@@ -42,3 +42,12 @@ TEST(ResultTest, streams_the_name_of_every_result)
         EXPECT_EQ(name, stream.Storage());
     }
 }
+
+TEST(ResultTest, streams_the_name_to_a_temporary_stream)
+{
+    infra::BoundedString::WithStorage<32> string;
+
+    infra::StringOutputStream(string) << fs::Result::mediaRemoved;
+
+    EXPECT_EQ("mediaRemoved", string);
+}
