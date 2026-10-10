@@ -64,7 +64,7 @@ All workloads use a fixed random seed.
 
 | Workload | Description                                                                                                                                     |
 |----------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| L1       | Write one file of 1 MiB and one of 4 MiB sequentially, in chunks of 64 B, 512 B and 4 KiB                                                       |
+| L1       | Write one file of 1 MiB and one of 4 MiB sequentially, in chunks of 64 B, 512 B and 4 KiB, after announcing the size with `ExpectSize`          |
 | L2       | Data logger: append 64 B and call `Sync`, until the file reaches 4 MiB, with a 100 ms idle period after each append                             |
 | L3       | Overwrite 512 B at random offsets in a file of 64 KiB, 1 MiB and 4 MiB                                                                          |
 | L4       | Create, write, close and remove many small files of 100 B to 8 KiB                                                                              |
@@ -73,6 +73,7 @@ All workloads use a fixed random seed.
 | L7       | Mount the volume when it is 10 %, 50 % and 90 % full                                                                                            |
 
 Workloads L2, L3 and L4 are run on volumes that are 10 %, 50 % and 90 % full, to measure the effect of the fill level.
+The fill level is the share of the space that the workload does not need for its own files: static files take that share of the capacity left after the largest size the workload's files reach, so that the workload still fits on a volume that is 90 % full.
 
 ## Write metrics
 
@@ -134,24 +135,45 @@ On target, the device timing models are also calibrated: the same workloads run 
 
 ## Reports
 
-Every run writes `metrics.json`, with one entry per metric, workload, subject and device model:
+Every metric executable writes a fragment with the device models it used and one entry per metric, workload, subject, device model and fill level:
 
 ```json
 {
-  "metric": "W-2",
-  "workload": "L2",
-  "subject": "embedded-filesystem/nor",
-  "device": "nor-qspi-16m",
-  "fill": 50,
-  "value": 1.02,
-  "target": "<= 1.1",
-  "pass": true,
-  "ramBytes": 7680
+  "devices": {
+    "nor-qspi-16m": { "sectors": "4096", "sectorSize": "4096", "typical.pageProgramNs": "400000" }
+  },
+  "results": [
+    {
+      "metric": "W-2",
+      "workload": "L2",
+      "subject": "embedded-filesystem/nor",
+      "device": "nor-qspi-16m",
+      "unit": "ratio",
+      "fill": 50,
+      "value": 1.02,
+      "target": "<= 1.1",
+      "pass": true,
+      "ramBytes": 7680,
+      "better": "lower"
+    }
+  ]
 }
 ```
 
-A Markdown summary with the same content is generated from it, and the metrics workflow posts it as a comment on the pull request, updating the same comment on every push.
+A target is either a bound, such as `<= 1.1`, which the metric executable decides, or a comparison with other subjects, such as `>= baselines` (the best of FatFs and littlefs) or `<= fatfs` (the best FatFs configuration), which is decided when the fragments are merged.
+`metrics/report/merge_report.py` merges the fragments into `metrics.json`, with the same shape, and writes a Markdown summary of it, `metrics.md`.
+Given the `metrics.json` of `main` with `--baseline`, it marks a reported metric of embedded-filesystem as failed when it is worse than on `main` by more than 5 %, in the direction given by `better`; results on a device model whose parameters changed are not compared.
+The metrics workflow posts the summary as a comment on the pull request, updating the same comment on every push.
 The `metrics.json` of `main` is kept as a workflow artifact and used to detect regressions.
+
+### Harness
+
+Every subject, embedded-filesystem and the baselines alike, implements `metrics::FileSystemUnderTest`, an asynchronous interface whose operations complete through callbacks.
+`metrics::Runner` calls the subject, checks that no call completes before the event dispatcher runs, runs the virtual clock until the call completes, and records the latency, the device work and the result of every call, together with the phase of the workload it belongs to.
+Idle periods and settling are recorded too, so that background work counts.
+The workloads in `metrics/workload/Workloads.cpp` drive the runner, and `metrics/workload/MetricComputations.cpp` turns the records of a phase into the metrics of this document.
+Phases are named after the workload and its parameters, such as `L1 1048576 64` for 64 B chunks in a 1 MiB file, or `L6 lookup 100` for lookups in a directory of 100 entries.
+File contents follow a pattern derived from the file and the offset, so that every byte read back can be checked.
 
 ## Running
 
