@@ -49,6 +49,22 @@
       "generator": "Ninja"
     },
     {
+      "name": "metrics",
+      "displayName": "Metrics harness and baselines, optimized",
+      "inherits": "defaults",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "EMFS_BUILD_TESTS": true,
+        "EMFS_BUILD_METRICS": true
+      }
+    },
+    {
       "name": "Windows",
       "inherits": "defaults",
       "toolchainFile": "${sourceDir}/build/${presetName}/_deps/emil-src/cmake/toolchain-clang-x86_64-pc-windows-msvc.cmake",
@@ -138,6 +154,10 @@
       "configurePreset": "coverage"
     },
     {
+      "name": "metrics",
+      "configurePreset": "metrics"
+    },
+    {
       "name": "Windows-Release",
       "configuration": "Release",
       "configurePreset": "Windows"
@@ -207,6 +227,18 @@
       "configurePreset": "coverage",
       "configuration": "Debug",
       "inherits": "defaults"
+    },
+    {
+      "name": "metrics",
+      "configurePreset": "metrics",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false,
+        "timeout": 3600
+      }
     }
   ]
 }

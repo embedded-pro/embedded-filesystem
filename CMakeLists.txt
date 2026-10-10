@@ -6,8 +6,9 @@ endif()
 
 option(CMAKE_COMPILE_WARNING_AS_ERROR "Enable warnings-as-error" ON)
 option(EMFS_BUILD_TESTS "Enable building the tests" Off)
+option(EMFS_BUILD_METRICS "Enable building the host-only metrics harness and baselines" Off)
 
-if (EMFS_BUILD_TESTS)
+if (EMFS_BUILD_TESTS OR EMFS_BUILD_METRICS)
     # CTest cannot be included before the first project() statement, but embedded-infra-lib
     # needs to see that test utilities need to be built.
     set(BUILD_TESTING On)
@@ -45,18 +46,29 @@ else()
     set(EMFS_EXCLUDE_FROM_ALL "EXCLUDE_FROM_ALL")
 endif()
 
-if (EMFS_BUILD_TESTS)
+if (EMFS_BUILD_METRICS AND NOT EMIL_HOST_BUILD)
+    message(FATAL_ERROR "EMFS_BUILD_METRICS is only supported on host builds")
+endif()
+
+if (EMFS_BUILD_TESTS OR EMFS_BUILD_METRICS)
     include(CTest)
     emil_enable_testing()
 endif()
 
 add_subdirectory(fs)
+if (EMFS_BUILD_METRICS)
+    add_subdirectory(metrics)
+endif()
 
 if (EMFS_STANDALONE)
     emil_coverage_targets(DIRECTORIES fs)
 endif()
 
-emil_clangformat_directories(embedded_filesystem DIRECTORIES fs)
+if (EMFS_BUILD_METRICS)
+    emil_clangformat_directories(embedded_filesystem DIRECTORIES fs metrics)
+else()
+    emil_clangformat_directories(embedded_filesystem DIRECTORIES fs)
+endif()
 
 if (EMFS_STANDALONE)
     emil_folderize_all_targets()
