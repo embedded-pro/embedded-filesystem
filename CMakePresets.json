@@ -1,0 +1,212 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "defaults",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "installDir": "${sourceDir}/install",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "On",
+        "CMAKE_COMPILE_WARNING_AS_ERROR": "On"
+      }
+    },
+    {
+      "name": "host",
+      "displayName": "Configuration for Host Tooling and Tests",
+      "inherits": "defaults",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo;MinSizeRel",
+        "EMFS_BUILD_TESTS": true
+      },
+      "generator": "Ninja Multi-Config"
+    },
+    {
+      "name": "host-single-Debug",
+      "displayName": "Configuration for Host Tooling and Tests, Single Config Generator, Debug",
+      "inherits": "defaults",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "EMFS_BUILD_TESTS": true
+      }
+    },
+    {
+      "name": "host-single-MinSizeRel",
+      "displayName": "Configuration for Host Tooling and Tests, Single Config Generator, MinSizeRel",
+      "inherits": "defaults",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel",
+        "EMFS_BUILD_TESTS": true
+      }
+    },
+    {
+      "name": "coverage",
+      "displayName": "Configuration for Code Coverage",
+      "inherits": "host",
+      "cacheVariables": {
+        "EMIL_ENABLE_COVERAGE": "On"
+      },
+      "generator": "Ninja"
+    },
+    {
+      "name": "Windows",
+      "inherits": "defaults",
+      "toolchainFile": "${sourceDir}/build/${presetName}/_deps/emil-src/cmake/toolchain-clang-x86_64-pc-windows-msvc.cmake",
+      "environment": {
+        "CCACHE_DEPEND": "true",
+        "CCACHE_COMPILERTYPE": "clang-cl"
+      },
+      "cacheVariables": {
+        "EMFS_BUILD_TESTS": true
+      },
+      "generator": "Ninja Multi-Config"
+    },
+    {
+      "name": "cortex",
+      "hidden": true,
+      "inherits": "defaults",
+      "environment": {
+        "CMAKE_TOOLCHAIN_FILE": ""
+      },
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo;MinSizeRel"
+      },
+      "generator": "Ninja Multi-Config"
+    },
+    {
+      "name": "cortex-m4",
+      "displayName": "cortex-m4",
+      "description": "Compile for Cortex-M4 with FPU",
+      "inherits": "cortex",
+      "toolchainFile": "${sourceDir}/build/${presetName}/_deps/emil-src/cmake/toolchain-arm-gcc-m4-fpv4-sp-d16.cmake",
+      "cacheVariables": {
+        "TARGET_CORTEX": "m4"
+      }
+    },
+    {
+      "name": "cortex-m7",
+      "displayName": "cortex-m7",
+      "description": "Compile for Cortex-M7 with double precision FPU",
+      "inherits": "cortex",
+      "toolchainFile": "${sourceDir}/build/${presetName}/_deps/emil-src/cmake/toolchain-arm-gcc-m7-fpv5-d16.cmake",
+      "cacheVariables": {
+        "TARGET_CORTEX": "m7"
+      }
+    },
+    {
+      "name": "cortex-m33",
+      "displayName": "cortex-m33",
+      "description": "Compile for Cortex-M33 with FPU",
+      "inherits": "cortex",
+      "toolchainFile": "${sourceDir}/build/${presetName}/_deps/emil-src/cmake/toolchain-arm-gcc-m33-fpv5-sp-d16.cmake",
+      "cacheVariables": {
+        "TARGET_CORTEX": "m33"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "host-Debug",
+      "configuration": "Debug",
+      "configurePreset": "host"
+    },
+    {
+      "name": "host-Debug-WithPackage",
+      "configuration": "Debug",
+      "configurePreset": "host",
+      "targets": ["all", "package"]
+    },
+    {
+      "name": "host-RelWithDebInfo",
+      "configuration": "RelWithDebInfo",
+      "configurePreset": "host"
+    },
+    {
+      "name": "host-single-Debug",
+      "configuration": "Debug",
+      "configurePreset": "host-single-Debug"
+    },
+    {
+      "name": "release-package",
+      "configuration": "MinSizeRel",
+      "configurePreset": "host-single-MinSizeRel",
+      "targets": ["package"]
+    },
+    {
+      "name": "coverage",
+      "configuration": "Debug",
+      "configurePreset": "coverage"
+    },
+    {
+      "name": "Windows-Release",
+      "configuration": "Release",
+      "configurePreset": "Windows"
+    },
+    {
+      "name": "Windows-RelWithDebInfo",
+      "configuration": "RelWithDebInfo",
+      "configurePreset": "Windows"
+    },
+    {
+      "name": "cortex-m4-RelWithDebInfo",
+      "configuration": "RelWithDebInfo",
+      "configurePreset": "cortex-m4"
+    },
+    {
+      "name": "cortex-m4-MinSizeRel",
+      "configuration": "MinSizeRel",
+      "configurePreset": "cortex-m4"
+    },
+    {
+      "name": "cortex-m7-RelWithDebInfo",
+      "configuration": "RelWithDebInfo",
+      "configurePreset": "cortex-m7"
+    },
+    {
+      "name": "cortex-m7-MinSizeRel",
+      "configuration": "MinSizeRel",
+      "configurePreset": "cortex-m7"
+    },
+    {
+      "name": "cortex-m33-RelWithDebInfo",
+      "configuration": "RelWithDebInfo",
+      "configurePreset": "cortex-m33"
+    },
+    {
+      "name": "cortex-m33-MinSizeRel",
+      "configuration": "MinSizeRel",
+      "configurePreset": "cortex-m33"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "defaults",
+      "hidden": true,
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": true
+      }
+    },
+    {
+      "name": "host",
+      "configurePreset": "host",
+      "configuration": "Debug",
+      "inherits": "defaults"
+    },
+    {
+      "name": "host-single-Debug",
+      "configurePreset": "host-single-Debug",
+      "configuration": "Debug",
+      "inherits": "defaults"
+    },
+    {
+      "name": "coverage",
+      "configurePreset": "coverage",
+      "configuration": "Debug",
+      "inherits": "defaults"
+    }
+  ]
+}
