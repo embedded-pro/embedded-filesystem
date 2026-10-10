@@ -1,0 +1,13 @@
+ls:
+  .dir: snake_case
+  .hpp: PascalCase
+  .cpp: PascalCase
+
+ignore:
+  - .claude
+  - .devcontainer
+  - .megalinter_github_conf
+  - .git
+  - .github
+  - .vscode
+  - megalinter-reports

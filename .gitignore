@@ -1,0 +1,12 @@
+.cache
+.vs/
+.vscode/.cortex-debug*
+.xwin-cache
+build/
+out/
+install/
+megalinter-reports/
+.megalinter_github_conf/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+CLAUDE.local.md
