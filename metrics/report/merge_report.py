@@ -12,6 +12,7 @@ ALL_BASELINES = "baselines"
 REGRESSION_TOLERANCE = 0.05
 TARGET_PATTERN = re.compile(r"^(<=|>=) (.+)$")
 METRIC_PATTERN = re.compile(r"^([A-Z]+)-(\d+)$")
+NUMBER_PATTERN = re.compile(r"(\d+)")
 
 
 class ReportError(Exception):
@@ -132,9 +133,17 @@ def metric_order(metric):
     return (match.group(1), int(match.group(2)))
 
 
-def result_order(result):
+def natural_order(text):
+    return tuple(int(part) if index % 2 else part for index, part in enumerate(NUMBER_PATTERN.split(text)))
+
+
+def row_order(result):
     fill = result.get("fill")
-    return (metric_order(result["metric"]), result["workload"], -1 if fill is None else fill, result["device"], result["subject"])
+    return (metric_order(result["metric"]), natural_order(result["workload"]), -1 if fill is None else fill)
+
+
+def result_order(result):
+    return row_order(result) + (result["device"], result["subject"])
 
 
 def merge(fragment_paths, baseline=None):
@@ -150,35 +159,43 @@ def format_value(value):
     return "n/a" if value is None else f"{value:.4g}"
 
 
-def format_outcome(result):
+def format_cell(result):
+    value = format_value(result.get("value"))
     if result.get("regression"):
-        return f"❌ worse than main ({format_value(result['baselineValue'])})"
+        return f"{value} ❌ (main: {format_value(result['baselineValue'])})"
     if result.get("pass") is True:
-        return "✅"
+        return f"{value} ✅"
     if result.get("pass") is False:
-        return "❌"
-    if "note" in result:
-        return result["note"]
-    if "baselineValue" in result:
-        return f"reported (main: {format_value(result['baselineValue'])})"
-    return "reported"
+        return f"{value} ❌"
+    return value
 
 
-def format_row(result):
-    fill = result.get("fill")
-    cells = [
-        result["metric"],
-        result["workload"],
-        "" if fill is None else f"{fill} %",
-        result["subject"],
-        result["device"],
-        format_value(result.get("value")),
-        result["unit"],
-        result.get("target", ""),
-        format_outcome(result),
-        str(result["ramBytes"]),
-    ]
+def subject_order(subject):
+    return (not is_own(subject), subject)
+
+
+def table_row(cells):
     return "| " + " | ".join(cells) + " |"
+
+
+def device_table(results):
+    subjects = sorted({result["subject"] for result in results}, key=subject_order)
+    rows = {}
+    for result in results:
+        rows.setdefault(row_order(result), {})[result["subject"]] = result
+
+    lines = [table_row(["Metric", "Workload", "Fill", "Unit", *subjects]), table_row(["---"] * (4 + len(subjects)))]
+    for key in sorted(rows):
+        row = rows[key]
+        first = next(iter(row.values()))
+        fill = first.get("fill")
+        cells = [first["metric"], first["workload"], "" if fill is None else f"{fill} %", first["unit"]]
+        cells.extend(format_cell(row[subject]) if subject in row else "" for subject in subjects)
+        lines.append(table_row(cells))
+
+    ram = {result["subject"]: result["ramBytes"] for result in results}
+    lines.append(table_row(["RAM", "", "", "B", *(str(ram[subject]) for subject in subjects)]))
+    return lines
 
 
 def summary(results):
@@ -188,23 +205,34 @@ def summary(results):
     return f"{len(results)} results: {passed} passed, {failed} failed, {reported} reported."
 
 
+def failure_lines(results):
+    failures = [result for result in results if result.get("pass") is False]
+    if not failures:
+        return []
+    lines = ["### Missed targets and regressions", ""]
+    for result in failures:
+        expected = result.get("target") or f"main: {format_value(result.get('baselineValue'))}"
+        fill = result.get("fill")
+        at_fill = "" if fill is None else f" at {fill} %"
+        lines.append(f"- {result['metric']} {result['workload']}{at_fill}, {result['subject']} on {result['device']}: {format_value(result.get('value'))} {result['unit']}, expected {expected}")
+    return lines + [""]
+
+
 def device_rows(devices):
     for name in sorted(devices):
         for parameter, value in devices[name].items():
-            yield f"| {name} | {parameter} | {value} |"
+            yield table_row([name, parameter, value])
 
 
 def markdown(report):
-    lines = [
-        "## Metrics",
-        "",
-        summary(report["results"]),
-        "",
-        "| Metric | Workload | Fill | Subject | Device | Value | Unit | Target | Result | RAM (B) |",
-        "|--------|----------|------|---------|--------|-------|------|--------|--------|---------|",
-    ]
-    lines.extend(format_row(result) for result in report["results"])
-    lines.extend(["", "<details><summary>Device models</summary>", "", "| Device | Parameter | Value |", "|--------|-----------|-------|"])
+    results = report["results"]
+    lines = ["## Metrics", "", summary(results), ""]
+    lines.extend(failure_lines(results))
+    for device in sorted({result["device"] for result in results}):
+        lines.extend([f"### {device}", ""])
+        lines.extend(device_table([result for result in results if result["device"] == device]))
+        lines.append("")
+    lines.extend(["<details><summary>Device models</summary>", "", "| Device | Parameter | Value |", "|--------|-----------|-------|"])
     lines.extend(device_rows(report["devices"]))
     lines.extend(["", "</details>", ""])
     return "\n".join(lines)
