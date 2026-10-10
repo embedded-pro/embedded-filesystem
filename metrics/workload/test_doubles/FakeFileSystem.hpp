@@ -2,8 +2,8 @@
 #define METRICS_WORKLOAD_TEST_DOUBLES_FAKE_FILE_SYSTEM_HPP
 
 #include "hal/interfaces/Flash.hpp"
+#include "metrics/workload/CompletionQueue.hpp"
 #include "metrics/workload/FileSystemUnderTest.hpp"
-#include <deque>
 #include <map>
 #include <set>
 #include <string>
@@ -53,7 +53,6 @@ namespace metrics
         };
 
         void Complete(const std::function<void(fs::Result result)>& onDone, fs::Result result);
-        void Defer(const std::function<void()>& action);
         uint32_t DeviceAddress(FileHandle file, std::size_t size) const;
         uint64_t UsedBytes() const;
 
@@ -62,7 +61,7 @@ namespace metrics
         std::vector<OpenFile> openFiles;
         std::vector<uint8_t> deviceBuffer;
         std::function<void(fs::Result result)> pendingCompletion;
-        std::deque<std::function<void()>> deferred;
+        CompletionQueue completions;
     };
 }
 

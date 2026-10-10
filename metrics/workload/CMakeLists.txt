@@ -6,6 +6,8 @@ target_link_libraries(metrics.workload PUBLIC
 )
 
 target_sources(metrics.workload PRIVATE
+    CompletionQueue.cpp
+    CompletionQueue.hpp
     DeviceProbe.cpp
     DeviceProbe.hpp
     FileSystemUnderTest.hpp

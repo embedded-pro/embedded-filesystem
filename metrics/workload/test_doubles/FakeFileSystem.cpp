@@ -1,5 +1,4 @@
 #include "metrics/workload/test_doubles/FakeFileSystem.hpp"
-#include "infra/event/EventDispatcher.hpp"
 #include <algorithm>
 
 namespace metrics
@@ -158,7 +157,7 @@ namespace metrics
     void FakeFileSystem::IdleHint(const std::function<void()>& onDone)
     {
         ++idleHints;
-        Defer(onDone);
+        completions.Defer(onDone);
     }
 
     void FakeFileSystem::Complete(const std::function<void(fs::Result result)>& onDone, fs::Result result)
@@ -169,21 +168,10 @@ namespace metrics
         if (completeSynchronously)
             onDone(result);
         else
-            Defer([onDone, result]
+            completions.Defer([onDone, result]
                 {
                     onDone(result);
                 });
-    }
-
-    void FakeFileSystem::Defer(const std::function<void()>& action)
-    {
-        deferred.push_back(action);
-        infra::EventDispatcher::Instance().Schedule([this]
-            {
-                auto next = std::move(deferred.front());
-                deferred.pop_front();
-                next();
-            });
     }
 
     uint32_t FakeFileSystem::DeviceAddress(FileHandle file, std::size_t size) const
