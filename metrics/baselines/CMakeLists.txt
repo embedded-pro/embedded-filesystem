@@ -1,3 +1,5 @@
+include(FetchContent)
+
 add_library(metrics.baselines STATIC)
 
 target_link_libraries(metrics.baselines PUBLIC
@@ -10,3 +12,5 @@ target_sources(metrics.baselines PRIVATE
 )
 
 add_subdirectory(test)
+add_subdirectory(littlefs)
+add_subdirectory(fatfs)
