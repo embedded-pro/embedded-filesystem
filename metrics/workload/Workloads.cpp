@@ -212,7 +212,7 @@ namespace metrics
 
     void RandomOverwrite(Runner& runner, const WorkloadParameters& parameters)
     {
-        Prepare(runner, "L3", parameters, std::max(Scaled(4 * mebibyte, parameters), overwriteSize));
+        Prepare(runner, "L3", parameters, 2 * std::max(Scaled(4 * mebibyte, parameters), overwriteSize));
 
         Random random{ parameters.seed };
         uint32_t fileId = 300;

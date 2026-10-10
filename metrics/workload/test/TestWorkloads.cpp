@@ -166,13 +166,13 @@ TEST_F(WorkloadsTest, workloads_fill_the_volume_first_when_asked)
     EXPECT_EQ(96 * 1024, metrics::TotalUserBytes(Phase("fill", metrics::Operation::write)));
 }
 
-TEST_F(WorkloadsTest, random_overwrite_reserves_its_largest_file_when_filling)
+TEST_F(WorkloadsTest, random_overwrite_reserves_twice_its_largest_file_when_filling)
 {
     parameters.fillPercent = 50;
 
     metrics::RandomOverwrite(runner, parameters);
 
-    EXPECT_EQ(96 * 1024, metrics::TotalUserBytes(Phase("fill", metrics::Operation::write)));
+    EXPECT_EQ(64 * 1024, metrics::TotalUserBytes(Phase("fill", metrics::Operation::write)));
 }
 
 TEST_F(WorkloadsTest, small_files_reserves_its_window_when_filling)
