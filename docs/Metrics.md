@@ -58,6 +58,18 @@ FatFs and littlefs are fetched with FetchContent at pinned versions, only when `
 Their storage callbacks are adapted to the metered devices through a synchronous shim that runs the event dispatcher until the device request completes.
 The shim exists only in the metrics harness; it is the blocking adapter that an EmIL application would otherwise need.
 
+| Subject                | Version                               | Configuration                                                                                                                                                                                             |
+|------------------------|---------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `littlefs/default`     | v2.11.3                               | The example of the littlefs README: read and program size 16 B, cache 16 B, lookahead 16 B, 500 block cycles                                                                                              |
+| `littlefs/ram-matched` | v2.11.3                               | Read and program size 16 B, cache 2048 B and lookahead 1536 B, which is 7680 B of buffers with one open file, 500 block cycles, and `lfs_fs_gc` when the volume is idle                                   |
+| `fatfs/default`        | R0.16, from the `abbrev/fatfs` mirror | The `ffconf.h` of FatFs, with what the workloads need: formatting, long file names in a static buffer, code page 437 and no real-time clock                                                               |
+| `fatfs/tuned`          | R0.16, from the `abbrev/fatfs` mirror | As `fatfs/default`, with fast seek on files opened for reading (a link map of 64 entries), `f_expand` for `ExpectSize`, trim mapped to a discard, and `f_mkfs` aligned to the allocation unit of the card |
+
+littlefs runs on `nor-qspi-16m` and `internal-flash`, and on `nor-qspi-1m` for the lifetime metric WL-3; both FatFs variants run on `sd-card-256m`.
+On `internal-flash`, the file sizes of the workloads are divided by 64, so that they fit on 512 KiB.
+FatFs symbols are global and its options are compile-time, so every FatFs variant is built from its own copy of the sources next to an `ffconf.h` generated from the upstream one, and runs in its own executable.
+The RAM reported for a subject is the size of its state and buffers with one open file, which is what every workload needs.
+
 ## Workloads
 
 All workloads use a fixed random seed.
@@ -74,6 +86,8 @@ All workloads use a fixed random seed.
 
 Workloads L2, L3 and L4 are run on volumes that are 10 %, 50 % and 90 % full, to measure the effect of the fill level.
 The fill level is the share of the space that the workload does not need for its own files: static files take that share of the capacity left after the largest size the workload's files reach, so that the workload still fits on a volume that is 90 % full.
+L3 counts its largest file twice, because a copy-on-write filesystem such as littlefs copies a file from the overwritten offset to its end.
+The volume is filled until the usage reported by the filesystem reaches the fill level, so that the space a filesystem needs for its metadata and for small files counts.
 
 ## Write metrics
 
@@ -185,4 +199,6 @@ ctest --preset metrics
 
 The `metrics` preset builds an optimized Linux host build with `EMFS_BUILD_METRICS` and the tests enabled; it runs the unit tests of the harness as well as the metric tests, and keeps going after a failure so that the report is always written.
 
-The metric tests are GoogleTest executables with the CTest label `metrics`; they assert the targets of this document, so a missed target is a failing test.
+The metric tests are GoogleTest executables with the CTest label `metrics`, run as several shards each so that `ctest --parallel` spreads them over the cores; they assert the targets of this document, so a missed target is a failing test, and every call of a workload must succeed.
+Each shard writes a report fragment to `build/metrics/metrics/fragments`, and the `metrics.merge` test writes `build/metrics/metrics/metrics.json` and `build/metrics/metrics/metrics.md`.
+Configuring with `-DEMFS_METRICS_BASELINE=<path to the metrics.json of main>` enables the 5 % rule; the metrics workflow does this on pull requests, with the report of the latest run on `main`.

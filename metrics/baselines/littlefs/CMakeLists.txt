@@ -41,6 +41,7 @@ target_sources(metrics.littlefs PRIVATE
 add_subdirectory(test)
 
 emfs_add_metrics(metrics.littlefs_metrics
+    SHARDS 7
     SOURCES LittleFsMetrics.cpp
     LIBRARIES metrics.littlefs
 )
