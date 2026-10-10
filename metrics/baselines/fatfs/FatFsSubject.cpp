@@ -197,6 +197,26 @@ namespace metrics
             });
     }
 
+    void FatFsSubject::QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone)
+    {
+        DWORD freeClusters = 0;
+        FATFS* mounted = nullptr;
+        auto result = f_getfree("", &freeClusters, &mounted);
+
+        VolumeUsage usage{};
+        if (result == FR_OK)
+        {
+            uint64_t clusterSize = static_cast<uint64_t>(mounted->csize) * device.BlockSize();
+            usage.totalBytes = (mounted->n_fatent - 2) * clusterSize;
+            usage.usedBytes = usage.totalBytes - freeClusters * clusterSize;
+        }
+
+        completions.Defer([onDone, result, usage]
+            {
+                onDone(FatFsResult(result), usage);
+            });
+    }
+
     void FatFsSubject::IdleHint(const std::function<void()>& onDone)
     {
         completions.Defer(onDone);

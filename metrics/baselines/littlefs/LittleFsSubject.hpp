@@ -56,6 +56,7 @@ namespace metrics
         void MakeDirectory(std::string_view path, const std::function<void(fs::Result result)>& onDone) override;
         void List(std::string_view path, const std::function<void(fs::Result result, std::vector<DirectoryEntry> entries)>& onDone) override;
 
+        void QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone) override;
         void IdleHint(const std::function<void()>& onDone) override;
 
     private:

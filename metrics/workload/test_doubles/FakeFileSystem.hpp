@@ -37,11 +37,13 @@ namespace metrics
         void MakeDirectory(std::string_view path, const std::function<void(fs::Result result)>& onDone) override;
         void List(std::string_view path, const std::function<void(fs::Result result, std::vector<DirectoryEntry> entries)>& onDone) override;
 
+        void QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone) override;
         void IdleHint(const std::function<void()>& onDone) override;
 
         bool completeSynchronously{ false };
         bool neverComplete{ false };
         uint32_t idleHints{ 0 };
+        uint64_t unreportedBytes{ 0 };
         std::map<std::string, std::vector<uint8_t>> files;
         std::set<std::string> directories;
 

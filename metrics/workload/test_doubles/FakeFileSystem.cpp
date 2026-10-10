@@ -154,6 +154,16 @@ namespace metrics
             fs::Result::success);
     }
 
+    void FakeFileSystem::QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone)
+    {
+        VolumeUsage usage{ UsedBytes() - unreportedBytes, flash.TotalSize() };
+        Complete([onDone, usage](fs::Result result)
+            {
+                onDone(result, usage);
+            },
+            fs::Result::success);
+    }
+
     void FakeFileSystem::IdleHint(const std::function<void()>& onDone)
     {
         ++idleHints;
@@ -182,7 +192,7 @@ namespace metrics
 
     uint64_t FakeFileSystem::UsedBytes() const
     {
-        uint64_t used = 0;
+        uint64_t used = unreportedBytes;
         for (const auto& [name, content] : files)
             used += content.size();
 

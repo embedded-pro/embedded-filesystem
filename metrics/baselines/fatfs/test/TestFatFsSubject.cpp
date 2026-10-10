@@ -340,6 +340,31 @@ TEST_F(FatFsSubjectTest, writing_beyond_the_capacity_reports_no_space)
     EXPECT_EQ(fs::Result::noSpace, result);
 }
 
+TEST_F(FatFsSubjectTest, usage_grows_with_the_files_written)
+{
+    FormatAndMount();
+    auto before = runner.QueryUsage();
+    ASSERT_TRUE(before.has_value());
+
+    WriteFile("/file", Pattern(100000, 9));
+
+    auto after = runner.QueryUsage();
+    ASSERT_TRUE(after.has_value());
+    EXPECT_LE(before->usedBytes + 100000, after->usedBytes);
+    EXPECT_EQ(before->totalBytes, after->totalBytes);
+}
+
+TEST_F(FatFsSubjectTest, usage_reports_the_data_area_of_the_volume)
+{
+    FormatAndMount();
+    auto usage = runner.QueryUsage();
+
+    ASSERT_TRUE(usage.has_value());
+    EXPECT_LT(usage->usedBytes, usage->totalBytes);
+    EXPECT_LT(usage->totalBytes, 16384 * 512);
+    EXPECT_LT(15000 * 512, usage->totalBytes);
+}
+
 TEST_F(FatFsSubjectTest, idle_completes_and_lasts_the_idle_period)
 {
     FormatAndMount();

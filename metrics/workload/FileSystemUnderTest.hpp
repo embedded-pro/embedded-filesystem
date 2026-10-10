@@ -22,6 +22,14 @@ namespace metrics
 
     using FileHandle = uint32_t;
 
+    struct VolumeUsage
+    {
+        uint64_t usedBytes;
+        uint64_t totalBytes;
+
+        bool operator==(const VolumeUsage& other) const = default;
+    };
+
     struct DirectoryEntry
     {
         std::string name;
@@ -60,6 +68,7 @@ namespace metrics
         virtual void MakeDirectory(std::string_view path, const std::function<void(fs::Result result)>& onDone) = 0;
         virtual void List(std::string_view path, const std::function<void(fs::Result result, std::vector<DirectoryEntry> entries)>& onDone) = 0;
 
+        virtual void QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone) = 0;
         virtual void IdleHint(const std::function<void()>& onDone) = 0;
     };
 }

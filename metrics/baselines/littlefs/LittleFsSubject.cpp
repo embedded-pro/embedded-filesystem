@@ -204,6 +204,17 @@ namespace metrics
             });
     }
 
+    void LittleFsSubject::QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone)
+    {
+        auto blocks = lfs_fs_size(&lfs);
+        VolumeUsage usage{ static_cast<uint64_t>(std::max<lfs_ssize_t>(blocks, 0)) * config.block_size, static_cast<uint64_t>(config.block_count) * config.block_size };
+
+        completions.Defer([onDone, blocks, usage]
+            {
+                onDone(LittleFsResult(blocks), usage);
+            });
+    }
+
     void LittleFsSubject::IdleHint(const std::function<void()>& onDone)
     {
         if (configuration.collectGarbageWhenIdle)

@@ -259,6 +259,27 @@ TEST_P(LittleFsSubjectTest, writing_beyond_the_capacity_reports_no_space)
     EXPECT_EQ(fs::Result::noSpace, result);
 }
 
+TEST_P(LittleFsSubjectTest, usage_grows_with_the_files_written)
+{
+    FormatAndMount();
+    auto before = runner.QueryUsage();
+    ASSERT_TRUE(before.has_value());
+
+    WriteFile("/file", Pattern(100000, 9));
+
+    auto after = runner.QueryUsage();
+    ASSERT_TRUE(after.has_value());
+    EXPECT_LE(before->usedBytes + 100000, after->usedBytes);
+    EXPECT_EQ(before->totalBytes, after->totalBytes);
+}
+
+TEST_P(LittleFsSubjectTest, usage_reports_the_capacity_of_the_device)
+{
+    FormatAndMount();
+
+    EXPECT_EQ(64 * 4096, runner.QueryUsage()->totalBytes);
+}
+
 TEST_P(LittleFsSubjectTest, idle_completes_and_lasts_the_idle_period)
 {
     FormatAndMount();

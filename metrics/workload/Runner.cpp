@@ -12,7 +12,7 @@ namespace metrics
 
     std::string_view OperationName(Operation operation)
     {
-        static constexpr std::array<std::string_view, 14> names{ "format", "mount", "unmount", "open", "read", "write", "seek", "sync", "close", "expectSize", "remove", "makeDirectory", "list", "idle" };
+        static constexpr std::array<std::string_view, 15> names{ "format", "mount", "unmount", "open", "read", "write", "seek", "sync", "close", "expectSize", "remove", "makeDirectory", "list", "usage", "idle" };
         return names[static_cast<std::size_t>(operation)];
     }
 
@@ -177,6 +177,24 @@ namespace metrics
             return std::nullopt;
 
         return entries;
+    }
+
+    std::optional<VolumeUsage> Runner::QueryUsage()
+    {
+        VolumeUsage usage{};
+        auto result = Call(Operation::usage, 0, 0, [this, &usage](const Completion& done)
+            {
+                subject.QueryUsage([done, &usage](fs::Result result, VolumeUsage reported)
+                    {
+                        usage = reported;
+                        done(result);
+                    });
+            });
+
+        if (result != fs::Result::success)
+            return std::nullopt;
+
+        return usage;
     }
 
     void Runner::Idle(infra::Duration duration)

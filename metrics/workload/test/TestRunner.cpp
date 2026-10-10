@@ -43,6 +43,7 @@ TEST(OperationNameTest, names_every_operation)
     EXPECT_EQ("format", metrics::OperationName(metrics::Operation::format));
     EXPECT_EQ("seek", metrics::OperationName(metrics::Operation::seek));
     EXPECT_EQ("expectSize", metrics::OperationName(metrics::Operation::expectSize));
+    EXPECT_EQ("usage", metrics::OperationName(metrics::Operation::usage));
     EXPECT_EQ("idle", metrics::OperationName(metrics::Operation::idle));
 }
 
@@ -130,6 +131,14 @@ TEST_F(RunnerTest, list_returns_the_entries_of_the_directory)
 
     ASSERT_TRUE(entries.has_value());
     EXPECT_EQ((std::vector<metrics::DirectoryEntry>{ { "a", false, 3 }, { "b", false, 5 } }), *entries);
+}
+
+TEST_F(RunnerTest, query_usage_returns_the_usage_reported_by_the_subject)
+{
+    subject.files["/file"] = std::vector<uint8_t>(100);
+
+    EXPECT_EQ((metrics::VolumeUsage{ 100, 64 * 4096 }), runner.QueryUsage());
+    EXPECT_EQ(metrics::Operation::usage, runner.Records().back().operation);
 }
 
 TEST_F(RunnerTest, a_call_completed_from_inside_the_call_aborts)

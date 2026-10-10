@@ -26,6 +26,7 @@ namespace metrics
         remove,
         makeDirectory,
         list,
+        usage,
         idle
     };
 
@@ -66,6 +67,7 @@ namespace metrics
         fs::Result Remove(std::string_view path);
         fs::Result MakeDirectory(std::string_view path);
         std::optional<std::vector<DirectoryEntry>> List(std::string_view path);
+        std::optional<VolumeUsage> QueryUsage();
         void Idle(infra::Duration duration);
         bool Settle(infra::Duration limit);
 
