@@ -41,13 +41,14 @@ Time-dependent behaviour, such as the idle delay before background work, is test
 
 ## Test doubles
 
-| Double                                                   | From            | Use                                                                                                                          |
-|----------------------------------------------------------|-----------------|------------------------------------------------------------------------------------------------------------------------------|
-| `hal::FlashStub`                                         | EmIL            | NOR flash in RAM: programming is a bitwise AND, erase sets 0xff, `stopAfterWriteSteps` stops writing after a number of steps |
-| `hal::BlockDeviceStub`                                   | EmIL            | Block device in RAM, with `FailNextOperationWith` to inject errors                                                           |
-| `hal::FlashMock`, `hal::BlockDeviceMock`                 | EmIL            | Exact request sequences, where the order of device requests is the behaviour under test                                      |
-| `metrics::MeteredFlash`, `metrics::MeteredBlockDevice`   | This repository | Counting requests, bytes, erases per block and simulated time                                                                |
-| `metrics::PowerCutFlash`, `metrics::PowerCutBlockDevice` | This repository | Cutting power after a given step, with an optional partial program or torn sector                                            |
+| Double                                                     | From            | Use                                                                                                                                                                                   |
+|------------------------------------------------------------|-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `hal::FlashStub`                                           | EmIL            | NOR flash in RAM: programming is a bitwise AND, erase sets 0xff, `stopAfterWriteSteps` stops writing after a number of steps                                                          |
+| `hal::BlockDeviceStub`                                     | EmIL            | Block device in RAM, with `FailNextOperationWith` to inject errors                                                                                                                    |
+| `hal::FlashMock`, `hal::BlockDeviceMock`                   | EmIL            | Exact request sequences, where the order of device requests is the behaviour under test                                                                                               |
+| `metrics::MeteredFlash`, `metrics::MeteredBlockDevice`     | This repository | Counting requests, bytes, erases per block and simulated time                                                                                                                         |
+| `metrics::PowerCutFlash`, `metrics::PowerCutBlockDevice`   | This repository | Cutting power at a given write step: a NOR program or erase not started, partial or completed; a block unwritten, written or torn, optionally losing every write since the last flush |
+| `metrics::NorPowerCutSweep`, `metrics::BlockPowerCutSweep` | This repository | Running an operation once per cut point and mode, and verifying the image after each cut                                                                                              |
 
 ## Power-cut sweep
 
@@ -58,9 +59,15 @@ After each cut, the device is remounted and checked:
 * a consistency check of the on-flash structures passes;
 * every file holds either its contents before the interrupted operation or its contents after it.
 
-For NOR flash, every cut is also repeated with a partial program of the interrupted step, where only part of the bytes are programmed.
-For block devices, every cut is repeated once with the interrupted sector written completely and once with it left unwritten; a separate run with torn sectors measures the exposure described in [Fat.md](Fat.md).
+A write step is one program request or one erased sector on NOR flash, and one written block or one discard request on a block device.
+For NOR flash, every cut is repeated with the interrupted step not started, partially done and completed: a partial program programs only the first bytes of the request, and a partial erase leaves the second half of the sector programmed.
+For block devices, every cut is repeated with the interrupted block left unwritten, written completely and torn, where only the first bytes of the block hold the new data; a run with loss of unflushed writes models a device cache that is not written back.
 The result of the sweep is metric P-1 in [Metrics.md](Metrics.md).
+
+The sweep is implemented by `metrics::NorPowerCutSweep` and `metrics::BlockPowerCutSweep` in `metrics/power_cut`.
+It takes three functions: one that prepares the device, one that runs the operation under test, and one that verifies the device after a cut and returns the reason of an inconsistency.
+Each run starts from the image left by the preparation, in a fresh environment with its own event dispatcher and virtual clock, and each verification runs in another fresh environment, as a device would after a reset.
+For large operations, the number of cut points can be limited; the points are then sampled with a fixed stride, so that the same commit always runs the same cuts.
 
 ## Interoperability tests for FAT
 
