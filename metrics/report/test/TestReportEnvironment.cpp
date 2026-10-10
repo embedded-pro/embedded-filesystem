@@ -29,10 +29,23 @@ TEST(ReportEnvironmentTest, tear_down_writes_the_report)
     EXPECT_EQ(report.Json(), ReadFile(path));
 }
 
+TEST(ReportEnvironmentTest, tear_down_creates_the_directory_of_the_report)
+{
+    metrics::Report report;
+    auto path = testing::TempDir() + "report_environment_directory/nested/report.json";
+    metrics::ReportEnvironment environment{ report, path };
+
+    environment.TearDown();
+
+    EXPECT_EQ(report.Json(), ReadFile(path));
+}
+
 TEST(ReportEnvironmentTest, tear_down_fails_when_the_report_cannot_be_written)
 {
     metrics::Report report;
-    metrics::ReportEnvironment environment{ report, testing::TempDir() + "missing-directory/report.json" };
+    auto blocker = testing::TempDir() + "report_environment_blocker";
+    std::ofstream{ blocker } << "not a directory";
+    metrics::ReportEnvironment environment{ report, blocker + "/report.json" };
 
     EXPECT_NONFATAL_FAILURE(environment.TearDown(), "could not be written");
 }

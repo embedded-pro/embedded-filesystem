@@ -1,5 +1,6 @@
 #include "metrics/workload/Runner.hpp"
 #include "infra/util/ReallyAssert.hpp"
+#include <array>
 #include <chrono>
 
 namespace metrics
@@ -7,6 +8,12 @@ namespace metrics
     namespace
     {
         constexpr std::chrono::minutes callLimit{ 10 };
+    }
+
+    std::string_view OperationName(Operation operation)
+    {
+        static constexpr std::array<std::string_view, 14> names{ "format", "mount", "unmount", "open", "read", "write", "seek", "sync", "close", "expectSize", "remove", "makeDirectory", "list", "idle" };
+        return names[static_cast<std::size_t>(operation)];
     }
 
     Runner::Runner(VirtualTime& time, FileSystemUnderTest& subject, const DeviceProbe& device)
@@ -17,7 +24,15 @@ namespace metrics
 
     void Runner::SetPhase(std::string newPhase)
     {
+        if (phaseObserver && newPhase != phase)
+            phaseObserver(phase);
+
         phase = std::move(newPhase);
+    }
+
+    void Runner::ObservePhases(PhaseObserver observer)
+    {
+        phaseObserver = std::move(observer);
     }
 
     fs::Result Runner::Format()

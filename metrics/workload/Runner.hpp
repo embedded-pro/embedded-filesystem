@@ -29,6 +29,8 @@ namespace metrics
         idle
     };
 
+    std::string_view OperationName(Operation operation);
+
     struct CallRecord
     {
         Operation operation;
@@ -45,7 +47,10 @@ namespace metrics
     public:
         Runner(VirtualTime& time, FileSystemUnderTest& subject, const DeviceProbe& device);
 
+        using PhaseObserver = std::function<void(const std::string& endedPhase)>;
+
         void SetPhase(std::string phase);
+        void ObservePhases(PhaseObserver observer);
 
         fs::Result Format();
         fs::Result Mount();
@@ -80,6 +85,7 @@ namespace metrics
         FileSystemUnderTest& subject;
         const DeviceProbe& device;
         std::string phase;
+        PhaseObserver phaseObserver;
         std::vector<CallRecord> records;
         bool interrupted{ false };
     };

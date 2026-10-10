@@ -67,3 +67,10 @@ emfs_add_fatfs_variant(tuned OPTIONS ${EMFS_FATFS_NEEDED_OPTIONS}
 )
 
 add_subdirectory(test)
+
+foreach(variant default tuned)
+    emfs_add_metrics(metrics.fatfs_${variant}_metrics
+        SOURCES FatFsMetrics.cpp
+        LIBRARIES metrics.fatfs_${variant}
+    )
+endforeach()
