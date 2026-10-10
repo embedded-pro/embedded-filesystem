@@ -1,0 +1,45 @@
+---
+name: Linting & Formatting
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  linter:
+    name: Linting
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: oxsecurity/megalinter/flavors/c_cpp@9949bad031045f366be2467e00e8371a7328a2e2 # v10.1.0
+        env:
+          APPLY_FIXES: all
+          VALIDATE_ALL_CODEBASE: true
+          GITHUB_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN  }}
+      - run: git diff
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ success() || failure() }}
+        with:
+          name: linter
+          path: |
+            megalinter-reports
+      - uses: reviewdog/action-suggester@c387862ad6765a9729f2b40ee4d8b5769f2145c7 # v1.19.0
+        with:
+          tool_name: MegaLinter
