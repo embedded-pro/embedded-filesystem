@@ -16,7 +16,7 @@ The build follows the layout of embedded-infra-lib, hal-st and hal-ti:
 
 * a top-level `CMakeLists.txt` that fetches EmIL with FetchContent, pinned to a commit and updated automatically;
 * CMake presets for the host, coverage, Windows, and compile-only Cortex-M4, Cortex-M7 and Cortex-M33 builds;
-* workflows for continuous integration, linting, releases, static analysis with SonarCloud, metrics and the EmIL version update;
+* workflows for continuous integration, linting, pull request titles, releases, static analysis with SonarCloud and the EmIL version update;
 * a development container and editor settings;
 * a first target, `fs.interfaces`, with one test, so that every pipeline is green from the start.
 
@@ -28,6 +28,7 @@ The build follows the layout of embedded-infra-lib, hal-st and hal-ti:
 ## Phase 4: metrics harness
 
 The metered devices, the device models, the power-cut devices, the workloads, the FatFs and littlefs baselines and the report generator are built before the filesystems, so that the baseline numbers are recorded and every later increment is measured.
+This phase also adds the `EMFS_BUILD_METRICS` option, the `metrics` test preset and the metrics workflow that comments on pull requests.
 
 ## Phase 5: shared building blocks
 

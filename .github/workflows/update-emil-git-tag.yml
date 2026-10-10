@@ -1,0 +1,74 @@
+---
+name: Update embedded-pro/embedded-infra-lib Git Tag
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update_git_tag:
+    name: Update git tag and create PR when changed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Configure Git
+        run: |
+          git config --global url."https://${{ secrets.PRIVATE_REPO_TOKEN  }}@github.com/".insteadOf "https://github.com/"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67 # v6
+      - name: Pull latest hash
+        id: pull_head
+        run: |
+          cmake --preset host
+          cd ./build/host/_deps/emil-src
+          current_hash="$(git rev-parse HEAD)"
+          git switch main
+          git pull
+          latest_hash="$(git rev-parse HEAD)"
+
+          git_log="$(git log --oneline --format="%s" "$current_hash".."$latest_hash")"
+
+          echo "current_hash=$current_hash"
+          echo "latest_hash =$latest_hash"
+          echo "$git_log"
+
+          {
+            echo "current_hash=$current_hash"
+            echo "latest_hash=$latest_hash"
+            echo "git_log<<EOF"
+            echo "$git_log"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update CMakeLists.txt
+        if: ${{ steps.pull_head.outputs.current_hash != steps.pull_head.outputs.latest_hash }}
+        run: |
+          sed -i 's/${{ steps.pull_head.outputs.current_hash }}/${{ steps.pull_head.outputs.latest_hash }}/g' CMakeLists.txt
+          rm -rf ninja-build
+
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: token
+        with:
+          app-id: ${{ vars.FOREST_RELEASER_APP_ID }}
+          private-key: ${{ secrets.FOREST_RELEASER_APP_PRIVATE_KEY }}
+
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        if: ${{ steps.pull_head.outputs.current_hash != steps.pull_head.outputs.latest_hash }}
+        with:
+          token: ${{ steps.token.outputs.token }}
+          commit-message: "chore: update embedded-pro/embedded-infra-lib hash to ${{ steps.pull_head.outputs.latest_hash }}"
+          title: "chore: update embedded-pro/embedded-infra-lib hash to ${{ steps.pull_head.outputs.latest_hash }}"
+          body: |
+            commits on embedded-pro/embedded-infra-lib:
+
+            ```
+            ${{ steps.pull_head.outputs.git_log }}
+            ```
