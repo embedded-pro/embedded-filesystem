@@ -1,6 +1,8 @@
 # embedded-filesystem
 
+[![Continuous Integration](https://github.com/embedded-pro/embedded-filesystem/actions/workflows/ci.yml/badge.svg)](https://github.com/embedded-pro/embedded-filesystem/actions/workflows/ci.yml)
 [![Linting & Formatting](https://github.com/embedded-pro/embedded-filesystem/actions/workflows/linting-formatting.yml/badge.svg)](https://github.com/embedded-pro/embedded-filesystem/actions/workflows/linting-formatting.yml)
+[![Static Analysis](https://github.com/embedded-pro/embedded-filesystem/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/embedded-pro/embedded-filesystem/actions/workflows/static-analysis.yml)
 
 **Description**: Asynchronous, heap-less C++20 filesystems for microcontrollers: PC-compatible FAT for SD/eMMC and a power-fail-safe, wear-leveling NOR filesystem, built on [embedded-infra-lib].
 
@@ -30,7 +32,7 @@ FatFs and littlefs remain better in maturity, portability, exFAT support, RAM us
 
 ## Status
 
-The project is in its design phase: the documentation is under review, and the implementation follows test first, as described in [docs/Roadmap.md](docs/Roadmap.md).
+The design is documented and the build is in place; the filesystems are implemented test first, phase by phase, as described in [docs/Roadmap.md](docs/Roadmap.md).
 
 ## Dependencies
 
@@ -76,7 +78,9 @@ cmake --build --preset host-Debug
 ctest --preset host
 ```
 
-The metrics are built and run with:
+Other presets build with coverage instrumentation (`coverage`), with a single-configuration generator (`host-single-Debug`), and for Cortex-M4, Cortex-M7 and Cortex-M33 (`cortex-m4`, `cortex-m7`, `cortex-m33`, built with `cortex-m4-RelWithDebInfo` and so on).
+
+Once the metrics harness is in place (phase 4 of the roadmap), the metrics are built and run with:
 
 ```bash
 cmake --preset host -DEMFS_BUILD_METRICS=On

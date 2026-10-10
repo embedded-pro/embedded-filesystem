@@ -1,0 +1,117 @@
+---
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  host_build_test_ubuntu:
+    name: Host Build & Test (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure Git
+        run: |
+          git config --global url."https://${{ secrets.PRIVATE_REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global --add safe.directory '*'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        with:
+          key: ${{ github.job }}-ubuntu-latest
+          max-size: 2G
+          save: ${{ github.ref == 'refs/heads/main' }}
+      - uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67 # v6
+      - uses: lukka/run-cmake@5d55ea7949e25f69f0ecb516d8d572297e03a956 # v10.9
+        with:
+          configurePreset: "host"
+          buildPreset: "host-Debug-WithPackage"
+          testPreset: "host"
+          configurePresetAdditionalArgs: "['-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache']"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: embedded_filesystem
+          path: build/host/embedded_filesystem-*-Linux.tar.gz
+          if-no-files-found: error
+      - name: Upload test logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-logs
+          path: build/host/Testing/Temporary/
+  host_build_test:
+    name: Host Build & Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest]
+    steps:
+      - name: Configure Git
+        run: |
+          git config --global url."https://${{ secrets.PRIVATE_REPO_TOKEN  }}@github.com/".insteadOf "https://github.com/"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+      - uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67 # v6
+      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        with:
+          variant: sccache
+          key: ${{ github.job }}-${{ matrix.os }}
+          max-size: 2G
+          save: ${{ github.ref == 'refs/heads/main' }}
+      # The Visual Studio generator ignores compiler launchers; sccache cannot cache /Zi, so debug info is embedded (/Z7).
+      # CC/CXX make run-cmake skip its vcpkg-based MSVC setup; msvc-dev-cmd already did it.
+      - uses: lukka/run-cmake@5d55ea7949e25f69f0ecb516d8d572297e03a956 # v10.9
+        env:
+          CC: cl
+          CXX: cl
+        with:
+          configurePreset: "host-single-Debug"
+          buildPreset: "host-single-Debug"
+          testPreset: "host-single-Debug"
+          configurePresetAdditionalArgs: "['-GNinja', '-DCMAKE_C_COMPILER_LAUNCHER=sccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=sccache', '-DCMAKE_POLICY_DEFAULT_CMP0141=NEW', '-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded']"
+      - name: Upload test logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-logs
+          path: build/host-single-Debug/Testing/Temporary/
+  embedded_build:
+    name: Embedded Build
+    runs-on: ubuntu-latest
+    needs: [host_build_test_ubuntu]
+    strategy:
+      matrix:
+        configuration: ["RelWithDebInfo"]
+        gcc: ["15.2.Rel1"]
+        target: ["cortex-m4", "cortex-m7", "cortex-m33"]
+    steps:
+      - name: Configure Git
+        run: |
+          git config --global url."https://${{ secrets.PRIVATE_REPO_TOKEN  }}@github.com/".insteadOf "https://github.com/"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install GNU Arm Embedded Toolchain ${{ matrix.gcc }}
+        uses: carlosperate/arm-none-eabi-gcc-action@98c40e51546516419841748d3210c290df0d2c6c # v1.13.0
+        with:
+          release: ${{ matrix.gcc }}
+      - uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67 # v6
+      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        with:
+          key: ${{ matrix.gcc }}-${{ matrix.configuration }}-${{ matrix.target }}
+          max-size: 2G
+          save: ${{ github.ref == 'refs/heads/main' }}
+      - uses: lukka/run-cmake@5d55ea7949e25f69f0ecb516d8d572297e03a956 # v10.9
+        with:
+          configurePreset: ${{ matrix.target }}
+          buildPreset: ${{ matrix.target }}-${{ matrix.configuration }}
+          configurePresetAdditionalArgs: "['-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache']"

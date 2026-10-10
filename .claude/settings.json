@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(cmake *)",
+      "Bash(ctest *)",
+      "Bash(ninja *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(cat *)",
+      "Bash(python3 *)",
+      "Bash(apt-get *)",
+      "Bash(gh *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(mkdir *)",
+      "Bash(rm *)"
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "cmake.copyCompileCommands": "${workspaceFolder}/build/compile_commands.json",
+  "editor.formatOnSave": true,
+  "files.insertFinalNewline": true
+}
