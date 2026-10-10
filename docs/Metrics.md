@@ -33,17 +33,18 @@ The device models and the metered devices are host-only code in `metrics/`, and 
 
 ### Device models
 
-| Model            | Capacity | Geometry                                                | Timing                                                                                                                                                            |
-|------------------|----------|---------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `nor-qspi-16m`   | 16 MiB   | 4 KiB sectors, 256 B pages, program unit 1 B            | 128 Mbit QSPI NOR class: page program 0.4 ms typical, 3 ms maximum; 4 KiB erase 45 ms typical, 400 ms maximum; read at 50 MB/s                                    |
-| `nor-qspi-1m`    | 1 MiB    | As `nor-qspi-16m`                                       | As `nor-qspi-16m`; used for wear-leveling runs to the end of life                                                                                                 |
-| `internal-flash` | 512 KiB  | 2 KiB sectors, program unit 16 B, no second programming | 8 µs per 16 B program unit, 20 ms per sector erase                                                                                                                |
-| `sd-card-256m`   | 256 MiB  | 512 B blocks, 4 MiB allocation units                    | 100 µs per command, 25 µs per block read, 50 µs per block written, and a 10 ms penalty when a write opens an allocation unit beyond the two most recently written |
+| Model            | Capacity | Geometry                                                | Timing                                                                                                                                                                                                                                                                |
+|------------------|----------|---------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `nor-qspi-16m`   | 16 MiB   | 4 KiB sectors, 256 B pages, program unit 1 B            | 128 Mbit QSPI NOR class: page program 0.4 ms typical, 3 ms maximum; 4 KiB erase 45 ms typical, 400 ms maximum; read at 50 MB/s                                                                                                                                        |
+| `nor-qspi-1m`    | 1 MiB    | As `nor-qspi-16m`                                       | As `nor-qspi-16m`; used for wear-leveling runs to the end of life                                                                                                                                                                                                     |
+| `internal-flash` | 512 KiB  | 2 KiB sectors, program unit 16 B, no second programming | 8 µs per 16 B program unit, 20 ms per sector erase, read at 100 MB/s; maximum timings equal the typical ones                                                                                                                                                          |
+| `sd-card-256m`   | 256 MiB  | 512 B blocks, 4 MiB allocation units                    | 100 µs per command, 25 µs per block read, 50 µs per block written, and a 10 ms penalty when a write opens an allocation unit beyond the two most recently written; a flush and a discard cost one command; at maximum timings a write request adds a 250 ms busy time |
 
 The NOR timings follow the datasheets of common 128 Mbit QSPI NOR devices.
 The SD card model is a simplification of the behaviour measured on low-cost cards with flashbench, where writes spread over many allocation units are much slower than writes concentrated in a few.
 All parameters are assumptions until they are calibrated against real devices in the on-target phase described in [Roadmap.md](Roadmap.md), and every report states the parameters it used.
 Typical timings are used for throughput; maximum timings are used for latency bounds.
+The models are defined in `metrics/device/DeviceModels.cpp`, and the metered devices `metrics::MeteredFlash` and `metrics::MeteredBlockDevice` delay every completion by the modelled time on a virtual clock, `metrics::VirtualTime`, so that latencies and background work are measured deterministically.
 
 ### Simulated time and background work
 
@@ -155,9 +156,11 @@ The `metrics.json` of `main` is kept as a workflow artifact and used to detect r
 ## Running
 
 ```bash
-cmake --preset host -DEMFS_BUILD_METRICS=On
-cmake --build --preset host-Debug
+cmake --preset metrics
+cmake --build --preset metrics
 ctest --preset metrics
 ```
+
+The `metrics` preset builds an optimized Linux host build with `EMFS_BUILD_METRICS` and the tests enabled; it runs the unit tests of the harness as well as the metric tests, and keeps going after a failure so that the report is always written.
 
 The metric tests are GoogleTest executables with the CTest label `metrics`; they assert the targets of this document, so a missed target is a failing test.

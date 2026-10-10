@@ -28,7 +28,13 @@ The build follows the layout of embedded-infra-lib, hal-st and hal-ti:
 ## Phase 4: metrics harness
 
 The metered devices, the device models, the power-cut devices, the workloads, the FatFs and littlefs baselines and the report generator are built before the filesystems, so that the baseline numbers are recorded and every later increment is measured.
-This phase also adds the `EMFS_BUILD_METRICS` option, the `metrics` test preset and the metrics workflow that comments on pull requests.
+This phase also adds the `EMFS_BUILD_METRICS` option, the `metrics` presets and the metrics workflow that comments on pull requests.
+It is delivered in four steps:
+
+1. Device models, metered devices and the virtual clock (`metrics/device`).
+2. Power-cut devices and the power-cut sweep.
+3. The interface every filesystem under test implements, the workloads, the runner and the report.
+4. The FatFs and littlefs baselines, the metric tests and the metrics workflow.
 
 ## Phase 5: shared building blocks
 

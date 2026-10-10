@@ -80,11 +80,11 @@ ctest --preset host
 
 Other presets build with coverage instrumentation (`coverage`), with a single-configuration generator (`host-single-Debug`), and for Cortex-M4, Cortex-M7 and Cortex-M33 (`cortex-m4`, `cortex-m7`, `cortex-m33`, built with `cortex-m4-RelWithDebInfo` and so on).
 
-Once the metrics harness is in place (phase 4 of the roadmap), the metrics are built and run with:
+The metrics harness, which is being built in phase 4 of the roadmap, has its own optimized Linux preset:
 
 ```bash
-cmake --preset host -DEMFS_BUILD_METRICS=On
-cmake --build --preset host-Debug
+cmake --preset metrics
+cmake --build --preset metrics
 ctest --preset metrics
 ```
 
