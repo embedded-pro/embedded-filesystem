@@ -1,6 +1,7 @@
 #ifndef FS_INTERFACES_RESULT_HPP
 #define FS_INTERFACES_RESULT_HPP
 
+#include "infra/stream/OutputStream.hpp"
 #include <cstdint>
 
 namespace fs
@@ -25,6 +26,9 @@ namespace fs
         mediaRemoved,
         deviceError
     };
+
+    infra::TextOutputStream& operator<<(infra::TextOutputStream& stream, Result result);
+    infra::TextOutputStream& operator<<(infra::TextOutputStream&& stream, Result result);
 }
 
 #endif
