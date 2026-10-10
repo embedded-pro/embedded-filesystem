@@ -75,7 +75,9 @@ Metrics: configure with `-DEMFS_BUILD_METRICS=On`, run `ctest --preset metrics`.
 
 ## Dependency: EMIL (embedded-infra-lib)
 
-Pulled via `FetchContent` in the top-level `CMakeLists.txt` under the name `emil`, pinned to a full commit SHA (`GIT_TAG <sha> # Unreleased`), auto-bumped by `.github/workflows/update-emil-git-tag.yml`. Use EMIL's interfaces, containers, state machine, CRC and test doubles — don't reintroduce local copies. Changes needed in EMIL interfaces (such as `hal::BlockDevice::Flush`) are made in EMIL, not worked around here.
+Pulled via `FetchContent` in the top-level `CMakeLists.txt` under the name `emil`, pinned to a full commit SHA (`GIT_TAG <sha> # Unreleased`), auto-bumped by `.github/workflows/update-emil-git-tag.yml`.
+
+Use EMIL's interfaces, containers, state machine, CRC and test doubles — don't reintroduce local copies. Changes needed in EMIL interfaces (such as `hal::BlockDevice::Flush`) are made in EMIL, not worked around here.
 
 ## Version control
 
