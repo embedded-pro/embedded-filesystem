@@ -70,6 +70,54 @@ On `internal-flash`, the file sizes of the workloads are divided by 64, so that 
 FatFs symbols are global and its options are compile-time, so every FatFs variant is built from its own copy of the sources next to an `ffconf.h` generated from the upstream one, and runs in its own executable.
 The RAM reported for a subject is the size of its state and buffers with one open file, which is what every workload needs.
 
+### Baseline results
+
+These are the first results of the baselines, on the typical timings of the device models above, except W-6, which uses the maximum timings.
+The metrics workflow measures them again on every pull request, and the full report is its `metrics.md`.
+
+On `nor-qspi-16m`, with the littlefs configurations of the [baselines](#baselines):
+
+| Metric | Measurement                                                                | `littlefs/default` | `littlefs/ram-matched` |
+|--------|----------------------------------------------------------------------------|--------------------|------------------------|
+| W-1    | Sequential write of 4 MiB in 4 KiB chunks (kB/s)                           | 27.7               | 79.4                   |
+| W-2    | Append and sync at 4 MiB against 4 KiB, 50 % full                          | 1.01               | 1                      |
+| W-3    | Append and sync on a 90 % against a 10 % full volume                       | 1                  | 1                      |
+| W-4    | Write amplification of the data logger, 50 % full                          | 33.6               | 35.1                   |
+| W-5    | Overwrite in a 4 MiB against a 64 KiB file, 50 % full                      | 64.2               | 60.2                   |
+| W-6    | Longest append and sync at maximum timings (ms)                            | 1587               | 848                    |
+| R-1    | Sequential read (MB/s)                                                     | 49.2               | 49.1                   |
+| R-2    | Device reads for a random 512 B read in a 4 MiB file                       | 39.6               | 8                      |
+| R-4    | Mount of a 90 % full volume (ms)                                           | 0.3                | 0.258                  |
+| WL-1   | Erase spread with 70 % static data                                         | 13.8               | 13.8                   |
+| WL-3   | User data written on `nor-qspi-1m` until a block reaches 1000 erases (MiB) | 315                | 315                    |
+|        | RAM (B)                                                                    | 328                | 7944                   |
+
+On `sd-card-256m`, with the FatFs configurations of the [baselines](#baselines):
+
+| Metric | Measurement                                            | `fatfs/default` | `fatfs/tuned` |
+|--------|--------------------------------------------------------|-----------------|---------------|
+| W-1    | Sequential write of 4 MiB in 4 KiB chunks (MB/s)       | 7.85            | 7.85          |
+| W-1    | Sequential write of 4 MiB in 64 B chunks (MB/s)        | 3.41            | 1.84          |
+| W-2    | Append and sync at 4 MiB against 4 KiB, 50 % full      | 1               | 1             |
+| W-4    | Write amplification of the data logger, 50 % full      | 16.1            | 16.1          |
+| W-5    | Overwrite in a 4 MiB against a 64 KiB file, 50 % full  | 7.18            | 8.32          |
+| W-6    | Longest append and sync at maximum timings (ms)        | 761             | 761           |
+| R-1    | Sequential read (MB/s)                                 | 13.6            | 13.6          |
+| R-2    | Device reads for a random 512 B read in a 4 MiB file   | 1.83            | 1             |
+| R-3    | Open by path in a directory of 1000 entries (ms)       | 3.99            | 3.99          |
+| M-2    | Aligned writes of the data logger, 50 % full (%)       | 0.006           | 0.006         |
+| M-3    | Allocation units per MiB of the data logger, 50 % full | 0.75            | 0.5           |
+|        | RAM (B)                                                | 1656            | 1920          |
+
+What the baselines show:
+
+* Overwriting inside a file costs littlefs about 60 times more in a 4 MiB file than in a 64 KiB file, because littlefs copies the file from the overwritten offset to its end, and a random read in a 4 MiB file needs 8 device reads to follow the skip list of the file even with large caches.
+* Appends with `Sync` keep a flat cost on both, at the price of rewriting a whole block or sector for every 64 B: write amplification is 16 for FatFs and more than 30 for littlefs.
+* Without fast seek, FatFs walks the cluster chain to seek: an overwrite in a 4 MiB file costs 7 times as much as in a 64 KiB file, and random reads need 1.8 device reads; the link map of `fatfs/tuned` brings random reads down to one device read.
+* `f_expand` makes `fatfs/tuned` slower for writes of 64 B, because writing inside the expanded file reads every sector before writing it.
+* littlefs levels wear only dynamically: with 70 % static data, the most erased block is erased 13.8 times as often as the average one.
+* `littlefs/default` programs 16 B at a time, and the model charges every program request a whole page program, which is why it writes three times slower than `littlefs/ram-matched`; this is a pessimistic assumption until the models are calibrated on hardware.
+
 ## Workloads
 
 All workloads use a fixed random seed.
