@@ -73,11 +73,14 @@ Getters that need no device access, such as `File::Size()` and `File::Position()
 ### Operation queue
 
 Each volume executes one operation at a time and issues at most one device request at a time, which is what `hal::BlockDevice` and `hal::Flash` drivers support.
-Operations started while another one is running are kept in a bounded queue and executed in order.
-When the queue is full, the operation completes with `Result::busy`.
+An operation claims the `fs::OperationQueue` of its volume before its first device request and releases it when it completes; claims are granted in order, always from the event dispatcher.
+The queue is bounded by what can claim it: every handle has one call in flight at most, and the volume has a fixed number of slots for the operations on paths, such as `Open`, `Remove` and `Rename`.
+A call that finds its handle busy, or no free slot, completes with `Result::busy`; such completions wait in a bounded `fs::DeferredCompletions` until the event dispatcher delivers them.
 
 Background work, such as erasing obsolete NOR blocks or scanning the FAT for free clusters, runs only when the queue is empty and after a configurable idle delay.
-A foreground operation that arrives while background work is running waits for at most one device request, for instance one sector erase; W-6 in [Metrics.md](Metrics.md) measures this.
+The idle delay starts when a foreground operation releases the queue and no other operation is waiting, so a volume without work never wakes the processor.
+Background work claims the queue like an operation, and checks before every device request whether a foreground operation is waiting; if one is, it releases the queue and continues after the next idle delay.
+A foreground operation that arrives while background work is running therefore waits for at most one device request, for instance one sector erase; W-6 in [Metrics.md](Metrics.md) measures this.
 
 ### Lifecycle state machines
 
@@ -282,9 +285,12 @@ A handle returns to its pool once the last `infra::SharedPtr` and `infra::WeakPt
 The building blocks in `fs/common` are shared by both filesystems.
 Each one is sized at compile time:
 
-| Building block   | Sized by                                                             | RAM                        |
-|------------------|----------------------------------------------------------------------|----------------------------|
-| `fs::PathLimits` | The longest name and the longest path in UTF-8 bytes, 255 by default | None: paths are not copied |
+| Building block                            | Sized by                                                             | RAM                                                  |
+|-------------------------------------------|----------------------------------------------------------------------|------------------------------------------------------|
+| `fs::PathLimits`                          | The longest name and the longest path in UTF-8 bytes, 255 by default | None: paths are not copied                           |
+| `fs::OperationQueue`                      | Claimed by the handles and the path-operation slots of the volume    | A claimable resource, an idle timer and its callback |
+| `fs::DeferredCompletions::WithMaxSize<N>` | N completions with `busy` that wait for the event dispatcher         | N completions                                        |
+| `fs::HandlePool<Handle, N>`               | N handles, constructed once with the volume                          | N handles                                            |
 
 ### Paths
 
@@ -292,6 +298,14 @@ A path is validated once, in one pass, when the operation that receives it start
 It is then walked one component at a time with `fs::PathComponents`, so that each step of a lookup handles one name and the walk needs no recursion.
 `fs::SplitLast` splits a path into its parent directory and its last name, for the operations that create, remove or rename an entry.
 Components are views into the path of the caller; nothing is copied.
+
+### Pooled handles
+
+Handles are constructed once, with the volume, by `fs::HandlePool`, and live as long as the volume.
+`Allocate` hands out an `infra::SharedPtr` to a free handle, or none when every handle is in use.
+An operation in flight holds an `infra::SharedPtr` to its own handle, so a handle is never unreferenced while it has work to do.
+When the last `infra::SharedPtr` and `infra::WeakPtr` to a handle are released, the handle is notified: a file starts its implicit close, and a directory has nothing left to do.
+The handle returns to the pool when it calls `Release`.
 
 ### Device results
 
