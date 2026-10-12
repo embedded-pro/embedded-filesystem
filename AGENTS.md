@@ -71,7 +71,7 @@ cmake --build --preset host-Debug
 ctest --preset host
 ```
 
-Metrics: configure with `-DEMFS_BUILD_METRICS=On`, run `ctest --preset metrics`. Options use the `EMFS_` prefix (`EMFS_BUILD_TESTS`, `EMFS_BUILD_METRICS`).
+Metrics: `cmake --preset metrics && cmake --build --preset metrics && ctest --preset metrics` (Linux host only). Options use the `EMFS_` prefix (`EMFS_BUILD_TESTS`, `EMFS_BUILD_METRICS`).
 
 ## Dependency: EMIL (embedded-infra-lib)
 
