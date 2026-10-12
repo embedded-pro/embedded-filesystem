@@ -143,12 +143,11 @@ namespace fs
             {
                 return FatUnmountDone{ result };
             });
-        volume.Cache().Flush([this](Result result)
-            {
-                volume.Cache().Clear();
-                volume.Cache().SetMirroredRegion(std::nullopt);
-                LifecycleOperationDone(result);
-            });
+        volume.Operation().emplace<FatUnmount>(volume, [this](Result result)
+                              {
+                                  LifecycleOperationDone(result);
+                              })
+            .Start();
     }
 
     void FatFileSystem::LifecycleOperationDone(Result result)

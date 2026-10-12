@@ -25,7 +25,6 @@ namespace fs
 
     private:
         void Locate();
-        void OnLocated(Result result, const FatExtent& run);
         void Transfer(const FatExtent& run);
         void TransferSectors(uint32_t sector, uint32_t sectors);
         void TransferPart(uint32_t sector, uint32_t offset, uint32_t bytes);

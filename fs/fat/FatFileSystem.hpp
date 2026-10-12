@@ -122,7 +122,7 @@ namespace fs
     public:
         explicit WithStorage(hal::BlockDevice& device, const FatConfig& config = {})
             : Storage(device)
-            , FatFileSystem(FatVolumeParts{ device, this->barrierStorage, this->cacheStorage, this->deferredStorage, infra::MakeRange(this->nameStorage), infra::MakeRange(this->closedStorage) }, config)
+            , FatFileSystem(FatVolumeParts{ device, this->barrierStorage, this->cacheStorage, this->deferredStorage, infra::MakeRange(this->nameStorage), infra::MakeRange(this->closedStorage), CacheSectors }, config)
         {
             for (std::size_t index = 0; index != Limits.pathOperations; ++index)
                 pathSlots.emplace_back(Volume().Queue());

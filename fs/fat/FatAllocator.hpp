@@ -23,6 +23,7 @@ namespace fs
 
         void Reset();
         uint32_t Cursor() const;
+        uint32_t Contiguous() const;
         void Grow(std::optional<uint32_t> last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
 
     private:
@@ -49,6 +50,7 @@ namespace fs
         uint32_t allocated{ 0 };
         uint32_t first{ 0 };
         uint32_t previous{ 0 };
+        uint32_t contiguous{ 0 };
         uint32_t candidate{ 0 };
         uint32_t examined{ 0 };
         bool preferredOnly{ false };

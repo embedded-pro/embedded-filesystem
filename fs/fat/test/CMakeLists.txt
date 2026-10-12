@@ -41,6 +41,7 @@ target_sources(fs.fat_test PRIVATE
     TestFatTableReader.cpp
     TestFatTableWriter.cpp
     TestFatUsage.cpp
+    TestFatWrite.cpp
     TestSparseBlockDevice.cpp
     TestUtf8.cpp
 )

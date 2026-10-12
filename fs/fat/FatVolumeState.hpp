@@ -14,6 +14,7 @@ namespace fs
         std::optional<FsInfo> fsInfo;
         std::optional<bool> cleanAtMount;
         std::optional<uint32_t> freeClusters;
+        bool tableChanged{ false };
     };
 }
 

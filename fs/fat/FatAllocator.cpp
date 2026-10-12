@@ -25,6 +25,11 @@ namespace fs
         return cursor;
     }
 
+    uint32_t FatAllocator::Contiguous() const
+    {
+        return contiguous;
+    }
+
     void FatAllocator::Grow(std::optional<uint32_t> last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
     {
         really_assert(clusters != 0);
@@ -34,6 +39,7 @@ namespace fs
         wanted = clusters;
         allocated = 0;
         first = 0;
+        contiguous = 0;
         barrier = false;
         Next();
     }
@@ -131,9 +137,13 @@ namespace fs
         if (allocated == 0)
             first = cluster;
 
+        if (contiguous == allocated && cluster == first + allocated)
+            ++contiguous;
+
         barrier = barrier || (last && writer.SectorOf(cluster) != writer.SectorOf(*last));
         previous = cluster;
         ++allocated;
+        volume.tableChanged = true;
         cursor = After(cluster) != 0 ? After(cluster) : 2;
 
         if (volume.freeClusters)

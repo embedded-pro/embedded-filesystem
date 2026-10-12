@@ -7,25 +7,33 @@
 #include "fs/common/OperationQueue.hpp"
 #include "fs/common/Path.hpp"
 #include "fs/common/SectorCache.hpp"
+#include "fs/fat/FatAllocator.hpp"
 #include "fs/fat/FatBackgroundScan.hpp"
 #include "fs/fat/FatChainWalk.hpp"
 #include "fs/fat/FatClosedFiles.hpp"
 #include "fs/fat/FatConfig.hpp"
 #include "fs/fat/FatDirectoryReader.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
+#include "fs/fat/FatEntryUpdate.hpp"
 #include "fs/fat/FatFreeSpaceScan.hpp"
 #include "fs/fat/FatMount.hpp"
 #include "fs/fat/FatOpen.hpp"
 #include "fs/fat/FatOpenDirectory.hpp"
 #include "fs/fat/FatPathWalk.hpp"
 #include "fs/fat/FatRead.hpp"
+#include "fs/fat/FatRunLocator.hpp"
 #include "fs/fat/FatStat.hpp"
+#include "fs/fat/FatSync.hpp"
+#include "fs/fat/FatTableWriter.hpp"
+#include "fs/fat/FatUnmount.hpp"
 #include "fs/fat/FatUsage.hpp"
 #include "fs/fat/FatVolumeState.hpp"
+#include "fs/fat/FatWrite.hpp"
 #include "fs/interfaces/FileSystem.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/ByteRange.hpp"
 #include "infra/util/Function.hpp"
+#include "infra/util/IntrusiveList.hpp"
 #include "infra/util/MemoryRange.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -72,7 +80,9 @@ namespace fs
         }
     }
 
-    using FatOperation = std::variant<std::monostate, FatMount, FatStat, FatOpenDirectory, FatOpen, FatRead, FatUsage>;
+    class FatFile;
+
+    using FatOperation = std::variant<std::monostate, FatMount, FatUnmount, FatStat, FatOpenDirectory, FatOpen, FatRead, FatWrite, FatSync, FatUsage>;
 
     struct FatVolumeParts
     {
@@ -82,6 +92,7 @@ namespace fs
         DeferredCompletions& deferred;
         infra::ByteRange nameBuffer;
         infra::MemoryRange<FatClosedFile> closedFiles;
+        uint32_t cacheSectors;
     };
 
     class FatVolume
@@ -94,15 +105,19 @@ namespace fs
 
         hal::BlockDevice& Device() const;
         SectorCache& Cache() const;
+        uint32_t CacheSectors() const;
         DirectTransfers& Transfers();
         PathLimits Limits() const;
         FatVolumeState& State();
         const FatGeometry& Geometry() const;
         FatDirectoryReader& Reader();
         FatPathWalk& Walk();
-        FatChainWalk& Chain();
+        FatRunLocator& Locator();
+        FatAllocator& Allocator();
+        FatEntryUpdate& EntryUpdate();
         FatClosedFiles& ClosedFiles();
         FatFreeSpaceScan& FreeSpace();
+        infra::IntrusiveList<FatFile>& OpenFiles();
         OperationQueue& Queue();
         FatOperation& Operation();
 
@@ -121,6 +136,7 @@ namespace fs
         hal::BlockDevice& device;
         SectorCache& cache;
         DeferredCompletions& deferred;
+        uint32_t cacheSectors;
         PathLimits limits;
         infra::Function<void()> onMediaRemoved;
         DirectTransfers transfers;
@@ -129,7 +145,12 @@ namespace fs
         FatDirectoryReader reader;
         FatPathWalk walk;
         FatChainWalk chain;
+        FatRunLocator locator;
+        FatTableWriter tableWriter;
+        FatAllocator allocator;
+        FatEntryUpdate entryUpdate;
         FatClosedFiles closedFiles;
+        infra::IntrusiveList<FatFile> openFiles;
         FatFreeSpaceScan freeSpace;
         OperationQueue queue;
         FatBackgroundScan background;

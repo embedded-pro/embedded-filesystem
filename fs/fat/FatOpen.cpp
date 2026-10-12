@@ -52,11 +52,23 @@ namespace fs
         if (walk.FoundDirectory())
             return Result::isADirectory;
 
-        if (call.mode != OpenMode::read)
+        return VerifyFile(walk.Found());
+    }
+
+    Result FatOpen::VerifyFile(const FatScannedEntry& found) const
+    {
+        if (call.mode == OpenMode::write)
             return Result::unsupported;
 
-        if (walk.Found().entry.size != 0 && !volume.Geometry().IsCluster(walk.Found().entry.firstCluster))
+        if (call.mode != OpenMode::read && (found.entry.attributes & FatAttributes::readOnly) != 0)
+            return Result::readOnly;
+
+        if (found.entry.size != 0 && !volume.Geometry().IsCluster(found.entry.firstCluster))
             return Result::corrupted;
+
+        for (auto& file : volume.OpenFiles())
+            if (file.State().entry == found.shortEntry && (file.State().mode != OpenMode::read || call.mode != OpenMode::read))
+                return Result::busy;
 
         return Result::success;
     }
