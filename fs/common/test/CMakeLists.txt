@@ -5,9 +5,15 @@ emil_add_test(fs.common_test)
 target_link_libraries(fs.common_test PUBLIC
     gmock_main
     fs.common
+    infra.event_test_helper
+    infra.timer_test_helper
+    infra.util_test_helper
 )
 
 target_sources(fs.common_test PRIVATE
     TestBlockDeviceResult.cpp
+    TestDeferredCompletions.cpp
+    TestHandlePool.cpp
+    TestOperationQueue.cpp
     TestPath.cpp
 )
