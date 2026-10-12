@@ -165,7 +165,7 @@ namespace fs
 
         bool IsValid(const FatFormatConfig& config, uint32_t blockSize)
         {
-            return blockSize == sectorBytes && config.fatCopies != 0 && (!config.sectorsPerCluster || std::has_single_bit(*config.sectorsPerCluster)) && (!config.alignmentSectors || *config.alignmentSectors != 0);
+            return blockSize == sectorBytes && config.fatCopies != 0 && (!config.sectorsPerCluster.has_value() || std::has_single_bit(*config.sectorsPerCluster)) && (!config.alignmentSectors.has_value() || *config.alignmentSectors != 0);
         }
     }
 
