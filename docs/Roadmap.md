@@ -82,6 +82,7 @@ The formatter comes early, because every later test and the metrics need formatt
 
 The filesystems run on real hardware: NOR flash through the QSPI driver of EmIL on an ST board with hal-st, and SD cards once an SD card driver for `hal::BlockDevice` exists.
 The device models are calibrated against measurements, and the footprint and cycle metrics F-1 and F-2 are measured with `cortex-memory-budget` and `cortex-cycle-budget`.
+The parameters that `fs::FatFormatter` chooses are compared with those of cards formatted by the SD Memory Card Formatter of the SD Association.
 
 ## Later
 

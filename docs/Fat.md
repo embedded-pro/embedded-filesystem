@@ -235,7 +235,7 @@ It follows the SD Association file system specification, part 2 of the SD specif
 | Larger       | FAT32 | 64                  | 32768                    |
 
 The specification formats cards larger than 32 GB, SDXC cards, with exFAT; the formatter uses FAT32 for them, as exFAT is not supported.
-The implementation checks these values against the specification before they are relied on.
+These values have not yet been checked against the specification document itself; they are compared with cards formatted by the SD Memory Card Formatter of the SD Association in the on-target phase described in [Roadmap.md](Roadmap.md).
 
 The device holds an MBR with one primary partition, and the system area, from the boot sector up to and including the fixed root directory, ends on a boundary unit, so that the data area starts on one and clusters never straddle one.
 On FAT12 and FAT16, the start of the partition absorbs the difference; on FAT32, the partition starts on a boundary unit and the reserved sectors absorb it.
