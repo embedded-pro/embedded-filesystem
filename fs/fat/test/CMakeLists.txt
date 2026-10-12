@@ -20,10 +20,12 @@ target_sources(fs.fat_test PRIVATE
     TestFatBootSector.cpp
     TestFatChainWalk.cpp
     TestFatClosedFiles.cpp
+    TestFatCreate.cpp
     TestFatDirectory.cpp
     TestFatDirectoryEntry.cpp
     TestFatDirectoryReader.cpp
     TestFatEntryAssembler.cpp
+    TestFatEntrySetWriter.cpp
     TestFatExtentCache.cpp
     TestFatFileSystem.cpp
     TestFatFormatLayout.cpp
@@ -33,6 +35,7 @@ target_sources(fs.fat_test PRIVATE
     TestFatGeometry.cpp
     TestFatLookup.cpp
     TestFatName.cpp
+    TestFatNameScan.cpp
     TestFatOpen.cpp
     TestFatPartitionTable.cpp
     TestFatRead.cpp

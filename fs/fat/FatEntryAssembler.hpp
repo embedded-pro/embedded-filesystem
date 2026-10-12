@@ -30,6 +30,7 @@ namespace fs
 
     bool IsDirectory(const FatScannedEntry& entry);
     EntryInfo InfoOf(const FatScannedEntry& entry);
+    bool NameMatches(const FatScannedEntry& entry, infra::BoundedConstString name);
 
     class FatEntryAssembler
     {

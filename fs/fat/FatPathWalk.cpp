@@ -41,7 +41,7 @@ namespace fs
 
     bool FatPathWalk::Visit(const FatScannedEntry& entry)
     {
-        if (!Matches(entry))
+        if (!NameMatches(entry, component))
             return true;
 
         found = entry;
@@ -92,17 +92,5 @@ namespace fs
             cursor = reader.Start(FoundCluster());
             NextComponent();
         }
-    }
-
-    bool FatPathWalk::Matches(const FatScannedEntry& entry)
-    {
-        if (EqualIgnoringAsciiCase(entry.name, component))
-            return true;
-
-        if (!entry.longName)
-            return false;
-
-        auto size = ShortNameToUtf8(entry.entry.name, infra::MakeRange(shortName));
-        return EqualIgnoringAsciiCase(infra::BoundedConstString(reinterpret_cast<const char*>(shortName.data()), size), component);
     }
 }

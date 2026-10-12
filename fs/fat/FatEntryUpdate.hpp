@@ -17,7 +17,7 @@ namespace fs
     class FatEntryUpdate
     {
     public:
-        FatEntryUpdate(SectorCache& cache, FatDirectoryReader& reader);
+        FatEntryUpdate(SectorCache& cache, FatDirectoryReader& reader, uint32_t timerServiceId);
         FatEntryUpdate(const FatEntryUpdate& other) = delete;
         FatEntryUpdate& operator=(const FatEntryUpdate& other) = delete;
         ~FatEntryUpdate();
@@ -32,6 +32,7 @@ namespace fs
     private:
         SectorCache& cache;
         FatDirectoryReader& reader;
+        uint32_t timerServiceId;
         FatOpenFile* file{ nullptr };
         std::array<uint8_t, directoryEntryBytes> updated{};
         infra::AutoResetFunction<void(Result result)> onDone;

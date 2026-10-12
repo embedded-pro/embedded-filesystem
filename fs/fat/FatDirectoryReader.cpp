@@ -47,6 +47,11 @@ namespace fs
         return first + position.index / EntriesPerSector();
     }
 
+    uint32_t FatDirectoryReader::Capacity(uint32_t cluster) const
+    {
+        return cluster == 0 ? geometry.rootSectors * EntriesPerSector() : EntriesPerCluster();
+    }
+
     void FatDirectoryReader::Resume()
     {
         if (cursor->done)
@@ -117,7 +122,7 @@ namespace fs
     {
         if (IsFixedRoot())
         {
-            cursor->done = cursor->index == geometry.rootSectors * EntriesPerSector();
+            cursor->done = cursor->index == Capacity(0);
 
             if (cursor->done)
                 Done(Result::success);

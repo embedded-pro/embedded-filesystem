@@ -25,6 +25,7 @@
 #include "fs/fat/FatStat.hpp"
 #include "fs/fat/FatSync.hpp"
 #include "fs/fat/FatTableWriter.hpp"
+#include "fs/fat/FatTimestamp.hpp"
 #include "fs/fat/FatUnmount.hpp"
 #include "fs/fat/FatUsage.hpp"
 #include "fs/fat/FatVolumeState.hpp"
@@ -120,6 +121,7 @@ namespace fs
         infra::IntrusiveList<FatFile>& OpenFiles();
         OperationQueue& Queue();
         FatOperation& Operation();
+        FatDateTime Timestamp() const;
 
         uint32_t Generation() const;
         bool Available() const;
@@ -137,6 +139,7 @@ namespace fs
         SectorCache& cache;
         DeferredCompletions& deferred;
         uint32_t cacheSectors;
+        uint32_t timerServiceId;
         PathLimits limits;
         infra::Function<void()> onMediaRemoved;
         DirectTransfers transfers;

@@ -34,6 +34,8 @@ target_sources(fs.fat PRIVATE
     FatDirectoryReader.hpp
     FatEntryAssembler.cpp
     FatEntryAssembler.hpp
+    FatEntrySetWriter.cpp
+    FatEntrySetWriter.hpp
     FatEntryUpdate.cpp
     FatEntryUpdate.hpp
     FatExtentCache.cpp
@@ -57,6 +59,8 @@ target_sources(fs.fat PRIVATE
     FatMount.hpp
     FatName.cpp
     FatName.hpp
+    FatNameScan.cpp
+    FatNameScan.hpp
     FatOpen.cpp
     FatOpen.hpp
     FatOpenDirectory.cpp

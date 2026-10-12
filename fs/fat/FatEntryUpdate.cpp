@@ -1,12 +1,14 @@
 #include "fs/fat/FatEntryUpdate.hpp"
 #include "fs/fat/FatRanks.hpp"
+#include "fs/fat/FatTimestamp.hpp"
 #include <algorithm>
 
 namespace fs
 {
-    FatEntryUpdate::FatEntryUpdate(SectorCache& cache, FatDirectoryReader& reader)
+    FatEntryUpdate::FatEntryUpdate(SectorCache& cache, FatDirectoryReader& reader, uint32_t timerServiceId)
         : cache(cache)
         , reader(reader)
+        , timerServiceId(timerServiceId)
     {}
 
     FatEntryUpdate::~FatEntryUpdate() = default;
@@ -35,7 +37,12 @@ namespace fs
         entry.firstCluster = file->firstCluster;
 
         if (file->written)
+        {
+            auto now = ToFatDateTime(infra::Now(timerServiceId));
             entry.attributes |= FatAttributes::archive;
+            entry.writeTime = now.time;
+            entry.writeDate = now.date;
+        }
 
         EncodeShortEntry(entry, infra::MakeRange(updated));
 

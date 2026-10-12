@@ -32,10 +32,29 @@ namespace fs
 
     void FatAllocator::Grow(std::optional<uint32_t> last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
     {
+        Start(last, clusters, true, onDone);
+    }
+
+    void FatAllocator::Take(uint32_t last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
+    {
+        Start(last, clusters, false, onDone);
+    }
+
+    void FatAllocator::Link(const infra::Function<void(Result result)>& onDone)
+    {
+        really_assert(last.has_value() && allocated != 0);
+
+        onLinked = onDone;
+        LinkAfterBarrier();
+    }
+
+    void FatAllocator::Start(std::optional<uint32_t> last, uint32_t clusters, bool link, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
+    {
         really_assert(clusters != 0);
 
         this->last = last;
         this->onDone = onDone;
+        linkWhenTaken = link;
         wanted = clusters;
         allocated = 0;
         first = 0;
@@ -48,7 +67,7 @@ namespace fs
     {
         if (allocated == wanted)
         {
-            Link(Result::success);
+            Finish(Result::success);
             return;
         }
 
@@ -71,7 +90,7 @@ namespace fs
     {
         if (result != Result::success)
         {
-            Link(result);
+            Finish(result);
             return;
         }
 
@@ -85,7 +104,7 @@ namespace fs
             ReadCandidateSector();
         }
         else if (examined >= volume.geometry.clusterCount)
-            Link(Result::noSpace);
+            Finish(Result::noSpace);
         else
             ReadCandidateSector();
     }
@@ -130,7 +149,7 @@ namespace fs
     {
         if (result != Result::success)
         {
-            Link(result);
+            Finish(result);
             return;
         }
 
@@ -152,31 +171,44 @@ namespace fs
         Next();
     }
 
-    void FatAllocator::Link(Result result)
+    void FatAllocator::Finish(Result result)
     {
         if (result != Result::success && result != Result::noSpace)
             Done(result);
         else if (allocated == 0)
             Done(Result::noSpace);
-        else if (!last)
+        else if (!last || !linkWhenTaken)
             Done(result);
-        else if (barrier)
-            cache.Flush([this, result](Result flushed)
-                {
-                    if (flushed != Result::success)
-                        Done(flushed);
-                    else
-                        LinkLast(result);
-                });
         else
-            LinkLast(result);
+        {
+            takeResult = result;
+            onLinked = [this](Result linked)
+            {
+                Done(linked != Result::success ? linked : takeResult);
+            };
+            LinkAfterBarrier();
+        }
     }
 
-    void FatAllocator::LinkLast(Result result)
+    void FatAllocator::LinkAfterBarrier()
     {
-        writer.Write(*last, first, [this, result](Result written)
+        if (barrier)
+            cache.Flush([this](Result flushed)
+                {
+                    if (flushed != Result::success)
+                        onLinked(flushed);
+                    else
+                        LinkLast();
+                });
+        else
+            LinkLast();
+    }
+
+    void FatAllocator::LinkLast()
+    {
+        writer.Write(*last, first, [this](Result written)
             {
-                Done(written != Result::success ? written : result);
+                onLinked(written);
             });
     }
 

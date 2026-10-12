@@ -25,16 +25,20 @@ namespace fs
         uint32_t Cursor() const;
         uint32_t Contiguous() const;
         void Grow(std::optional<uint32_t> last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
+        void Take(uint32_t last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
+        void Link(const infra::Function<void(Result result)>& onDone);
 
     private:
+        void Start(std::optional<uint32_t> last, uint32_t clusters, bool link, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
         void Next();
         void ReadCandidateSector();
         void OnSector(Result result, infra::ConstByteRange contents);
         std::optional<uint32_t> FreeInSector(infra::ConstByteRange contents);
         void Take(uint32_t cluster);
         void Taken(Result result, uint32_t cluster);
-        void Link(Result result);
-        void LinkLast(Result result);
+        void Finish(Result result);
+        void LinkAfterBarrier();
+        void LinkLast();
         void Done(Result result);
         uint32_t Preferred() const;
         bool IsCluster(uint32_t cluster) const;
@@ -55,7 +59,10 @@ namespace fs
         uint32_t examined{ 0 };
         bool preferredOnly{ false };
         bool barrier{ false };
+        bool linkWhenTaken{ false };
+        Result takeResult{ Result::success };
         infra::AutoResetFunction<void(Result result, uint32_t first, uint32_t allocated)> onDone;
+        infra::AutoResetFunction<void(Result result)> onLinked;
     };
 }
 

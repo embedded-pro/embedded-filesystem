@@ -8,6 +8,7 @@ namespace fs
         , cache(parts.cache)
         , deferred(parts.deferred)
         , cacheSectors(parts.cacheSectors)
+        , timerServiceId(config.timerServiceId)
         , limits{ parts.nameBuffer.size(), config.maxPathBytes }
         , onMediaRemoved(onMediaRemoved)
         , transfers(parts.barrier, parts.cache)
@@ -18,7 +19,7 @@ namespace fs
         , locator(chain)
         , tableWriter(parts.cache, state.geometry)
         , allocator(parts.cache, state, tableWriter)
-        , entryUpdate(parts.cache, reader)
+        , entryUpdate(parts.cache, reader, config.timerServiceId)
         , closedFiles(parts.closedFiles)
         , freeSpace(parts.cache, state)
         , queue(config.idleDelay, [this]
@@ -116,6 +117,11 @@ namespace fs
     FatOperation& FatVolume::Operation()
     {
         return operation;
+    }
+
+    FatDateTime FatVolume::Timestamp() const
+    {
+        return ToFatDateTime(infra::Now(timerServiceId));
     }
 
     uint32_t FatVolume::Generation() const

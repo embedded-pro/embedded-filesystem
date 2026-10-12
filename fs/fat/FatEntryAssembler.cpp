@@ -1,6 +1,8 @@
 #include "fs/fat/FatEntryAssembler.hpp"
+#include "fs/fat/FatName.hpp"
 #include "fs/fat/Utf8.hpp"
 #include "infra/util/ReallyAssert.hpp"
+#include <array>
 #include <utility>
 
 namespace fs
@@ -18,6 +20,19 @@ namespace fs
             return EntryInfo{ entry.name, EntryType::directory, 0 };
 
         return EntryInfo{ entry.name, EntryType::file, entry.entry.size };
+    }
+
+    bool NameMatches(const FatScannedEntry& entry, infra::BoundedConstString name)
+    {
+        if (EqualIgnoringAsciiCase(entry.name, name))
+            return true;
+
+        if (!entry.longName)
+            return false;
+
+        std::array<uint8_t, ShortName::maxUtf8Bytes> shortName{};
+        auto size = ShortNameToUtf8(entry.entry.name, infra::MakeRange(shortName));
+        return EqualIgnoringAsciiCase(infra::BoundedConstString(reinterpret_cast<const char*>(shortName.data()), size), name);
     }
 
     namespace

@@ -49,6 +49,7 @@ namespace fs
         FatDirectoryCursor Start(uint32_t firstCluster) const;
         void Read(FatDirectoryCursor& cursor, FatDirectoryVisitor& visitor, const infra::Function<void(Result result)>& onDone);
         uint32_t SectorOf(FatEntryPosition position) const;
+        uint32_t Capacity(uint32_t cluster) const;
 
     private:
         void Resume();
