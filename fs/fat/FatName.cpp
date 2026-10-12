@@ -8,7 +8,7 @@ namespace fs
     namespace
     {
         constexpr std::size_t maxUnits = 255;
-        constexpr std::string_view reserved{ "\"*/:<>?\\|" };
+        constexpr std::string_view reserved{ R"("*/:<>?\|)" };
 
         bool IsReserved(char32_t codePoint)
         {
@@ -38,7 +38,7 @@ namespace fs
 
         auto units = Utf16Units(name);
 
-        if (!units || HasReservedCharacter(name))
+        if (!units.has_value() || HasReservedCharacter(name))
             return Result::invalidPath;
 
         if (*units > maxUnits)

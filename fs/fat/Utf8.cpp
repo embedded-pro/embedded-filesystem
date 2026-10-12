@@ -142,7 +142,7 @@ namespace fs
 
     std::optional<char16_t> Utf16Encoder::Next()
     {
-        if (pendingLow)
+        if (pendingLow.has_value())
             return std::exchange(pendingLow, std::nullopt);
 
         if (offset == text.size())
