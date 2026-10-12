@@ -24,6 +24,7 @@ namespace fs
     bool IsEndOfChain(FatType type, uint32_t value);
     bool IsBadCluster(FatType type, uint32_t value);
     uint32_t EndOfChain(FatType type);
+    uint32_t MediaEntry(FatType type, uint8_t media);
 
     std::optional<bool> CleanShutdown(FatType type, uint32_t secondEntry);
     uint32_t WithCleanShutdown(FatType type, uint32_t secondEntry, bool clean);

@@ -136,6 +136,11 @@ namespace fs
         return Maximum(type);
     }
 
+    uint32_t MediaEntry(FatType type, uint8_t media)
+    {
+        return (Maximum(type) & ~uint32_t{ 0xff }) | media;
+    }
+
     std::optional<bool> CleanShutdown(FatType type, uint32_t secondEntry)
     {
         switch (type)

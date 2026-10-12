@@ -37,6 +37,10 @@ jobs:
           max-size: 2G
           save: ${{ github.ref == 'refs/heads/main' }}
       - uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67 # v6
+      - name: Install the FAT tools for the interoperability tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dosfstools mtools
       - name: Download the metrics of main
         if: ${{ github.event_name == 'pull_request' }}
         continue-on-error: true

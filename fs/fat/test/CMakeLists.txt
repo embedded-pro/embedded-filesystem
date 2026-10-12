@@ -5,16 +5,23 @@ emil_add_test(fs.fat_test)
 target_link_libraries(fs.fat_test PUBLIC
     gmock_main
     fs.fat
+    fs.fat_test_doubles
+    hal.interfaces_test_doubles
+    infra.event_test_helper
+    infra.util_test_helper
 )
 
 target_sources(fs.fat_test PRIVATE
     TestFatBootSector.cpp
     TestFatDirectoryEntry.cpp
+    TestFatFormatLayout.cpp
+    TestFatFormatter.cpp
     TestFatFsInfo.cpp
     TestFatGeometry.cpp
     TestFatName.cpp
     TestFatPartitionTable.cpp
     TestFatShortName.cpp
     TestFatTable.cpp
+    TestSparseBlockDevice.cpp
     TestUtf8.cpp
 )
