@@ -63,9 +63,9 @@ namespace fs
         StartPathCall(path, FatStatCall{ path, onDone });
     }
 
-    void FatFileSystem::Remove(infra::BoundedConstString, const infra::Function<void(Result result)>& onDone)
+    void FatFileSystem::Remove(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        volume.Defer(onDone, IsMounted() ? Result::unsupported : Unavailable());
+        StartPathCall(path, FatRemoveCall{ path, onDone });
     }
 
     void FatFileSystem::Rename(infra::BoundedConstString, infra::BoundedConstString, const infra::Function<void(Result result)>& onDone)
@@ -73,9 +73,9 @@ namespace fs
         volume.Defer(onDone, IsMounted() ? Result::unsupported : Unavailable());
     }
 
-    void FatFileSystem::MakeDirectory(infra::BoundedConstString, const infra::Function<void(Result result)>& onDone)
+    void FatFileSystem::MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        volume.Defer(onDone, IsMounted() ? Result::unsupported : Unavailable());
+        StartPathCall(path, FatMakeDirectoryCall{ path, onDone });
     }
 
     void FatFileSystem::Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone)
@@ -243,6 +243,10 @@ namespace fs
             volume.Operation().emplace<FatOpenDirectory>(volume, *openDirectory, allocateDirectory, finished).Start();
         else if (auto* open = std::get_if<FatOpenCall>(&call))
             volume.Operation().emplace<FatOpen>(volume, *open, allocateFile, finished).Start();
+        else if (auto* makeDirectory = std::get_if<FatMakeDirectoryCall>(&call))
+            volume.Operation().emplace<FatMakeDirectory>(volume, *makeDirectory, finished).Start();
+        else if (auto* remove = std::get_if<FatRemoveCall>(&call))
+            volume.Operation().emplace<FatRemove>(volume, *remove, finished).Start();
         else
             volume.Operation().emplace<FatUsage>(volume, std::get<FatUsageCall>(call), finished).Start();
     }

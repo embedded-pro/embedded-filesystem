@@ -312,3 +312,11 @@ TEST_F(FatDirectoryTest, open_directory_before_mount_is_not_mounted)
 
     ExpectOpenDirectory("/", fs::Result::notMounted);
 }
+
+TEST_F(FatDirectoryTest, directory_with_a_pending_next_is_destroyed_with_its_volume)
+{
+    auto directory = ExpectOpenDirectory("/");
+
+    directory->Next([](fs::Result, std::optional<fs::EntryInfo>) {});
+    directory = nullptr;
+}

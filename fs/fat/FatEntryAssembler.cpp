@@ -153,17 +153,21 @@ namespace fs
     {
         scanned.entry = DecodeShortEntry(entry);
         scanned.shortEntry = position;
-        scanned.longName = LongNameCompletes(scanned.entry);
+        auto complete = SetCompletes(scanned.entry);
+        scanned.longName = complete && NameIsValid();
 
-        if (scanned.longName)
-        {
+        if (complete)
             ++scanned.slots;
-            scanned.name = infra::BoundedConstString(reinterpret_cast<const char*>(nameBuffer.begin() + nameBegin), nameBuffer.size() - nameBegin);
-        }
         else
         {
             scanned.first = position;
             scanned.slots = 1;
+        }
+
+        if (scanned.longName)
+            scanned.name = infra::BoundedConstString(reinterpret_cast<const char*>(nameBuffer.begin() + nameBegin), nameBuffer.size() - nameBegin);
+        else
+        {
             auto size = ShortNameToUtf8(scanned.entry.name, nameBuffer);
             scanned.name = infra::BoundedConstString(reinterpret_cast<const char*>(nameBuffer.begin()), size);
         }
@@ -171,8 +175,13 @@ namespace fs
         Reset();
     }
 
-    bool FatEntryAssembler::LongNameCompletes(const ShortEntry& entry) const
+    bool FatEntryAssembler::SetCompletes(const ShortEntry& entry) const
     {
-        return expectedOrdinal == 1 && !invalid && !pendingLowSurrogate && nameBegin != nameBuffer.size() && LongNameChecksum(entry.name.bytes) == checksum;
+        return expectedOrdinal == 1 && LongNameChecksum(entry.name.bytes) == checksum;
+    }
+
+    bool FatEntryAssembler::NameIsValid() const
+    {
+        return !invalid && !pendingLowSurrogate && nameBegin != nameBuffer.size();
     }
 }

@@ -35,12 +35,24 @@ namespace fs
         infra::Function<void(Result result, infra::SharedPtr<File> file)> onDone;
     };
 
+    struct FatMakeDirectoryCall
+    {
+        infra::BoundedConstString path;
+        infra::Function<void(Result result)> onDone;
+    };
+
+    struct FatRemoveCall
+    {
+        infra::BoundedConstString path;
+        infra::Function<void(Result result)> onDone;
+    };
+
     struct FatUsageCall
     {
         infra::Function<void(Result result, VolumeUsage usage)> onDone;
     };
 
-    using FatPathCall = std::variant<FatStatCall, FatOpenDirectoryCall, FatOpenCall, FatUsageCall>;
+    using FatPathCall = std::variant<FatStatCall, FatOpenDirectoryCall, FatOpenCall, FatMakeDirectoryCall, FatRemoveCall, FatUsageCall>;
 
     struct FatPathSlot
     {

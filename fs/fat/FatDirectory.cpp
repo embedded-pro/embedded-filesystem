@@ -7,12 +7,30 @@ namespace fs
         , claimer(volume.Queue())
     {}
 
-    FatDirectory::~FatDirectory() = default;
+    FatDirectory::~FatDirectory()
+    {
+        if (open)
+            Detach();
+    }
 
     void FatDirectory::Open(uint32_t firstCluster)
     {
+        this->firstCluster = firstCluster;
         cursor = volume.Reader().Start(firstCluster);
         generation = volume.Generation();
+        open = true;
+        volume.OpenDirectories().push_back(*this);
+    }
+
+    uint32_t FatDirectory::FirstCluster() const
+    {
+        return firstCluster;
+    }
+
+    void FatDirectory::Detach()
+    {
+        volume.OpenDirectories().erase(*this);
+        open = false;
     }
 
     void FatDirectory::Next(const infra::Function<void(Result result, std::optional<EntryInfo> entry)>& onDone)
@@ -32,6 +50,9 @@ namespace fs
 
     void FatDirectory::UnReferenced()
     {
+        if (open)
+            Detach();
+
         Release();
     }
 

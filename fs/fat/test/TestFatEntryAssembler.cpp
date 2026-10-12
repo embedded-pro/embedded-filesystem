@@ -185,11 +185,15 @@ TEST_F(FatEntryAssemblerTest, name_longer_than_the_buffer_reports_the_short_name
     const infra::BoundedConstString name{ "a name that is longer than forty bytes in UTF-8" };
     auto checksum = ChecksumOf("ANAMET~1   ");
 
+    uint32_t position = 0;
     for (auto ordinal = fs::LongEntriesFor(name); ordinal != 0; --ordinal)
-        smallAssembler.Feed(infra::MakeRange(Long(name, ordinal, ordinal == fs::LongEntriesFor(name), checksum)), fs::FatEntryPosition{});
-    smallAssembler.Feed(infra::MakeRange(Short("ANAMET~1   ")), fs::FatEntryPosition{});
+        smallAssembler.Feed(infra::MakeRange(Long(name, ordinal, ordinal == fs::LongEntriesFor(name), checksum)), fs::FatEntryPosition{ 3, position++ });
+    smallAssembler.Feed(infra::MakeRange(Short("ANAMET~1   ")), fs::FatEntryPosition{ 3, position });
 
     EXPECT_EQ("ANAMET~1", smallAssembler.Entry().name);
+    EXPECT_FALSE(smallAssembler.Entry().longName);
+    EXPECT_EQ(fs::LongEntriesFor(name) + 1, smallAssembler.Entry().slots);
+    EXPECT_EQ((fs::FatEntryPosition{ 3, 0 }), smallAssembler.Entry().first);
 }
 
 TEST_F(FatEntryAssemblerTest, unpaired_surrogate_reports_the_short_name)

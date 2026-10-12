@@ -28,6 +28,7 @@ namespace fs
 
         void Clear();
         void Remember(const FatClosedFile& file);
+        void Forget(FatEntryPosition entry);
         std::optional<FatExtent> Recall(FatEntryPosition entry, uint32_t firstCluster, uint32_t size) const;
 
     private:

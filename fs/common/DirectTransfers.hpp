@@ -17,7 +17,7 @@ namespace fs
         DirectTransfers(FlushBarrier& barrier, SectorCache& cache);
         DirectTransfers(const DirectTransfers& other) = delete;
         DirectTransfers& operator=(const DirectTransfers& other) = delete;
-        ~DirectTransfers() = default;
+        ~DirectTransfers();
 
         void Read(uint32_t firstSector, infra::ByteRange buffer, const infra::Function<void(Result result)>& onDone);
         void Write(uint32_t firstSector, infra::ConstByteRange data, uint8_t rank, const infra::Function<void(Result result)>& onDone);

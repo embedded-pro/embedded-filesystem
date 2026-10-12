@@ -9,6 +9,8 @@ namespace fs
         , cache(cache)
     {}
 
+    DirectTransfers::~DirectTransfers() = default;
+
     void DirectTransfers::Read(uint32_t firstSector, infra::ByteRange buffer, const infra::Function<void(Result result)>& onDone)
     {
         really_assert(!this->onDone);

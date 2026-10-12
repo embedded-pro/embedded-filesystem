@@ -1,4 +1,5 @@
 #include "fs/fat/FatVolume.hpp"
+#include "fs/fat/FatDirectory.hpp"
 #include "fs/fat/FatFile.hpp"
 #include <algorithm>
 
@@ -22,6 +23,7 @@ namespace fs
         , tableWriter(parts.cache, state.geometry)
         , allocator(parts.cache, state, tableWriter, *this)
         , entryUpdate(parts.cache, reader, config.timerServiceId)
+        , chainFree(parts.cache, transfers, state, tableWriter, config.discard)
         , closedFiles(parts.closedFiles)
         , freeSpace(parts.cache, state)
         , queue(config.idleDelay, [this]
@@ -96,6 +98,11 @@ namespace fs
         return entryUpdate;
     }
 
+    FatChainFree& FatVolume::ChainFree()
+    {
+        return chainFree;
+    }
+
     FatClosedFiles& FatVolume::ClosedFiles()
     {
         return closedFiles;
@@ -109,6 +116,11 @@ namespace fs
     infra::IntrusiveList<FatFile>& FatVolume::OpenFiles()
     {
         return openFiles;
+    }
+
+    infra::IntrusiveList<FatDirectory>& FatVolume::OpenDirectories()
+    {
+        return openDirectories;
     }
 
     OperationQueue& FatVolume::Queue()
@@ -169,6 +181,9 @@ namespace fs
 
         while (!openFiles.empty())
             openFiles.front().Detach();
+
+        while (!openDirectories.empty())
+            openDirectories.front().Detach();
 
         unavailable = reason == Result::mediaRemoved ? Result::mediaRemoved : Result::notMounted;
     }

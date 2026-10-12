@@ -100,7 +100,7 @@ namespace
             EXPECT_TRUE(statName.empty());
         }
 
-        void ExpectUnsupportedCallsCompleteWith(fs::Result result)
+        void ExpectPathChangesCompleteWith(fs::Result result)
         {
             testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
             volume.Remove("/a", [&done](fs::Result result)
@@ -122,7 +122,7 @@ namespace
 
         void ExpectEveryCallCompletesWith(fs::Result result)
         {
-            ExpectUnsupportedCallsCompleteWith(result);
+            ExpectPathChangesCompleteWith(result);
 
             testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
             volume.OpenDirectory("/", [&done](fs::Result result, infra::SharedPtr<fs::Directory> directory)
@@ -394,12 +394,18 @@ TEST_F(FatFileSystemTest, mount_after_unmount_reads_the_device_again)
     EXPECT_EQ(reads + 2, device.ReadRequests());
 }
 
-TEST_F(FatFileSystemTest, calls_that_are_not_yet_supported)
+TEST_F(FatFileSystemTest, rename_is_not_yet_supported)
 {
     Format();
     ExpectMount();
 
-    ExpectUnsupportedCallsCompleteWith(fs::Result::unsupported);
+    testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
+    volume.Rename("/a", "/b", [&done](fs::Result result)
+        {
+            done.callback(result);
+        });
+    EXPECT_CALL(done, callback(fs::Result::unsupported));
+    ExecuteAllActions();
 }
 
 TEST_F(FatFileSystemTest, stat_of_the_root_is_a_directory_with_an_empty_name)

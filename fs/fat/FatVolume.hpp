@@ -9,6 +9,7 @@
 #include "fs/common/SectorCache.hpp"
 #include "fs/fat/FatAllocator.hpp"
 #include "fs/fat/FatBackgroundScan.hpp"
+#include "fs/fat/FatChainFree.hpp"
 #include "fs/fat/FatChainWalk.hpp"
 #include "fs/fat/FatClosedFiles.hpp"
 #include "fs/fat/FatConfig.hpp"
@@ -17,11 +18,13 @@
 #include "fs/fat/FatEntryUpdate.hpp"
 #include "fs/fat/FatExpectSize.hpp"
 #include "fs/fat/FatFreeSpaceScan.hpp"
+#include "fs/fat/FatMakeDirectory.hpp"
 #include "fs/fat/FatMount.hpp"
 #include "fs/fat/FatOpen.hpp"
 #include "fs/fat/FatOpenDirectory.hpp"
 #include "fs/fat/FatPathWalk.hpp"
 #include "fs/fat/FatRead.hpp"
+#include "fs/fat/FatRemove.hpp"
 #include "fs/fat/FatRunLocator.hpp"
 #include "fs/fat/FatStat.hpp"
 #include "fs/fat/FatSync.hpp"
@@ -82,9 +85,10 @@ namespace fs
         }
     }
 
+    class FatDirectory;
     class FatFile;
 
-    using FatOperation = std::variant<std::monostate, FatMount, FatUnmount, FatStat, FatOpenDirectory, FatOpen, FatRead, FatWrite, FatSync, FatExpectSize, FatUsage>;
+    using FatOperation = std::variant<std::monostate, FatMount, FatUnmount, FatStat, FatOpenDirectory, FatOpen, FatMakeDirectory, FatRemove, FatRead, FatWrite, FatSync, FatExpectSize, FatUsage>;
 
     struct FatVolumeParts
     {
@@ -118,9 +122,11 @@ namespace fs
         FatRunLocator& Locator();
         FatAllocator& Allocator();
         FatEntryUpdate& EntryUpdate();
+        FatChainFree& ChainFree();
         FatClosedFiles& ClosedFiles();
         FatFreeSpaceScan& FreeSpace();
         infra::IntrusiveList<FatFile>& OpenFiles();
+        infra::IntrusiveList<FatDirectory>& OpenDirectories();
         OperationQueue& Queue();
         FatOperation& Operation();
         const FatReservations& Reservations() const;
@@ -159,8 +165,10 @@ namespace fs
         FatTableWriter tableWriter;
         FatAllocator allocator;
         FatEntryUpdate entryUpdate;
+        FatChainFree chainFree;
         FatClosedFiles closedFiles;
         infra::IntrusiveList<FatFile> openFiles;
+        infra::IntrusiveList<FatDirectory> openDirectories;
         FatFreeSpaceScan freeSpace;
         OperationQueue queue;
         FatBackgroundScan background;

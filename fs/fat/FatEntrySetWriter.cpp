@@ -209,7 +209,7 @@ namespace fs
         auto shortEntrySector = SectorOfSlot(slots - 1u);
 
         if (sector == shortEntrySector && SectorOfSlot(0) != shortEntrySector)
-            return spanningShortEntryRank;
+            return trailingEntryRank;
 
         return entryRank;
     }
