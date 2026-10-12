@@ -132,6 +132,17 @@ namespace fs
         else
             volume.ChainFree().Free(target.entry.firstCluster, [this](Result result)
                 {
+                    OnFreed(result);
+                });
+    }
+
+    void FatRemove::OnFreed(Result result)
+    {
+        if (result != Result::success)
+            Finish(result);
+        else
+            volume.Cache().Flush([this](Result result)
+                {
                     Finish(result);
                 });
     }

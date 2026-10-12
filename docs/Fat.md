@@ -204,6 +204,7 @@ FAT12 has no such bit.
 A volume that was not clean at mount stays marked as not clean, and its FSINFO is not trusted.
 FSINFO is written only by `Unmount`, when the FAT changed during the mount, with the free count when it is known and as unknown otherwise; writing it on every `Sync` would add a write to every `Sync`, and an outdated FSINFO is harmless because it is only a hint.
 A write-protected card mounts and can be read; operations that write complete with `readOnly`.
+`Remove` and `MakeDirectory` flush the cache before they complete, so they are durable then, and a power loss afterwards leaves no clusters allocated but unused; a file that `Open` creates is written with its first `Sync` or `Close`, or at `Unmount`.
 
 ## Behaviour on power loss
 

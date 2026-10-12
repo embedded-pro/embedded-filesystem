@@ -28,6 +28,7 @@ namespace fs
         void OnAllocated(Result result, uint32_t first);
         void InitializeSector();
         void OnInitialized(Result result);
+        void OnWritten(Result result);
         void WriteDotEntries(infra::ByteRange contents) const;
         void Finish(Result result);
 

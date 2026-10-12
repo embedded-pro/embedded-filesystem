@@ -93,17 +93,21 @@ TEST_F(FatRemoveTest, removed_file_is_gone_and_its_clusters_are_free)
     ExpectStat("/notes.txt", fs::Result::notFound);
 }
 
-TEST_F(FatRemoveTest, entry_is_cleared_and_flushed_before_the_clusters_are_freed_and_discarded)
+TEST_F(FatRemoveTest, entry_is_cleared_and_flushed_before_the_clusters_are_freed_discarded_and_flushed)
 {
     RecordRequests();
 
     ExpectRemove("/notes.txt");
 
-    ASSERT_EQ(3u, requests.size());
-    EXPECT_EQ(std::make_pair(Request::write, builder->Geometry().rootSector), requests[0]);
+    const auto& geometry = builder->Geometry();
+    ASSERT_EQ(6u, requests.size());
+    EXPECT_EQ(std::make_pair(Request::write, geometry.rootSector), requests[0]);
     EXPECT_EQ(std::make_pair(Request::flush, 0u), requests[1]);
-    EXPECT_EQ(std::make_pair(Request::erase, builder->Geometry().SectorOfCluster(notesCluster)), requests[2]);
-    EXPECT_EQ(notesCluster + 1, builder->FatEntry(notesCluster));
+    EXPECT_EQ(std::make_pair(Request::erase, geometry.SectorOfCluster(notesCluster)), requests[2]);
+    EXPECT_EQ(std::make_pair(Request::write, geometry.firstFatSector), requests[3]);
+    EXPECT_EQ(std::make_pair(Request::write, geometry.firstFatSector + geometry.sectorsPerFat), requests[4]);
+    EXPECT_EQ(std::make_pair(Request::flush, 0u), requests[5]);
+    EXPECT_EQ(0u, builder->FatEntry(notesCluster));
 }
 
 TEST_F(FatRemoveTest, contiguous_chain_is_discarded_in_one_request)
@@ -311,6 +315,13 @@ TEST_F(FatRemoveTest, chain_that_reaches_a_free_cluster_is_corrupted)
     builder->SetFatEntry(notesCluster + 1, 0);
 
     ExpectRemove("/notes.txt", fs::Result::corrupted);
+}
+
+TEST_F(FatRemoveTest, failed_flush_after_freeing_the_chain_is_reported)
+{
+    device.FailNextOperationWith(hal::BlockDevice::Result::timeout, 6);
+
+    ExpectRemove("/notes.txt", fs::Result::deviceError);
 }
 
 TEST_F(FatRemoveTest, failed_flush_after_clearing_the_entry_is_reported)

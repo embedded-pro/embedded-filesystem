@@ -36,6 +36,7 @@ namespace fs
         void ClearEntry();
         void OnCleared(Result result);
         void OnFlushed(Result result);
+        void OnFreed(Result result);
         void Finish(Result result);
 
     private:

@@ -125,9 +125,8 @@ TEST_F(FatMakeDirectoryTest, parent_must_be_an_existing_directory)
     ExpectMakeDirectory("/a|b", fs::Result::invalidPath);
 }
 
-TEST_F(FatMakeDirectoryTest, new_cluster_and_its_fat_entry_are_written_before_the_entry_in_the_parent)
+TEST_F(FatMakeDirectoryTest, new_cluster_and_its_fat_entry_are_written_before_the_entry_in_the_parent_and_flushed)
 {
-    ExpectMakeDirectory("/logs");
     infra::BoundedVector<std::pair<Request, uint32_t>>::WithMaxSize<16> requests;
     device.Observe([&requests](Request request, uint32_t block)
         {
@@ -135,7 +134,7 @@ TEST_F(FatMakeDirectoryTest, new_cluster_and_its_fat_entry_are_written_before_th
                 requests.emplace_back(request, block);
         });
 
-    ExpectUnmount();
+    ExpectMakeDirectory("/logs");
 
     auto cluster = ClusterOf(fs::FatEntryPosition{ 0, 2 });
     const auto& geometry = builder->Geometry();
@@ -183,6 +182,26 @@ TEST_F(FatMakeDirectoryTest, full_volume_has_no_space_for_a_directory)
     ExpectMakeDirectory("/logs", fs::Result::noSpace);
 
     ExpectStat("/logs", fs::Result::notFound);
+}
+
+TEST_F(FatMakeDirectoryTest, full_parent_on_a_volume_with_one_free_cluster_has_no_space)
+{
+    ExpectMakeDirectory("/logs");
+    auto logs = ClusterOf(fs::FatEntryPosition{ 0, 2 });
+    for (uint32_t index = 0; index != 14; ++index)
+    {
+        char name[12] = "F0000000TXT";
+        name[6] = static_cast<char>('0' + index / 10);
+        name[7] = static_cast<char>('0' + index % 10);
+        builder->AddFile(logs, "", name, infra::ConstByteRange());
+    }
+    ExpectUnmount();
+    for (uint32_t cluster = 2; cluster != builder->Geometry().clusterCount + 1; ++cluster)
+        if (builder->FatEntry(cluster) == 0)
+            builder->SetFatEntry(cluster, fs::EndOfChain(builder->Geometry().type));
+    ExpectMount();
+
+    ExpectMakeDirectory("/logs/inner", fs::Result::noSpace);
 }
 
 TEST_F(FatMakeDirectoryTest, full_root_takes_no_cluster)

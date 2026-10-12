@@ -102,6 +102,17 @@ namespace fs
         else
             parent.Write(FatAttributes::directory, cluster, [this](Result result)
                 {
+                    OnWritten(result);
+                });
+    }
+
+    void FatMakeDirectory::OnWritten(Result result)
+    {
+        if (result != Result::success)
+            Finish(result);
+        else
+            volume.Cache().Flush([this](Result result)
+                {
                     Finish(result);
                 });
     }
