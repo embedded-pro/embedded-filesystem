@@ -3,12 +3,20 @@ add_library(fs.common ${EMFS_EXCLUDE_FROM_ALL} STATIC)
 target_link_libraries(fs.common PUBLIC
     fs.interfaces
     hal.interfaces
+    infra.event
+    infra.timer
     infra.util
 )
 
 target_sources(fs.common PRIVATE
     BlockDeviceResult.cpp
     BlockDeviceResult.hpp
+    DeferredCompletions.cpp
+    DeferredCompletions.hpp
+    HandlePool.cpp
+    HandlePool.hpp
+    OperationQueue.cpp
+    OperationQueue.hpp
     Path.cpp
     Path.hpp
 )
