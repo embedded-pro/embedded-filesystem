@@ -31,6 +31,7 @@ namespace
 
         MOCK_METHOD(void, UnReferenced, (), (override));
         using PooledHandle::Release;
+        using PooledHandle::Share;
 
     private:
         int identity;
@@ -157,4 +158,17 @@ TEST_F(HandlePoolTest, handle_is_shared_as_its_interface)
 
     EXPECT_CALL(object, UnReferenced());
     shared = nullptr;
+}
+
+TEST_F(HandlePoolTest, handle_shared_by_itself_stays_referenced)
+{
+    auto handle = pool.Allocate();
+    auto& object = *handle;
+    auto self = object.Share(object);
+    handle = nullptr;
+
+    EXPECT_EQ(&object, self.operator->());
+
+    EXPECT_CALL(object, UnReferenced());
+    self = nullptr;
 }

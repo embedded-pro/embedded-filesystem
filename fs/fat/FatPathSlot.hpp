@@ -2,10 +2,13 @@
 #define FS_FAT_FAT_PATH_SLOT_HPP
 
 #include "fs/common/OperationQueue.hpp"
+#include "fs/interfaces/Directory.hpp"
 #include "fs/interfaces/EntryInfo.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/Function.hpp"
+#include "infra/util/SharedPtr.hpp"
+#include <optional>
 #include <variant>
 
 namespace fs
@@ -16,7 +19,13 @@ namespace fs
         infra::Function<void(Result result, const EntryInfo& info)> onDone;
     };
 
-    using FatPathCall = std::variant<std::monostate, FatStatCall>;
+    struct FatOpenDirectoryCall
+    {
+        infra::BoundedConstString path;
+        infra::Function<void(Result result, infra::SharedPtr<Directory> directory)> onDone;
+    };
+
+    using FatPathCall = std::variant<FatStatCall, FatOpenDirectoryCall>;
 
     struct FatPathSlot
     {
@@ -28,7 +37,7 @@ namespace fs
         bool InUse() const;
 
         OperationQueue::Claimer claimer;
-        FatPathCall call;
+        std::optional<FatPathCall> call;
     };
 }
 

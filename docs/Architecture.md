@@ -262,7 +262,7 @@ The end of the directory is `success` without an entry.
 The name of an entry is valid only during the callback.
 Entries that are added or removed during the iteration may or may not be returned.
 A directory handle has no `Close`; releasing the last reference returns it to its pool.
-`Stat("/")` reports a directory with an empty name.
+`Stat("/")` reports a directory with an empty name, and `Stat` and `Next` report a size of 0 for every directory.
 
 ### Paths and names
 
@@ -284,7 +284,7 @@ A file that is open in another mode cannot be opened again, and a file that is o
 `Open` and `OpenDirectory` hand out an `infra::SharedPtr` from a fixed-size pool, in the same way as EmIL hands out connections; when the pool is exhausted, they complete with `Result::tooManyOpenFiles`.
 Releasing the last reference to a file without closing it writes back and commits the file in the background; errors of that commit are not reported, so call `Close` to see them.
 A handle returns to its pool once the last `infra::SharedPtr` and `infra::WeakPtr` to it are released.
-`Unmount` writes back every open file and completes even if handles are still referenced; afterwards, calls on those handles complete with `notMounted`, or with `mediaRemoved` after the medium was removed, and the handles return to their pools when they are released.
+`Unmount` writes back every open file and completes even if handles are still referenced; afterwards, calls on those handles complete with `notMounted`, or with `mediaRemoved` after the medium was removed, also after a new `Mount`, and the handles return to their pools when they are released.
 
 ## Shared building blocks
 

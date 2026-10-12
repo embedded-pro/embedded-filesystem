@@ -59,7 +59,12 @@ namespace fs
         Result result{ Result::success };
     };
 
-    using FatLifecycleEvent = std::variant<FatMountRequested, FatMountDone, FatUnmountRequested, FatUnmountDone>;
+    struct FatMediaRemoved
+    {
+        static constexpr const char* name{ "MediaRemoved" };
+    };
+
+    using FatLifecycleEvent = std::variant<FatMountRequested, FatMountDone, FatUnmountRequested, FatUnmountDone, FatMediaRemoved>;
 }
 
 #endif

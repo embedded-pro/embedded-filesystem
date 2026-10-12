@@ -17,7 +17,7 @@ namespace fs
     class FatDirectoryVisitor
     {
     protected:
-        FatDirectoryVisitor() = default;
+        FatDirectoryVisitor();
         FatDirectoryVisitor(const FatDirectoryVisitor& other) = delete;
         FatDirectoryVisitor& operator=(const FatDirectoryVisitor& other) = delete;
         ~FatDirectoryVisitor() = default;
@@ -44,7 +44,7 @@ namespace fs
         FatDirectoryReader(SectorCache& cache, const FatGeometry& geometry, FatEntryAssembler& assembler);
         FatDirectoryReader(const FatDirectoryReader& other) = delete;
         FatDirectoryReader& operator=(const FatDirectoryReader& other) = delete;
-        ~FatDirectoryReader() = default;
+        ~FatDirectoryReader();
 
         FatDirectoryCursor Start(uint32_t firstCluster) const;
         void Read(FatDirectoryCursor& cursor, FatDirectoryVisitor& visitor, const infra::Function<void(Result result)>& onDone);

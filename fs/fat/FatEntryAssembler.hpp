@@ -2,6 +2,7 @@
 #define FS_FAT_FAT_ENTRY_ASSEMBLER_HPP
 
 #include "fs/fat/FatDirectoryEntry.hpp"
+#include "fs/interfaces/EntryInfo.hpp"
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
@@ -26,6 +27,9 @@ namespace fs
         FatEntryPosition shortEntry;
         uint8_t slots{ 1 };
     };
+
+    bool IsDirectory(const FatScannedEntry& entry);
+    EntryInfo InfoOf(const FatScannedEntry& entry);
 
     class FatEntryAssembler
     {

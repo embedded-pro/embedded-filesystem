@@ -100,17 +100,12 @@ namespace
             EXPECT_TRUE(statName.empty());
         }
 
-        void ExpectEveryCallCompletesWith(fs::Result result)
+        void ExpectUnsupportedCallsCompleteWith(fs::Result result)
         {
             testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
             volume.Open("/a", fs::OpenMode::read, [&done](fs::Result result, infra::SharedPtr<fs::File> file)
                 {
                     EXPECT_EQ(nullptr, file);
-                    done.callback(result);
-                });
-            volume.OpenDirectory("/", [&done](fs::Result result, infra::SharedPtr<fs::Directory> directory)
-                {
-                    EXPECT_EQ(nullptr, directory);
                     done.callback(result);
                 });
             volume.Remove("/a", [&done](fs::Result result)
@@ -131,7 +126,21 @@ namespace
                     done.callback(result);
                 });
 
-            EXPECT_CALL(done, callback(result)).Times(6);
+            EXPECT_CALL(done, callback(result)).Times(5);
+            ExecuteAllActions();
+        }
+
+        void ExpectEveryCallCompletesWith(fs::Result result)
+        {
+            ExpectUnsupportedCallsCompleteWith(result);
+
+            testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
+            volume.OpenDirectory("/", [&done](fs::Result result, infra::SharedPtr<fs::Directory> directory)
+                {
+                    EXPECT_EQ(nullptr, directory);
+                    done.callback(result);
+                });
+            EXPECT_CALL(done, callback(result));
             ExecuteAllActions();
         }
 
@@ -390,8 +399,7 @@ TEST_F(FatFileSystemTest, calls_that_are_not_yet_supported)
     Format();
     ExpectMount();
 
-    ExpectEveryCallCompletesWith(fs::Result::unsupported);
-    ExpectStat("/a", fs::Result::unsupported);
+    ExpectUnsupportedCallsCompleteWith(fs::Result::unsupported);
 }
 
 TEST_F(FatFileSystemTest, stat_of_the_root_is_a_directory_with_an_empty_name)

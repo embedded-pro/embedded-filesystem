@@ -13,8 +13,10 @@ target_link_libraries(fs.fat_test PUBLIC
 )
 
 target_sources(fs.fat_test PRIVATE
-    TestFatBootSector.cpp
+    FatFileSystemFixture.hpp
     FatVolumeFixture.hpp
+    TestFatBootSector.cpp
+    TestFatDirectory.cpp
     TestFatDirectoryEntry.cpp
     TestFatDirectoryReader.cpp
     TestFatEntryAssembler.cpp
@@ -23,6 +25,7 @@ target_sources(fs.fat_test PRIVATE
     TestFatFormatter.cpp
     TestFatFsInfo.cpp
     TestFatGeometry.cpp
+    TestFatLookup.cpp
     TestFatName.cpp
     TestFatPartitionTable.cpp
     TestFatShortName.cpp
