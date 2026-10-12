@@ -27,13 +27,13 @@ The on-disk designs are described in [Fat.md](Fat.md) and [NorFilesystem.md](Nor
       outside this repository)       flash (services/flash in EmIL)
 ```
 
-| Folder          | Target          | Contents                                                                                        |
-|-----------------|-----------------|-------------------------------------------------------------------------------------------------|
-| `fs/interfaces` | `fs.interfaces` | `fs::Result`, `fs::FileSystem`, `fs::File`, `fs::Directory`, `fs::EntryInfo`                    |
-| `fs/common`     | `fs.common`     | Path parsing, sector cache, per-volume operation queue, handle pools, CRC-protected records     |
-| `fs/fat`        | `fs.fat`        | FAT12, FAT16 and FAT32 with long file names, and the formatter                                  |
-| `fs/nor`        | `fs.nor`        | The log-structured NOR filesystem, its garbage collection and its wear leveling                 |
-| `metrics`       | `metrics.*`     | Host-only device models, metered devices, workloads and baselines, see [Metrics.md](Metrics.md) |
+| Folder          | Target          | Contents                                                                                                        |
+|-----------------|-----------------|-----------------------------------------------------------------------------------------------------------------|
+| `fs/interfaces` | `fs.interfaces` | `fs::Result`, `fs::OpenMode`, `fs::File`, `fs::Directory`, `fs::EntryInfo`, `fs::VolumeUsage`, `fs::FileSystem` |
+| `fs/common`     | `fs.common`     | Path parsing, sector cache, per-volume operation queue, handle pools, CRC-protected records                     |
+| `fs/fat`        | `fs.fat`        | FAT12, FAT16 and FAT32 with long file names, and the formatter                                                  |
+| `fs/nor`        | `fs.nor`        | The log-structured NOR filesystem, its garbage collection and its wear leveling                                 |
+| `metrics`       | `metrics.*`     | Host-only device models, metered devices, workloads and baselines, see [Metrics.md](Metrics.md)                 |
 
 Storage drivers are not part of this repository.
 NOR flash drivers are in EmIL (`services/flash`), and SD card and eMMC drivers implement `hal::BlockDevice` in EmIL or in the vendor HAL repositories such as hal-st and hal-ti.
@@ -67,6 +67,7 @@ Every operation that may touch a storage device takes a completion callback and 
 The callback is always invoked from the event dispatcher, never from inside the call that started the operation.
 A callback may start the next operation directly; the stack does not grow with the length of a chain of operations.
 All calls are made from the event dispatcher context; the library holds no locks.
+Buffers and path strings passed to an operation stay valid until its completion is called; the library does not copy them.
 Getters that need no device access, such as `File::Size()` and `File::Position()`, are synchronous, and `File::Seek()` only moves the position; the device is accessed by the next read or write.
 
 ### Operation queue
@@ -127,8 +128,8 @@ Operation objects are allocated from fixed-size pools inside the volume, so the 
 
 ## Public API
 
-This is the intended shape of the API; names and details are settled during the test-driven implementation.
-The interfaces follow EmIL conventions: a protected constructor, deleted copy operations and a protected, non-virtual destructor.
+The interfaces are in `fs/interfaces`.
+They follow EmIL conventions: a protected constructor, deleted copy operations and a protected, non-virtual destructor.
 
 ```cpp
 namespace fs
@@ -162,14 +163,27 @@ namespace fs
         readWrite
     };
 
+    enum class EntryType : uint8_t
+    {
+        file,
+        directory
+    };
+
+    struct EntryInfo
+    {
+        infra::BoundedConstString name;
+        EntryType type{ EntryType::file };
+        uint32_t size{ 0 };
+    };
+
+    struct VolumeUsage
+    {
+        uint64_t usedBytes{ 0 };
+        uint64_t totalBytes{ 0 };
+    };
+
     class File
     {
-    protected:
-        File() = default;
-        File(const File& other) = delete;
-        File& operator=(const File& other) = delete;
-        ~File() = default;
-
     public:
         virtual uint32_t Size() const = 0;
         virtual uint32_t Position() const = 0;
@@ -178,18 +192,19 @@ namespace fs
         virtual void Read(infra::ByteRange buffer, const infra::Function<void(Result result, std::size_t bytesRead)>& onDone) = 0;
         virtual void Write(infra::ConstByteRange data, const infra::Function<void(Result result)>& onDone) = 0;
         virtual void Truncate(const infra::Function<void(Result result)>& onDone) = 0;
+        virtual void ExpectSize(uint32_t size, const infra::Function<void(Result result)>& onDone) = 0;
         virtual void Sync(const infra::Function<void(Result result)>& onDone) = 0;
         virtual void Close(const infra::Function<void(Result result)>& onDone) = 0;
     };
 
+    class Directory
+    {
+    public:
+        virtual void Next(const infra::Function<void(Result result, std::optional<EntryInfo> entry)>& onDone) = 0;
+    };
+
     class FileSystem
     {
-    protected:
-        FileSystem() = default;
-        FileSystem(const FileSystem& other) = delete;
-        FileSystem& operator=(const FileSystem& other) = delete;
-        ~FileSystem() = default;
-
     public:
         virtual void Mount(const infra::Function<void(Result result)>& onDone) = 0;
         virtual void Unmount(const infra::Function<void(Result result)>& onDone) = 0;
@@ -200,16 +215,67 @@ namespace fs
         virtual void Remove(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone) = 0;
         virtual void Rename(infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone) = 0;
         virtual void MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone) = 0;
-        virtual void FreeSpace(const infra::Function<void(Result result, uint64_t bytes)>& onDone) = 0;
+        virtual void Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone) = 0;
     };
 }
 ```
 
-Paths use `/` as separator and are absolute within the volume.
-`Open` hands out an `infra::SharedPtr<File>` from a fixed-size pool, in the same way as EmIL hands out connections; when the pool is exhausted, `Open` completes with `Result::tooManyOpenFiles`.
-`Close` writes back pending data, commits it and releases the handle; releasing the last reference without closing writes back and commits in the background.
+Formatting a volume is not part of `FileSystem`: FAT volumes are formatted by `fs::FatFormatter`, and NOR volumes by `fs::NorFileSystem::Format`.
+
+### Open modes
+
+| Mode        | A missing file | An existing file | Position after `Open` | Writing                                                       |
+|-------------|----------------|------------------|-----------------------|---------------------------------------------------------------|
+| `read`      | `notFound`     | Kept             | 0                     | `Write`, `Truncate` and `ExpectSize` complete with `readOnly` |
+| `write`     | Created        | Truncated to 0   | 0                     | At the position                                               |
+| `append`    | Created        | Kept             | `Size()`              | Always at the end; `Seek` only affects `Read`                 |
+| `readWrite` | Created        | Kept             | 0                     | At the position                                               |
+
+Opening a directory as a file completes with `isADirectory`.
+A missing parent directory completes with `notFound`, and a parent that is a file with `notADirectory`.
+
+### Files
+
+`Read` stops at the end of the file: it completes with `success` and fewer bytes than requested, or with 0 bytes at the end.
+A `Write` that fails leaves `Position()` and `Size()` at the bytes that were actually written.
+`Seek` beyond the end of the file moves the position to the end.
 `Truncate` cuts the file at the current position.
+`ExpectSize` announces the size the file will reach, so that the filesystem can reserve contiguous space; it never changes `Size()`, and it may complete with `unsupported`.
 `Sync` makes everything written so far durable, including on power loss, before it completes.
+`Close` writes back pending data, commits it and releases the handle.
+Each handle runs one call at a time: a call made while another call on the same handle is pending completes with `busy`.
+Calling a file after `Close` is a programming error.
+
+### Directories
+
+`Next` returns the entries of a directory one by one, in no particular order, and never `.` or `..`.
+The end of the directory is `success` without an entry.
+The name of an entry is valid only during the callback.
+Entries that are added or removed during the iteration may or may not be returned.
+A directory handle has no `Close`; releasing the last reference returns it to its pool.
+`Stat("/")` reports a directory with an empty name.
+
+### Paths and names
+
+Paths are absolute within the volume, use `/` as separator and are encoded in UTF-8; `/` is the root directory.
+A path that is empty, relative or ends with `/`, an empty component, `.`, `..` and the NUL character complete with `invalidPath`.
+A name or a path longer than the limits of the volume completes with `nameTooLong`.
+FAT volumes compare names case-insensitively for ASCII letters and reject the characters that FAT reserves; NOR volumes compare names byte by byte.
+
+### Sharing
+
+A file may be open in `read` mode any number of times.
+A file that is open in another mode cannot be opened again, and a file that is open cannot be opened in another mode; such an `Open` completes with `busy`.
+`Remove` and `Rename` of an open file or directory complete with `busy`.
+`Rename` onto an existing name completes with `alreadyExists`.
+`Remove` of a directory that is not empty completes with `notEmpty`, and `Remove("/")` with `invalidPath`.
+
+### Handles
+
+`Open` and `OpenDirectory` hand out an `infra::SharedPtr` from a fixed-size pool, in the same way as EmIL hands out connections; when the pool is exhausted, they complete with `Result::tooManyOpenFiles`.
+Releasing the last reference to a file without closing it writes back and commits the file in the background; errors of that commit are not reported, so call `Close` to see them.
+A handle returns to its pool once the last `infra::SharedPtr` and `infra::WeakPtr` to it are released.
+`Unmount` writes back every open file and completes even if handles are still referenced; afterwards, calls on those handles complete with `notMounted`, or with `mediaRemoved` after the medium was removed, and the handles return to their pools when they are released.
 
 ## Configuration
 
