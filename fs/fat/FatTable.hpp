@@ -21,6 +21,7 @@ namespace fs
     uint32_t ReadEntry(FatType type, uint32_t cluster, infra::ConstByteRange sector, infra::ConstByteRange nextSector);
     uint32_t DecodeFat12(uint32_t cluster, uint16_t pair);
     void WriteEntry(FatType type, uint32_t cluster, uint32_t value, infra::ByteRange sector, infra::ByteRange nextSector);
+    void WriteStraddlingPart(uint32_t cluster, uint32_t value, infra::ByteRange sector, bool second);
 
     bool IsEndOfChain(FatType type, uint32_t value);
     bool IsBadCluster(FatType type, uint32_t value);

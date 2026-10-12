@@ -119,6 +119,16 @@ namespace fs
         }
     }
 
+    void WriteStraddlingPart(uint32_t cluster, uint32_t value, infra::ByteRange sector, bool second)
+    {
+        auto odd = cluster % 2 != 0;
+
+        if (!second)
+            sector.back() = static_cast<uint8_t>(odd ? (sector.back() & 0x0fu) | ((value & 0x0fu) << 4) : value & 0xffu);
+        else
+            sector.front() = static_cast<uint8_t>(odd ? (value >> 4) & 0xffu : (sector.front() & 0xf0u) | ((value >> 8) & 0x0fu));
+    }
+
     bool IsEndOfChain(FatType type, uint32_t value)
     {
         return value >= Maximum(type) - 7;

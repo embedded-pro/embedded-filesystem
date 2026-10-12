@@ -31,6 +31,8 @@ namespace fs
     {
         really_assert(buffer.size() % blockSize == 0);
         ++readRequests;
+        if (observer)
+            observer(Request::read, firstBlock);
 
         if (!Start(firstBlock, static_cast<uint32_t>(buffer.size() / blockSize), onDone))
             return;
@@ -45,6 +47,8 @@ namespace fs
     {
         really_assert(buffer.size() % blockSize == 0);
         ++writeRequests;
+        if (observer)
+            observer(Request::write, firstBlock);
 
         if (!Start(firstBlock, static_cast<uint32_t>(buffer.size() / blockSize), onDone))
             return;
@@ -58,6 +62,8 @@ namespace fs
     void SparseBlockDevice::EraseBlocks(uint32_t beginBlock, uint32_t endBlock, const infra::Function<void(Result)>& onDone)
     {
         ++eraseRequests;
+        if (observer)
+            observer(Request::erase, beginBlock);
 
         if (!Start(beginBlock, endBlock >= beginBlock ? endBlock - beginBlock : std::numeric_limits<uint32_t>::max(), onDone))
             return;
@@ -72,9 +78,16 @@ namespace fs
     void SparseBlockDevice::Flush(const infra::Function<void(Result)>& onDone)
     {
         ++flushRequests;
+        if (observer)
+            observer(Request::flush, 0);
 
         if (Start(0, 0, onDone))
             Complete(Result::success);
+    }
+
+    void SparseBlockDevice::Observe(const infra::Function<void(Request request, uint32_t firstBlock)>& observer)
+    {
+        this->observer = observer;
     }
 
     void SparseBlockDevice::FailNextOperationWith(Result result, uint32_t succeedingFirst)

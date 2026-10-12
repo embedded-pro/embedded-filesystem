@@ -150,6 +150,7 @@ Clusters are allocated in this order:
 
 The allocation unit is given by `FatConfig::blocksPerAllocationUnit`, because `hal::BlockDevice` does not report it.
 On FAT12, the allocator never takes a cluster whose 12-bit FAT entry straddles two sectors, because such an entry is changed by two writes; these clusters count as used.
+A file whose last cluster has such an entry, which only another implementation creates, is extended by writing both halves of that entry, so a power loss between the two writes can corrupt its chain.
 When the volume is full, writes complete with `noSpace`.
 
 ## ExpectSize

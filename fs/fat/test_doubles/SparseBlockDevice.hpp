@@ -19,6 +19,14 @@ namespace fs
         template<std::size_t StoredBlocks, std::size_t BytesPerBlock = 512>
         class WithStorage;
 
+        enum class Request : uint8_t
+        {
+            read,
+            write,
+            erase,
+            flush
+        };
+
         SparseBlockDevice(uint32_t numberOfBlocks, uint32_t blockSize, infra::MemoryRange<uint32_t> blockNumbers, infra::ByteRange contents);
 
         uint32_t BlockSize() const override;
@@ -29,6 +37,7 @@ namespace fs
         void Flush(const infra::Function<void(Result)>& onDone) override;
 
         void FailNextOperationWith(Result result, uint32_t succeedingFirst = 0);
+        void Observe(const infra::Function<void(Request request, uint32_t firstBlock)>& observer);
         void ReadBlock(uint32_t block, infra::ByteRange out) const;
         void WriteBlock(uint32_t block, infra::ConstByteRange data);
 
@@ -53,6 +62,7 @@ namespace fs
         infra::MemoryRange<uint32_t> blockNumbers;
         infra::ByteRange contents;
         std::optional<Result> injectedFailure;
+        infra::Function<void(Request request, uint32_t firstBlock)> observer;
         uint32_t succeedBeforeFailure{ 0 };
         uint32_t readRequests{ 0 };
         uint32_t writeRequests{ 0 };
