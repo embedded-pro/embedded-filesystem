@@ -44,10 +44,9 @@ TEST(FatShortNameTest, checksum_of_an_alias_written_by_mtools)
 
 TEST(FatShortNameTest, checksum_rotates_before_adding)
 {
-    EXPECT_EQ(0x82, fs::LongNameChecksum(Name("\x9aN\xd8"
-                                              "C\x9d"
-                                              "D~1DAT")
-                                             .bytes));
+    const std::array<uint8_t, 11> name{ 0x9a, 'N', 0xd8, 'C', 0x9d, 'D', '~', '1', 'D', 'A', 'T' };
+
+    EXPECT_EQ(0x82, fs::LongNameChecksum(name));
 }
 
 TEST(FatShortNameTest, upper_case_name_with_extension)
