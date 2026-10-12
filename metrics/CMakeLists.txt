@@ -1,2 +1,4 @@
 add_subdirectory(device)
 add_subdirectory(power_cut)
+add_subdirectory(workload)
+add_subdirectory(report)

@@ -33,7 +33,7 @@ It is delivered in four steps:
 
 1. Device models, metered devices and the virtual clock (`metrics/device`).
 2. Power-cut devices and the power-cut sweep.
-3. The interface every filesystem under test implements, the workloads, the runner and the report.
+3. The interface every filesystem under test implements, the workloads, the runner, the metric computations and the report (`metrics/workload`, `metrics/report`).
 4. The FatFs and littlefs baselines, the metric tests and the metrics workflow.
 
 ## Phase 5: shared building blocks
