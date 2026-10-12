@@ -80,7 +80,7 @@ namespace fs
 
     void FatFileSystem::Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone)
     {
-        volume.Defer(onDone, IsMounted() ? Result::unsupported : Unavailable());
+        StartCall(FatUsageCall{ onDone });
     }
 
     FatVolume& FatFileSystem::Volume()
@@ -170,10 +170,17 @@ namespace fs
     template<class Call>
     void FatFileSystem::StartPathCall(infra::BoundedConstString path, Call&& call)
     {
+        if (auto validation = ValidatePath(path, volume.Limits()); IsMounted() && validation != Result::success)
+            volume.Defer(call.onDone, validation);
+        else
+            StartCall(std::forward<Call>(call));
+    }
+
+    template<class Call>
+    void FatFileSystem::StartCall(Call&& call)
+    {
         if (!IsMounted())
             volume.Defer(call.onDone, Unavailable());
-        else if (auto validation = ValidatePath(path, volume.Limits()); validation != Result::success)
-            volume.Defer(call.onDone, validation);
         else if (auto slot = FreePathSlot())
         {
             slot->call = std::forward<Call>(call);
@@ -235,7 +242,9 @@ namespace fs
             volume.Operation().emplace<FatStat>(volume, *stat, finished).Start();
         else if (auto* openDirectory = std::get_if<FatOpenDirectoryCall>(&call))
             volume.Operation().emplace<FatOpenDirectory>(volume, *openDirectory, allocateDirectory, finished).Start();
+        else if (auto* open = std::get_if<FatOpenCall>(&call))
+            volume.Operation().emplace<FatOpen>(volume, *open, allocateFile, finished).Start();
         else
-            volume.Operation().emplace<FatOpen>(volume, std::get<FatOpenCall>(call), allocateFile, finished).Start();
+            volume.Operation().emplace<FatUsage>(volume, std::get<FatUsageCall>(call), finished).Start();
     }
 }

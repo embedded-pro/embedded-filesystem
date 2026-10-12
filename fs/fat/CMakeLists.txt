@@ -13,6 +13,8 @@ target_link_libraries(fs.fat PUBLIC
 target_sources(fs.fat PRIVATE
     CodePage437.cpp
     CodePage437.hpp
+    FatBackgroundScan.cpp
+    FatBackgroundScan.hpp
     FatBootSector.cpp
     FatBootSector.hpp
     FatBytes.cpp
@@ -40,6 +42,8 @@ target_sources(fs.fat PRIVATE
     FatFormatLayout.hpp
     FatFormatter.cpp
     FatFormatter.hpp
+    FatFreeSpaceScan.cpp
+    FatFreeSpaceScan.hpp
     FatFsInfo.cpp
     FatFsInfo.hpp
     FatGeometry.cpp
@@ -70,6 +74,8 @@ target_sources(fs.fat PRIVATE
     FatTable.hpp
     FatTableReader.cpp
     FatTableReader.hpp
+    FatUsage.cpp
+    FatUsage.hpp
     FatVolume.cpp
     FatVolume.hpp
     FatVolumeState.hpp

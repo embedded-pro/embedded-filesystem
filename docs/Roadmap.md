@@ -58,9 +58,9 @@ The formatter comes early, because every later test and the metrics need formatt
 6. Reading directory entries, with long names.
 7. Lookup by path, `Stat` and listing directories.
 8. Reading files through cluster chains and the extent cache.
-9. Allocation: the FSINFO hint, the free-run cache, contiguous and aligned runs, the background scan and `Usage`.
+9. Free space: the background scan that counts free clusters, and `Usage`.
 10. The independent consistency checker for FAT images.
-11. Writing, `Sync` and `Close` of existing files, with the first power-cut sweep.
+11. Writing, `Sync` and `Close` of existing files, with allocation from the FSINFO hint, the free-run cache and contiguous and aligned runs, and the first power-cut sweep.
 12. Creating files with long names and short aliases, and `ExpectSize`.
 13. `Remove` with discard and `MakeDirectory`, and the FAT subject of the metrics.
 14. `Rename` and `Truncate`.

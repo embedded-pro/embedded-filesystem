@@ -115,13 +115,8 @@ namespace
                 {
                     done.callback(result);
                 });
-            volume.Usage([&done](fs::Result result, fs::VolumeUsage usage)
-                {
-                    EXPECT_EQ(fs::VolumeUsage{}, usage);
-                    done.callback(result);
-                });
 
-            EXPECT_CALL(done, callback(result)).Times(4);
+            EXPECT_CALL(done, callback(result)).Times(3);
             ExecuteAllActions();
         }
 
@@ -140,7 +135,12 @@ namespace
                     EXPECT_EQ(nullptr, file);
                     done.callback(result);
                 });
-            EXPECT_CALL(done, callback(result)).Times(2);
+            volume.Usage([&done](fs::Result result, fs::VolumeUsage usage)
+                {
+                    EXPECT_EQ(fs::VolumeUsage{}, usage);
+                    done.callback(result);
+                });
+            EXPECT_CALL(done, callback(result)).Times(3);
             ExecuteAllActions();
         }
 

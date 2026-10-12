@@ -126,6 +126,9 @@ namespace fs
         if (result == Result::success)
             volume.cleanAtMount = CleanShutdown(volume.geometry.type, ReadEntry(volume.geometry.type, 1, contents, infra::ConstByteRange()));
 
+        if (volume.cleanAtMount == true && volume.fsInfo)
+            volume.freeClusters = volume.fsInfo->freeClusters;
+
         Done(result);
     }
 
