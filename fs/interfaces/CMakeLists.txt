@@ -7,12 +7,20 @@ target_include_directories(fs.interfaces PUBLIC
 
 target_link_libraries(fs.interfaces PUBLIC
     infra.stream
+    infra.util
 )
 
 target_sources(fs.interfaces PRIVATE
+    Directory.hpp
+    EntryInfo.hpp
+    File.hpp
+    FileSystem.hpp
+    OpenMode.hpp
     Result.cpp
     Result.hpp
 )
+
+add_subdirectory(test_doubles)
 
 if (EMFS_BUILD_TESTS)
     add_subdirectory(test)

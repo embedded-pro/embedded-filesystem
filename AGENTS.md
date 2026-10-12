@@ -6,7 +6,7 @@ embedded-filesystem provides asynchronous, heap-less C++20 filesystems for micro
 
 ## Architecture
 
-- `fs/interfaces/` — `fs::Result`, `fs::FileSystem`, `fs::File`, `fs::Directory` (target `fs.interfaces`)
+- `fs/interfaces/` — `fs::Result`, `fs::OpenMode`, `fs::FileSystem`, `fs::File`, `fs::Directory`, `fs::EntryInfo`, `fs::VolumeUsage` (target `fs.interfaces`)
 - `fs/common/` — path parsing, sector cache, per-volume operation queue, handle pools, CRC-protected records (target `fs.common`)
 - `fs/fat/` — FAT12/16/32 with long file names, and the formatter (target `fs.fat`); design in `docs/Fat.md`
 - `fs/nor/` — log-structured NOR filesystem, garbage collection, wear leveling (target `fs.nor`); design in `docs/NorFilesystem.md`

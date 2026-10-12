@@ -38,7 +38,12 @@ It is delivered in four steps:
 
 ## Phase 5: shared building blocks
 
-`fs::Result`, path parsing, handle pools, the sector cache, the per-volume operation queue, and the asynchronous file and directory interfaces.
+1. The asynchronous file and directory interfaces next to `fs::Result` (`fs/interfaces`), with their mocks.
+2. Path parsing and the mapping of block device results onto `fs::Result` (`fs/common`).
+3. The per-volume operation queue, deferred completions and handle pools.
+4. The sector cache.
+
+CRC-protected records are added to `fs/common` with the NOR journal in phase 7.
 
 ## Phase 6: FAT
 
@@ -46,15 +51,15 @@ It is delivered in four steps:
 2. Directories: short names, long names, lookup by path.
 3. Reading: cluster chains and the extent cache.
 4. Allocation: FSINFO hint, free-run cache and contiguous runs.
-5. Writing: write, append, create, remove, rename, make directory and truncate.
-6. Durability: write-back cache, ordered `Sync`, discard, the dirty flag.
+5. Writing: write, append, create, remove, rename, make directory and truncate, and multi-block write-back (M-1).
+6. Durability: ordered write-back through the ranks of the sector cache, `Sync` with `Flush`, discard, the dirty flag.
 7. Formatting with SD alignment.
 8. Power-cut sweep and interoperability tests.
 
 ## Phase 7: NOR
 
 1. Format, block headers and the mount scan.
-2. Journal and checkpoints.
+2. Journal, checkpoints and CRC-protected records.
 3. The copy-on-write map and the node cache.
 4. Inodes, files and directories, with inline data.
 5. Background erase, the pre-erased pool and garbage collection of node blocks.
