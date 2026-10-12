@@ -5,6 +5,8 @@
 
 namespace fs
 {
+    bool FatEntryPosition::operator==(const FatEntryPosition& other) const = default;
+
     bool IsDirectory(const FatScannedEntry& entry)
     {
         return (entry.entry.attributes & FatAttributes::directory) != 0;
