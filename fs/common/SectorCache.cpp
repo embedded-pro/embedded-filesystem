@@ -76,8 +76,8 @@ namespace fs
         }
     }
 
-    SectorCache::SectorCache(hal::BlockDevice& device, infra::MemoryRange<Entry> entries, infra::ByteRange buffers)
-        : device(device)
+    SectorCache::SectorCache(FlushBarrier& barrier, infra::MemoryRange<Entry> entries, infra::ByteRange buffers)
+        : barrier(barrier)
         , entries(entries)
         , buffers(buffers)
         , sectorSize(SectorSizeOf(entries, buffers))
@@ -105,6 +105,13 @@ namespace fs
         Access();
     }
 
+    void SectorCache::ReadOnce(uint32_t sector, const infra::Function<void(Result result, infra::ConstByteRange contents)>& onDone)
+    {
+        Start(Request::readOnce, sector, 0);
+        onRead = onDone;
+        Access();
+    }
+
     void SectorCache::Modify(uint32_t sector, uint8_t rank, const infra::Function<void(Result result, infra::ByteRange contents)>& onDone)
     {
         Start(Request::modify, sector, rank);
@@ -122,6 +129,13 @@ namespace fs
     void SectorCache::WriteBack(const infra::Function<void(Result result)>& onDone)
     {
         Start(Request::writeBack, 0, 0);
+        onWriteBack = onDone;
+        WriteBackAll();
+    }
+
+    void SectorCache::Flush(const infra::Function<void(Result result)>& onDone)
+    {
+        Start(Request::flush, 0, 0);
         onWriteBack = onDone;
         WriteBackAll();
     }
@@ -146,7 +160,7 @@ namespace fs
 
         for (const auto& entry : entries)
             if (entry.valid && entry.sector >= firstSector && entry.sector - firstSector < sectors)
-                infra::Copy(infra::MakeConst(BufferOf(entry)), infra::Head(infra::DiscardHead(buffer, (entry.sector - firstSector) * sectorSize), sectorSize));
+                infra::Copy(infra::MakeConst(BufferOf(entry)), infra::Head(infra::DiscardHead(buffer, static_cast<std::size_t>(entry.sector - firstSector) * sectorSize), sectorSize));
     }
 
     void SectorCache::Clear()
@@ -182,9 +196,10 @@ namespace fs
 
     void SectorCache::Hit()
     {
-        Touch(*target);
+        if (request != Request::readOnce)
+            Touch(*target);
 
-        if (request != Request::read && target->dirty && target->rank != requestedRank)
+        if (request != Request::read && request != Request::readOnce && target->dirty && target->rank != requestedRank)
             WriteBackAll();
         else
             Available();
@@ -194,7 +209,9 @@ namespace fs
     {
         target = &SelectSlot(leastRecentlyUsed);
 
-        if (target->valid && target->dirty)
+        if (target->valid && target->dirty && request == Request::readOnce)
+            Complete(Result::busy);
+        else if (target->valid && target->dirty)
         {
             writingVictim = true;
             WriteEntry(*target);
@@ -208,7 +225,11 @@ namespace fs
         target->valid = false;
         target->dirty = false;
         target->sector = requestedSector;
-        Touch(*target);
+
+        if (request == Request::readOnce)
+            MakeLeastRecent(*target);
+        else
+            Touch(*target);
 
         if (request == Request::overwrite)
         {
@@ -216,7 +237,7 @@ namespace fs
             Available();
         }
         else
-            device.ReadBlocks(BufferOf(*target), requestedSector, [this](hal::BlockDevice::Result deviceResult)
+            barrier.Device().ReadBlocks(BufferOf(*target), requestedSector, [this](hal::BlockDevice::Result deviceResult)
                 {
                     OnLoaded(deviceResult);
                 });
@@ -235,7 +256,7 @@ namespace fs
 
     void SectorCache::Available()
     {
-        if (request != Request::read)
+        if (request != Request::read && request != Request::readOnce)
             MarkModified();
 
         Complete(Result::success);
@@ -273,6 +294,11 @@ namespace fs
     {
         if (request == Request::writeBack)
             Complete(Result::success);
+        else if (request == Request::flush)
+            barrier.Flush([this](hal::BlockDevice::Result deviceResult)
+                {
+                    Complete(ToResult(deviceResult));
+                });
         else
             Available();
     }
@@ -286,7 +312,7 @@ namespace fs
 
     void SectorCache::WriteCopy()
     {
-        device.WriteBlocks(BufferOf(*writing), CopySector(mirroredRegion, writing->sector, copy), [this](hal::BlockDevice::Result deviceResult)
+        barrier.Write(BufferOf(*writing), CopySector(mirroredRegion, writing->sector, copy), writing->rank, [this](hal::BlockDevice::Result deviceResult)
             {
                 OnWritten(deviceResult);
             });
@@ -323,9 +349,9 @@ namespace fs
         auto completed = std::exchange(request, Request::none);
         auto contents = result == Result::success && target != nullptr ? BufferOf(*target) : infra::ByteRange();
 
-        if (completed == Request::read)
+        if (completed == Request::read || completed == Request::readOnce)
             onRead(result, contents);
-        else if (completed == Request::writeBack)
+        else if (completed == Request::writeBack || completed == Request::flush)
             onWriteBack(result);
         else
             onModify(result, contents);
@@ -335,6 +361,12 @@ namespace fs
     {
         leastRecentlyUsed.erase(entry);
         leastRecentlyUsed.push_back(entry);
+    }
+
+    void SectorCache::MakeLeastRecent(Entry& entry)
+    {
+        leastRecentlyUsed.erase(entry);
+        leastRecentlyUsed.push_front(entry);
     }
 
     infra::ByteRange SectorCache::BufferOf(const Entry& entry) const

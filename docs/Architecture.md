@@ -298,6 +298,8 @@ Each one is sized at compile time:
 | `fs::DeferredCompletions::WithMaxSize<N>`           | N completions with `busy` that wait for the event dispatcher              | N completions                                        |
 | `fs::HandlePool<Handle, N>`                         | N handles, constructed once with the volume                               | N handles                                            |
 | `fs::SectorCache::WithStorage<Sectors, SectorSize>` | Sectors buffers of SectorSize bytes, 512 by default; see [Fat.md](Fat.md) | Sectors buffers and their entries                    |
+| `fs::FlushBarrier`                                  | One per block device, in front of it                                      | The lowest rank written since the last flush         |
+| `fs::DirectTransfers`                               | One per volume, next to its sector cache                                  | One transfer in flight                               |
 
 ### Paths
 
@@ -313,6 +315,12 @@ Handles are constructed once, with the volume, by `fs::HandlePool`, and live as 
 An operation in flight holds an `infra::SharedPtr` to its own handle, so a handle is never unreferenced while it has work to do.
 When the last `infra::SharedPtr` and `infra::WeakPtr` to a handle are released, the handle is notified: a file starts its implicit close, and a directory has nothing left to do.
 The handle returns to the pool when it calls `Release`.
+
+### Ordered writes
+
+Every write of a FAT volume carries the rank of the sector cache described in [Fat.md](Fat.md), and goes through `fs::FlushBarrier`, which calls `hal::BlockDevice::Flush` before a write when a write of a lower rank has not been flushed yet.
+`SectorCache::Flush` writes back every modified sector in rank order and then flushes the device, which is what `Sync` and the barriers between the steps of an operation use.
+`fs::DirectTransfers` moves whole sectors between a buffer and the device: a read is overlaid with the sectors the cache holds, and a write or a discard first drops them from the cache.
 
 ### Device results
 

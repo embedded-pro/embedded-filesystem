@@ -14,6 +14,8 @@ target_link_libraries(fs.common_test PUBLIC
 target_sources(fs.common_test PRIVATE
     TestBlockDeviceResult.cpp
     TestDeferredCompletions.cpp
+    TestDirectTransfers.cpp
+    TestFlushBarrier.cpp
     TestHandlePool.cpp
     TestOperationQueue.cpp
     TestPath.cpp

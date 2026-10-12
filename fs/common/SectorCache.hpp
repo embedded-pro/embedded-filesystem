@@ -1,6 +1,7 @@
 #ifndef FS_COMMON_SECTOR_CACHE_HPP
 #define FS_COMMON_SECTOR_CACHE_HPP
 
+#include "fs/common/FlushBarrier.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -37,7 +38,7 @@ namespace fs
         template<std::size_t Sectors, std::size_t BytesPerSector = 512>
         class WithStorage;
 
-        SectorCache(hal::BlockDevice& device, infra::MemoryRange<Entry> entries, infra::ByteRange buffers);
+        SectorCache(FlushBarrier& barrier, infra::MemoryRange<Entry> entries, infra::ByteRange buffers);
         SectorCache(const SectorCache& other) = delete;
         SectorCache& operator=(const SectorCache& other) = delete;
         ~SectorCache() = default;
@@ -46,9 +47,11 @@ namespace fs
         void SetMirroredRegion(std::optional<MirroredRegion> region);
 
         void Read(uint32_t sector, const infra::Function<void(Result result, infra::ConstByteRange contents)>& onDone);
+        void ReadOnce(uint32_t sector, const infra::Function<void(Result result, infra::ConstByteRange contents)>& onDone);
         void Modify(uint32_t sector, uint8_t rank, const infra::Function<void(Result result, infra::ByteRange contents)>& onDone);
         void Overwrite(uint32_t sector, uint8_t rank, const infra::Function<void(Result result, infra::ByteRange contents)>& onDone);
         void WriteBack(const infra::Function<void(Result result)>& onDone);
+        void Flush(const infra::Function<void(Result result)>& onDone);
 
         void Discard(uint32_t beginSector, uint32_t endSector);
         void Overlay(uint32_t firstSector, infra::ByteRange buffer) const;
@@ -59,9 +62,11 @@ namespace fs
         {
             none,
             read,
+            readOnce,
             modify,
             overwrite,
-            writeBack
+            writeBack,
+            flush
         };
 
         void Start(Request newRequest, uint32_t sector, uint8_t rank);
@@ -82,10 +87,11 @@ namespace fs
         void Deliver();
 
         void Touch(Entry& entry);
+        void MakeLeastRecent(Entry& entry);
         infra::ByteRange BufferOf(const Entry& entry) const;
 
     private:
-        hal::BlockDevice& device;
+        FlushBarrier& barrier;
         infra::MemoryRange<Entry> entries;
         infra::ByteRange buffers;
         uint32_t sectorSize;
@@ -124,8 +130,8 @@ namespace fs
         static_assert(Sectors > 0 && BytesPerSector > 0);
 
     public:
-        explicit WithStorage(hal::BlockDevice& device)
-            : SectorCache(device, infra::MakeRange(this->entryStorage), infra::MakeRange(this->bufferStorage))
+        explicit WithStorage(FlushBarrier& barrier)
+            : SectorCache(barrier, infra::MakeRange(this->entryStorage), infra::MakeRange(this->bufferStorage))
         {}
     };
 }

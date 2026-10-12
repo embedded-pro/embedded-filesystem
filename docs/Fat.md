@@ -89,7 +89,8 @@ The volume stays mounted, so that other files remain accessible; only a volume t
 
 ## Sector cache
 
-All accesses to the device go through `fs::SectorCache`, a write-back cache with a compile-time number of sectors: modified sectors stay in RAM until they are evicted, until `Sync`, or until `Unmount`.
+Metadata and small transfers go through `fs::SectorCache`, a write-back cache with a compile-time number of sectors: modified sectors stay in RAM until they are evicted, until `Sync`, or until `Unmount`.
+Transfers of whole sectors go through `fs::DirectTransfers`, and every write of either goes through `fs::FlushBarrier`, so the flush between ranks covers every write.
 Every modified sector carries a rank, which orders the writes:
 
 | Rank | Sectors                                                                                               |
@@ -104,23 +105,23 @@ When the cache is full, it replaces a free slot, else the least recently used se
 A sector that is modified again with another rank first makes the cache write back everything.
 A write that fails leaves its sector modified, and writing back stops at the first failure, so a sector of a higher rank is never written after a failed write of a lower rank.
 FAT sectors are written to the first FAT and then to every other copy in turn.
-The cache issues one device request at a time, and it is the only part of the volume that issues device requests.
+The volume issues one device request at a time.
 
 ### Flushing between ranks
 
 A device with a cache of its own, such as eMMC with its cache enabled, may write its cache back in another order than it received the writes.
-So before the sector cache writes a sector of rank r, it calls `hal::BlockDevice::Flush` when a sector of a lower rank was written since the last flush.
+So before `fs::FlushBarrier` writes a sector of rank r, it calls `hal::BlockDevice::Flush` when a sector of a lower rank was written since the last flush.
 This costs one device request per change of rank, and makes the order of the ranks hold on every device.
 An operation that needs a barrier, as described under [Writing](#writing), asks the cache to flush: the cache writes back every modified sector and then flushes the device.
 
 ### Direct transfers
 
 The whole sectors of a read go directly from the device into the buffer of the caller, one request per contiguous run of clusters, and the cache then copies the sectors it holds of that range over the buffer, so that the caller sees the latest contents.
-A write goes directly to the device when its whole sectors form a contiguous run longer than the cache can collect, which is the number of cache sectors minus two; the cache drops the sectors it holds of that range, and writes the run at rank 0 in one request.
+A write goes directly to the device when its whole sectors form a contiguous run longer than the cache can collect, which is the number of cache sectors minus two; the cache drops the sectors it holds of that range, and the run is written at rank 0 in one request.
 Shorter writes, and the partial sectors at the ends of any transfer, go through the cache.
 The cache writes back consecutive sectors of the same rank that it holds in adjacent slots in one multi-block request, and places a data sector in the slot after the one of its predecessor when it can, so that collected writes leave the cache as multi-block requests.
-Clusters that are freed are discarded through the cache, which drops the sectors it holds of them first.
-Background reads, such as the scan of the FAT for free clusters, use only free or unmodified slots and leave them least recently used, so a background read is one device request and never pushes useful sectors out of the cache.
+Clusters that are freed are discarded through `fs::DirectTransfers`, after the cache drops the sectors it holds of them.
+Background reads, such as the scan of the FAT for free clusters, use `SectorCache::ReadOnce`, which takes only free or unmodified slots and leaves them least recently used, so a background read is one device request and never pushes useful sectors out of the cache; when every slot is modified, it completes with `busy`.
 As everywhere in EmIL, a buffer passed to `Read` or `Write` must stay valid until the operation completes.
 
 ## Open files
