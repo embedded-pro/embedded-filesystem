@@ -57,16 +57,6 @@ namespace fs
             }
         }
 
-        uint32_t ReadFat12(uint32_t cluster, uint32_t offset, infra::ConstByteRange sector, infra::ConstByteRange nextSector)
-        {
-            auto pair = LoadFat12Pair(offset, sector, nextSector);
-
-            if (cluster % 2 != 0)
-                return pair >> 4;
-
-            return pair & 0xfffu;
-        }
-
         void WriteFat12(uint32_t cluster, uint32_t value, uint32_t offset, infra::ByteRange sector, infra::ByteRange nextSector)
         {
             auto pair = LoadFat12Pair(offset, sector, nextSector);
@@ -95,12 +85,20 @@ namespace fs
         switch (type)
         {
             case FatType::fat12:
-                return ReadFat12(cluster, offset, sector, nextSector);
+                return DecodeFat12(cluster, LoadFat12Pair(offset, sector, nextSector));
             case FatType::fat16:
                 return LoadLittle16(sector, offset);
             default:
                 return LoadLittle32(sector, offset) & fat32Mask;
         }
+    }
+
+    uint32_t DecodeFat12(uint32_t cluster, uint16_t pair)
+    {
+        if (cluster % 2 != 0)
+            return pair >> 4u;
+
+        return pair & 0xfffu;
     }
 
     void WriteEntry(FatType type, uint32_t cluster, uint32_t value, infra::ByteRange sector, infra::ByteRange nextSector)
