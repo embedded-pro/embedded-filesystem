@@ -4,8 +4,8 @@
 #include "fs/common/OperationQueue.hpp"
 #include "fs/interfaces/EntryInfo.hpp"
 #include "fs/interfaces/Result.hpp"
+#include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/BoundedString.hpp"
-#include "infra/util/Function.hpp"
 #include <variant>
 
 namespace fs
@@ -13,7 +13,7 @@ namespace fs
     struct FatStatCall
     {
         infra::BoundedConstString path;
-        infra::Function<void(Result result, const EntryInfo& info)> onDone;
+        infra::AutoResetFunction<void(Result result, const EntryInfo& info)> onDone;
     };
 
     using FatPathCall = std::variant<std::monostate, FatStatCall>;

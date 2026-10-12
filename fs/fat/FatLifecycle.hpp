@@ -2,7 +2,6 @@
 #define FS_FAT_FAT_LIFECYCLE_HPP
 
 #include "fs/interfaces/Result.hpp"
-#include "infra/util/Function.hpp"
 #include <variant>
 
 namespace fs
@@ -38,7 +37,6 @@ namespace fs
     struct FatMountRequested
     {
         static constexpr const char* name{ "Mount" };
-        infra::Function<void(Result result)> onDone;
     };
 
     struct FatMountDone
@@ -50,7 +48,6 @@ namespace fs
     struct FatUnmountRequested
     {
         static constexpr const char* name{ "Unmount" };
-        infra::Function<void(Result result)> onDone;
     };
 
     struct FatUnmountDone

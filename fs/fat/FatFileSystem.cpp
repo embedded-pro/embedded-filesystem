@@ -46,7 +46,7 @@ namespace fs
             {
                 volume.Entered(Result::success);
             });
-        lifecycle.OnEntered<FatFault>([](FatFileSystem& volume, FatFault& fault)
+        lifecycle.OnEntered<FatFault>([](FatFileSystem& volume, const FatFault& fault)
             {
                 volume.Entered(fault.result);
             });
@@ -61,16 +61,17 @@ namespace fs
 
     void FatFileSystem::Mount(const infra::Function<void(Result result)>& onDone)
     {
-        if (lifecycle.Dispatch(FatMountRequested{ onDone }) != services::DispatchResult::transitioned)
+        if (lifecycle.Dispatch(FatMountRequested{}) == services::DispatchResult::transitioned)
+            onMountDone = onDone;
+        else
             Reject(onDone, Result::busy);
     }
 
     void FatFileSystem::Unmount(const infra::Function<void(Result result)>& onDone)
     {
-        if (lifecycle.Dispatch(FatUnmountRequested{ onDone }) == services::DispatchResult::transitioned)
-            return;
-
-        if (std::holds_alternative<FatMounting>(lifecycle.CurrentState()) || std::holds_alternative<FatUnmounting>(lifecycle.CurrentState()))
+        if (lifecycle.Dispatch(FatUnmountRequested{}) == services::DispatchResult::transitioned)
+            onUnmountDone = onDone;
+        else if (std::holds_alternative<FatMounting>(lifecycle.CurrentState()) || std::holds_alternative<FatUnmounting>(lifecycle.CurrentState()))
             Reject(onDone, Result::busy);
         else
             Reject(onDone, Unavailable());
@@ -158,9 +159,8 @@ namespace fs
         return std::holds_alternative<FatMounted>(lifecycle.CurrentState());
     }
 
-    void FatFileSystem::BeginMount(const FatMountRequested& request)
+    void FatFileSystem::BeginMount()
     {
-        onMountDone = request.onDone;
         lifecycleClaimer.Claim([this]
             {
                 StartMount();
@@ -180,9 +180,8 @@ namespace fs
         std::get<FatMount>(operation).Start();
     }
 
-    void FatFileSystem::BeginUnmount(const FatUnmountRequested& request)
+    void FatFileSystem::BeginUnmount()
     {
-        onUnmountDone = request.onDone;
         lifecycleClaimer.Claim([this]
             {
                 StartUnmount();
@@ -212,11 +211,17 @@ namespace fs
 
     void FatFileSystem::Entered(Result result)
     {
-        if (onMountDone)
-            onMountDone(result);
+        DeferCompletion(onMountDone, result);
+        DeferCompletion(onUnmountDone, result);
+    }
 
-        if (onUnmountDone)
-            onUnmountDone(result);
+    void FatFileSystem::DeferCompletion(infra::Function<void(Result result)>& onDone, Result result)
+    {
+        if (onDone)
+            deferred.Defer([done = std::exchange(onDone, nullptr), result]
+                {
+                    done(result);
+                });
     }
 
     FatPathSlot* FatFileSystem::FreePathSlot()
@@ -242,11 +247,11 @@ namespace fs
         auto call = std::exchange(slot.call, std::monostate{});
         slot.claimer.Release();
 
-        if (const auto* stat = std::get_if<FatStatCall>(&call))
+        if (auto* stat = std::get_if<FatStatCall>(&call))
             RunStat(*stat);
     }
 
-    void FatFileSystem::RunStat(const FatStatCall& call)
+    void FatFileSystem::RunStat(FatStatCall& call) const
     {
         if (IsRoot(call.path))
             call.onDone(Result::success, EntryInfo{ infra::BoundedConstString(), EntryType::directory, 0 });
