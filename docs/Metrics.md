@@ -12,7 +12,8 @@ A few metrics, such as code size and processor cycles, can only be measured on a
 
 The host metrics count work done by the storage device, not time measured on the host computer, because host timing depends on the machine and is not representative of a microcontroller.
 Counts are converted into simulated device time with timing models based on datasheets.
-Baselines run under the same conditions: the same device model, the same workload, and caches configured to use the same amount of RAM as embedded-filesystem, with the RAM used by every subject reported next to its results.
+Baselines run under the same conditions: the same device model, the same workload, and caches configured to use the same amount of RAM as embedded-filesystem where a baseline has a cache to size, with the RAM used by every subject reported next to its results.
+FatFs has no such cache: it works with one sector buffer per volume and one per file, so it uses less RAM than `embedded-filesystem/fat`, and both numbers are reported.
 FatFs and littlefs are each measured twice: with their default configuration, and with the options that help the workload enabled, such as fast seek and `f_expand` for FatFs, so that the comparison is not made against an untuned baseline.
 A metric with a numeric target fails the build when the target is missed; a metric marked as reported is tracked, and fails the build when it becomes worse than on `main` by more than 5 %.
 
@@ -69,6 +70,15 @@ littlefs runs on `nor-qspi-16m` and `internal-flash`, and on `nor-qspi-1m` for t
 On `internal-flash`, the file sizes of the workloads are divided by 64, so that they fit on 512 KiB.
 FatFs symbols are global and its options are compile-time, so every FatFs variant is built from its own copy of the sources next to an `ffconf.h` generated from the upstream one, and runs in its own executable.
 The RAM reported for a subject is the size of its state and buffers with one open file, which is what every workload needs.
+
+### Subjects of embedded-filesystem
+
+| Subject                   | Device         | Configuration                                                                                                                                                                                                  |
+|---------------------------|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `embedded-filesystem/fat` | `sd-card-256m` | `fs::FatFileSystem::WithStorage<2, 8>` with the allocation unit of the model and the default timer service, on a volume formatted by `fs::FatFormatter` with its defaults and the allocation unit of the model |
+
+The subjects of embedded-filesystem measure the defaults a product gets, such as the 2 copies of the FAT that the formatter writes, not a configuration chosen to match a baseline.
+P-1 is recorded from the power-cut sweep of each filesystem, on the small device models of the sweep.
 
 ### Baseline results
 
@@ -139,14 +149,16 @@ The volume is filled until the usage reported by the filesystem reaches the fill
 
 ## Write metrics
 
-| Id  | Metric                      | Definition                                                                                              | Workloads | Target                                                                                                               |
-|-----|-----------------------------|---------------------------------------------------------------------------------------------------------|-----------|----------------------------------------------------------------------------------------------------------------------|
-| W-1 | Sequential write throughput | User bytes written divided by total device time                                                         | L1        | At least the best baseline                                                                                           |
-| W-2 | Append scaling              | Device time of one append and `Sync` when the file holds 4 MiB, divided by the same when it holds 4 KiB | L2        | At most 1.1, for NOR and FAT                                                                                         |
-| W-3 | Fill scaling                | Device time of one append and `Sync` on a 90 % full volume, divided by the same on a 10 % full volume   | L2        | At most 1.2                                                                                                          |
-| W-4 | Write amplification         | Bytes programmed on the device divided by user bytes written                                            | L1, L2    | At most 1.1 for L1; reported for L2                                                                                  |
-| W-5 | Overwrite scaling           | Device time of one overwrite in a 4 MiB file, divided by the same in a 64 KiB file                      | L3        | At most 1.2 on NOR                                                                                                   |
-| W-6 | Call latency                | 99th percentile and maximum of the simulated latency of one call                                        | L2, L3    | Maximum at most one sector erase plus one block program, at maximum timings, independent of file size and fill level |
+| Id  | Metric                      | Definition                                                                                              | Workloads | Target                                                                                                                                          |
+|-----|-----------------------------|---------------------------------------------------------------------------------------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| W-1 | Sequential write throughput | User bytes written divided by total device time                                                         | L1        | At least the best baseline                                                                                                                      |
+| W-2 | Append scaling              | Device time of one append and `Sync` when the file holds 4 MiB, divided by the same when it holds 4 KiB | L2        | At most 1.1, for NOR and FAT                                                                                                                    |
+| W-3 | Fill scaling                | Device time of one append and `Sync` on a 90 % full volume, divided by the same on a 10 % full volume   | L2        | At most 1.2                                                                                                                                     |
+| W-4 | Write amplification         | Bytes programmed on the device divided by user bytes written                                            | L1, L2    | At most 1.1 for L1; reported for L2                                                                                                             |
+| W-5 | Overwrite scaling           | Device time of one overwrite in a 4 MiB file, divided by the same in a 64 KiB file                      | L3        | At most 1.2 on NOR                                                                                                                              |
+| W-6 | Call latency                | 99th percentile and maximum of the simulated latency of one call                                        | L2, L3    | Maximum at maximum timings, independent of file size and fill level: NOR at most one sector erase and one block program; FAT at most one commit |
+
+On FAT, one commit is 2 block writes plus one per copy of the FAT, 3 flushes and one allocation unit opening, plus the one background read that a call may wait for.
 
 ## Read metrics
 
@@ -172,19 +184,22 @@ For SD cards and eMMC, wear leveling is done by the card, and the device metrics
 
 ## Device metrics for SD cards and eMMC
 
-| Id  | Metric                   | Definition                                                                                         | Workloads  | Target         |
-|-----|--------------------------|----------------------------------------------------------------------------------------------------|------------|----------------|
-| M-1 | Blocks per write request | Mean number of blocks per write request                                                            | L1, L2, L4 | At least FatFs |
-| M-2 | Aligned writes           | Share of write requests that start on an allocation unit boundary or continue the previous request | L1, L2, L4 | At least FatFs |
-| M-3 | Allocation units touched | Distinct allocation units written per MiB of user data                                             | L1, L2, L4 | At most FatFs  |
+| Id  | Metric                   | Definition                                                                                                              | Workloads  | Target                                      |
+|-----|--------------------------|-------------------------------------------------------------------------------------------------------------------------|------------|---------------------------------------------|
+| M-1 | Blocks per write request | Mean number of blocks per write request                                                                                 | L1, L2, L4 | At least FatFs                              |
+| M-2 | Aligned writes           | Share of the written blocks whose write request starts on an allocation unit boundary or continues the previous request | L1, L2, L4 | At least FatFs on L1; reported on L2 and L4 |
+| M-3 | Allocation units touched | Distinct allocation units written per MiB of user data                                                                  | L1, L2, L4 | At most FatFs                               |
 
 ## Robustness metrics
 
-| Id  | Metric          | Definition                                                                                                           | Target                                                                                 |
-|-----|-----------------|----------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
-| P-1 | Power-cut sweep | Share of cut points after which the volume mounts consistently and every file holds its previous or its new contents | NOR: 100 %. FAT: 100 % with atomic sector writes, and reported with torn sector writes |
+| Id  | Metric          | Definition                                                                                                           | Target                                                                                                                                   |
+|-----|-----------------|----------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| P-1 | Power-cut sweep | Share of cut points after which the volume mounts consistently and every file holds its previous or its new contents | NOR: 100 %. FAT: 100 % with atomic sector writes, also when unflushed writes are lost or reordered, and reported with torn sector writes |
 
 The sweep is described in [Testing.md](Testing.md).
+
+M-2 counts blocks rather than requests, because a filesystem that coalesces small writes into fewer, larger requests would otherwise lower its share by sending fewer data requests next to the same number of metadata requests.
+On L2, where every `Sync` writes one data block, one block per FAT copy and one directory block, almost no write is aligned for any subject, and on L4 the alignment of small files says little, so M-2 is only reported there.
 
 ## On-target metrics
 

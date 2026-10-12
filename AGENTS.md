@@ -35,7 +35,7 @@ Exception: `metrics/` is host-only benchmark code and may use the standard libra
 
 - NOR: never program a program unit twice without an erase in between; align records to `NorConfig::programUnit`
 - NOR: a state change becomes visible only through a committed, CRC-protected journal record or checkpoint; never erase a block that committed state refers to
-- FAT: write data, then FAT (every copy), then the directory entry; `Sync` ends with `hal::BlockDevice::Flush`
+- FAT: write data, then FAT (every copy), then the directory entry, flushing the device whenever a higher rank follows a lower one; `Sync` ends with `hal::BlockDevice::Flush` (`docs/Fat.md`)
 - No wear leveling on block devices — SD cards and eMMC do it internally; keep writes large, aligned and sequential, and discard freed clusters
 
 ## Style

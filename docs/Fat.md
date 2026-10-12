@@ -17,99 +17,273 @@ Instead, it is designed to give the card the access pattern its controller handl
 | Files up to 4 GiB minus one byte                             | Files of 4 GiB and larger                                               |
 | Formatting with SD-compatible alignment                      | Formatting of partitioned layouts other than one primary partition      |
 
-Names are passed as UTF-8 and stored as UTF-16 in long name entries.
-Name comparison is case-insensitive for ASCII letters, as on Windows.
-The longest supported name and path are configuration parameters, at most 255 characters per name.
+## Names
+
+Names are passed as UTF-8; a name that is not valid UTF-8 completes with `invalidPath`.
+Long names are stored as UTF-16 in long name entries, at most 255 UTF-16 units per name; a longer name completes with `nameTooLong`.
+The longest name a volume creates and reports is also limited by `FatLimits::maxNameBytes`, 255 UTF-8 bytes by default, which sizes the buffer that holds a name while it is reported.
+A name on the medium that does not fit that buffer, for instance one written by a PC with many non-ASCII characters, is reported by its short name, which also opens it.
+
+The characters `"`, `*`, `/`, `:`, `<`, `>`, `?`, `\` and `|`, the control characters 0x00 to 0x1F and 0x7F complete with `invalidPath`, and so does a name that ends with a dot or a space.
+A name may start with a space or a dot.
+Names are compared case-insensitively for ASCII letters, as on Windows, and byte by byte otherwise; a path component matches either the long or the short name of an entry.
+
+A name that fits the 8.3 format, with a base and an extension that are each all lower case or all upper case, is stored as a short entry only, with the lower-case flags that Windows NT introduced.
+Every other name is stored in long name entries, followed by a short alias:
+
+1. The basis of the alias is the name in upper case, without spaces and leading dots; every character that a short name cannot hold, including `+`, `,`, `;`, `=`, `[`, `]` and every non-ASCII character, becomes `_`.
+2. Its base is the part before the last dot, cut to 8 characters, and its extension the part after the last dot, cut to 3.
+3. A numeric tail `~1` to `~32` replaces the end of the base; the lowest tail that neither a short nor a long name in the directory uses is taken, found while the directory is scanned for the name.
+4. If every tail is in use, the base becomes the first 2 characters of the basis followed by 4 hexadecimal digits of the CRC-16 of the name, and the directory is scanned once more; if that alias is in use too, the operation completes with `noSpace`.
+
+Short names are read with the lower-case flags applied, and their bytes from 0x80 upwards are decoded as code page 437.
+They are never generated with such bytes.
+
+## Directory entries
+
+An entry that starts with 0xE5 is free, and 0x05 stands for a first byte of 0xE5.
+An entry that starts with 0x00 ends the directory, so a scan stops there; clusters added to a directory are filled with zeros.
+Long name entries precede their short entry in reverse order, carry the checksum of the short name, and the first of them is flagged with 0x40.
+A set of long name entries with a gap in its sequence numbers, without its flagged entry or with a wrong checksum is an orphan: listing and lookup skip it and report the short entry that follows by its short name, and its slots are not reused.
+Volume labels and the `.` and `..` entries are skipped by listing and lookup.
+
+| Attribute | Effect                                                                                    |
+|-----------|-------------------------------------------------------------------------------------------|
+| Directory | Reported as `EntryType::directory`                                                        |
+| Read-only | `Open` for writing, `Truncate` and `Remove` complete with `readOnly`; `Rename` is allowed |
+| Hidden    | Listed like any other entry                                                               |
+| System    | Listed like any other entry                                                               |
+| Archive   | Set when an entry is created and when a file is written                                   |
+
+The fixed root directory of FAT12 and FAT16 holds the number of entries given in its boot sector, and any other directory at most 65536 entries; an operation that needs more completes with `noSpace`, and every scan is bounded by the same limits.
+A directory that needs more slots gets a new cluster, which is written as zeros at rank 0 and linked at rank 1, before the new entries are written in it at rank 2.
+
+## Timestamps
+
+Timestamps come from the timer services of EmIL, in the same way as the timestamps of `services::TracerWithDateTime`: the volume reads `infra::Now()` of the timer service given by `FatConfig::timerServiceId` and splits it into a date and a time with `infra::PartitionedTime`.
+FAT stores local time in steps of two seconds, from 1980 to 2107; earlier and later times are clamped to these bounds.
+The default is the system timer service, which counts from the start of 1970 unless the application sets it, so every timestamp is then 1980-01-01 00:00:00.
+An application that knows the time, from SNTP or a real-time clock, passes `infra::localTimeTimerServiceId` of `services::TimeWithLocalization`.
+The creation time is set when an entry is created, and the modification time by the `Sync` or `Close` that follows a write; the access date is not updated, so reading never writes.
 
 ## Mount
 
-Mounting reads the first sector of the device, decides whether it holds an MBR or a boot sector, and parses the BIOS parameter block of the volume.
+Mounting reads the first sector of the device.
+A sector with a valid boot sector makes the whole device the volume; otherwise, a sector with a valid MBR makes the first primary partition of a FAT type (0x01, 0x04, 0x06, 0x0B, 0x0C or 0x0E) the volume, and its boot sector is read.
+A device with neither, such as an empty card, completes with `corrupted`, and a device with a GPT protective MBR with `unsupported`.
+
+The BIOS parameter block is validated: values that no FAT volume may have, such as a cluster size that is not a power of two, a volume larger than its device or a FAT too small for its clusters, complete with `corrupted`, and values the volume does not support, such as a sector size other than the block size of the device, with `unsupported`.
 The FAT type is determined from the number of clusters, as the Microsoft FAT specification requires: fewer than 4085 clusters is FAT12, fewer than 65525 is FAT16, and anything else is FAT32.
-On FAT32, the FSINFO sector is read for the free-cluster count and the next-free hint; both are treated as hints and validated before use.
-The volume dirty flag in the FAT is set while the volume is mounted for writing and cleared on a clean unmount, so that a PC checks the volume after a power loss.
+On FAT32, when mirroring is disabled in the extended flags, only the active FAT is read and written.
+
+On FAT32, the FSINFO sector and the start of the FAT are read too.
+The free-cluster count and the next-free hint of FSINFO are used only when its signatures are valid, the values are in range, and the volume was cleanly unmounted, as recorded in the FAT; otherwise they are ignored.
+A FAT12 or FAT16 mount therefore reads one or two sectors, and a FAT32 mount three or four.
+Mounting writes nothing.
+
+## Corruption
+
+Every walk over a cluster chain or a directory is bounded by the number of clusters of the volume and the number of entries of a directory, so a loop cannot hang the volume.
+A link that points outside the volume, to a free cluster or to a bad cluster, a chain longer than the volume, and a chain shorter than the size of its file complete the operation that finds them with `corrupted`.
+The volume stays mounted, so that other files remain accessible; only a volume that cannot be mounted ends in the `Fault` state of its lifecycle.
 
 ## Sector cache
 
-All metadata accesses go through `fs::SectorCache`, a write-back cache with a compile-time number of sectors: modified sectors stay in RAM until they are evicted, until `Sync`, or until `Unmount`.
+All accesses to the device go through `fs::SectorCache`, a write-back cache with a compile-time number of sectors: modified sectors stay in RAM until they are evicted, until `Sync`, or until `Unmount`.
 Every modified sector carries a rank, which orders the writes:
 
-| Rank | Sectors                                                     |
-|------|-------------------------------------------------------------|
-| 0    | Data, and the clusters of a directory that was just created |
-| 1    | The FAT                                                     |
-| 2    | Existing directory entries                                  |
+| Rank | Sectors                                                                                               |
+|------|-------------------------------------------------------------------------------------------------------|
+| 0    | Data, and the clusters of a directory that is created or grown, as zeros or with `.` and `..`         |
+| 1    | The FAT and FSINFO                                                                                    |
+| 2    | Existing directory entries, and new entry sets                                                        |
+| 3    | The sector with the short entry of a new entry set whose long name entries begin in the sector before |
 
 Writing back writes the sectors of the lowest rank first, and within a rank in ascending sector order.
-When the cache is full, it replaces a free slot, else the least recently used sector that is not modified, else the least recently used sector of the lowest modified rank; so making room writes at most one sector, and never a sector of a higher rank before one of a lower rank.
+When the cache is full, it replaces a free slot, else the least recently used sector that is not modified, else the least recently used sector of the lowest modified rank; so making room writes at most one device request, and never a sector of a higher rank before one of a lower rank.
 A sector that is modified again with another rank first makes the cache write back everything.
 A write that fails leaves its sector modified, and writing back stops at the first failure, so a sector of a higher rank is never written after a failed write of a lower rank.
 FAT sectors are written to the first FAT and then to every other copy in turn.
-The cache issues one device request at a time.
+The cache issues one device request at a time, and it is the only part of the volume that issues device requests.
 
-Transfers that cover whole clusters bypass the cache and go directly between the caller's buffer and the device, as multi-block requests.
-Before such a write, the cache discards the sectors it holds of that range; after such a read, it copies the sectors it holds of that range over the buffer, so that the caller sees the latest contents.
+### Flushing between ranks
+
+A device with a cache of its own, such as eMMC with its cache enabled, may write its cache back in another order than it received the writes.
+So before the sector cache writes a sector of rank r, it calls `hal::BlockDevice::Flush` when a sector of a lower rank was written since the last flush.
+This costs one device request per change of rank, and makes the order of the ranks hold on every device.
+An operation that needs a barrier, as described under [Writing](#writing), asks the cache to flush: the cache writes back every modified sector and then flushes the device.
+
+### Direct transfers
+
+The whole sectors of a read go directly from the device into the buffer of the caller, one request per contiguous run of clusters, and the cache then copies the sectors it holds of that range over the buffer, so that the caller sees the latest contents.
+A write goes directly to the device when its whole sectors form a contiguous run longer than the cache can collect, which is the number of cache sectors minus two; the cache drops the sectors it holds of that range, and writes the run at rank 0 in one request.
+Shorter writes, and the partial sectors at the ends of any transfer, go through the cache.
+The cache writes back consecutive sectors of the same rank that it holds in adjacent slots in one multi-block request, and places a data sector in the slot after the one of its predecessor when it can, so that collected writes leave the cache as multi-block requests.
+Clusters that are freed are discarded through the cache, which drops the sectors it holds of them first.
+Background reads, such as the scan of the FAT for free clusters, use only free or unmodified slots and leave them least recently used, so a background read is one device request and never pushes useful sectors out of the cache.
 As everywhere in EmIL, a buffer passed to `Read` or `Write` must stay valid until the operation completes.
 
 ## Open files
 
-Each open file keeps its first cluster, its current cluster and position, its size, the location of its directory entry, its last cluster, and an extent cache.
-The extent cache holds a bounded number of runs of contiguous clusters, each as a start cluster and a length.
-Seeking within a run is computed without any device access; seeking outside the cached runs walks the cluster chain from the nearest known run instead of from the start of the file.
-Opening a file for appending positions it at the last cluster without walking the chain, once the chain has been walked a first time.
+Each open file keeps its first cluster, its current cluster and position, its size, the location of its directory entry, its last cluster, a reservation, and an extent cache.
+The extent cache holds `FatLimits::extentsPerFile` runs of contiguous clusters, 4 by default, each as the cluster index in the file, the cluster on the device and a length; it keeps the first run, and replaces the least recently used of the others.
+Seeking within a run is computed without any device access; seeking outside the cached runs walks the cluster chain from the nearest preceding run instead of from the start of the file.
+The volume remembers the location of the directory entry, the first cluster, the size and the last run of the last `FatLimits::closedFiles` files that were closed, 2 by default.
+Opening one of them again, with the same first cluster and size, starts with that run in its extent cache, so appending after a reopen does not walk the cluster chain.
 
 ## Allocation
 
-Free clusters are found through the FSINFO next-free hint and through a cache of free runs.
-When the volume is idle, a background scan of the FAT fills the free-run cache, so that a foreground allocation rarely needs to read the FAT.
-Clusters are allocated in contiguous runs: a file that grows takes the next free clusters after its last cluster when they are free, and a new file starts at the beginning of a free run.
-When the allocation unit of the card is known, new runs prefer to start at an allocation unit boundary.
+Free clusters are found through a cursor, initialised from the FSINFO next-free hint, and through a cache of `FatLimits::freeRuns` free runs, 8 by default.
+When the volume is idle, a background scan of the FAT fills the cache of free runs and counts the free clusters, so that a foreground allocation rarely needs to read the FAT.
+The scan checks before every device request whether a foreground operation is waiting, and yields to it.
+Clusters are allocated in this order:
+
+1. A file with a reservation takes its clusters from the reservation.
+2. A file that grows takes the cluster after its last cluster when it is free.
+3. Otherwise a file takes the first free cluster at or after the cursor within the allocation unit of the cursor, else the next free cluster after it, wrapping around at the end of the volume.
+4. A reservation that would cross an allocation unit boundary starts at the next boundary instead, when a free run of its length starts there.
+5. A file created by `Open` in `append` mode starts at an allocation unit boundary when a whole free allocation unit is known, so that a log fills allocation units one after the other.
+6. When the allocation unit of the card is not known, the rules about allocation units do not apply.
+
+The allocation unit is given by `FatConfig::blocksPerAllocationUnit`, because `hal::BlockDevice` does not report it.
+On FAT12, the allocator never takes a cluster whose 12-bit FAT entry straddles two sectors, because such an entry is changed by two writes; these clusters count as used.
+When the volume is full, writes complete with `noSpace`.
+
+## ExpectSize
+
+`ExpectSize` reserves a contiguous run of free clusters for the expected size, following the allocation rules above, and the writes of the file then take their clusters from it.
+The reservation is kept in RAM only: nothing is written for it, and `Close` returns what was not used.
+When no run of that length is free, it reserves the longest run it finds; it never completes with `noSpace`.
 
 ## Writing
 
-Small writes are collected in the sector cache and written as multi-block requests.
-A write that covers whole clusters is sent to the device directly, as one request per contiguous run.
+Writes go through the cache or directly to the device, as described under [Direct transfers](#direct-transfers).
 The order of writes is fixed so that a power loss never leaves a directory entry that refers to clusters that were not written:
 
 1. The data clusters are written.
-2. The FAT entries that link the new clusters are written, to every copy of the FAT in turn.
-3. The directory entry, with the new size and first cluster, is written.
+2. The FAT entries of the new clusters are written, to every copy of the FAT in turn.
+3. The FAT entry that links the new clusters to the end of the file is written.
+4. The directory entry, with the new size and first cluster, is written.
 
-The ranks of the sector cache enforce this order.
-An operation that needs the reverse order, such as `Remove`, which clears the directory entry before it frees the clusters in the FAT, writes back the cache between the two steps.
-`Sync` writes back every modified sector in this order and then calls `Flush` on the block device, so that data in the device's own cache is also made durable.
-FSINFO is updated on `Sync` and on `Unmount`, but because it is only a hint, an outdated FSINFO after a power loss is harmless.
+The ranks of the sector cache enforce the order of data, FAT and directory entries.
+Within the FAT, sectors are written in ascending order, so when the entries of the new clusters are in another FAT sector than the link of step 3, the operation flushes the cache between steps 2 and 3.
+`Sync` writes back every modified sector in this order and flushes the device.
+The directory entry is written only when its contents changed, so an overwrite inside a file that keeps its size and timestamps costs no write of the directory.
+
+An operation that needs another order flushes the cache between its steps:
+
+| Operation       | Order                                                                                                                                                      |
+|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Write, `Sync`   | Data, FAT entries of the new clusters, flush if needed, the link, the directory entry                                                                      |
+| Create          | Growth of the directory if needed, then the entry set at rank 2, with its short entry at rank 3 when the set spans two sectors                             |
+| `MakeDirectory` | The new cluster with `.` and `..`, its FAT entry, then the entry set in the parent                                                                         |
+| `Remove`        | The entry set marked free, flush, the FAT entries of the chain freed, then the discard of the freed clusters                                               |
+| `Truncate`      | The directory entry with the new size, flush, the end of chain at the new last cluster, flush, the FAT entries of the cut clusters freed, then the discard |
+| `Rename`        | The new entry set, flush, the old entry set marked free, then the `..` entry of a moved directory                                                          |
 
 ## Discard
 
-When clusters are freed by `Remove` or `Truncate`, their blocks are passed to `hal::BlockDevice::EraseBlocks`, which the device treats as a discard.
+When clusters are freed by `Remove` or `Truncate`, their blocks are passed to `hal::BlockDevice::EraseBlocks`, which the device treats as a discard, one request per contiguous run.
 This tells the card that the data is no longer needed, so its controller does not have to copy it during its own garbage collection.
-Discard can be disabled in the configuration for devices that implement it slowly.
+Discard can be disabled with `FatConfig::discard` for devices that implement it slowly.
+
+## Durability
+
+The clean-shutdown bit of the second FAT entry is cleared before the first change to the metadata of a mount is written, and set again by a clean `Unmount`, so that a PC checks the volume after a power loss.
+FAT12 has no such bit.
+A volume that was not clean at mount stays marked as not clean, and its FSINFO is not trusted.
+FSINFO is written only by `Unmount`, when the free count or the hint changed; writing it on every `Sync` would add a write to every `Sync`, and an outdated FSINFO is harmless because it is only a hint.
+A write-protected card mounts and can be read; operations that write complete with `readOnly`.
 
 ## Behaviour on power loss
 
-| Interrupted during          | State after the next mount                                                                           |
-|-----------------------------|------------------------------------------------------------------------------------------------------|
-| Writing data clusters       | The file has its previous size and contents; the new clusters are not yet allocated                  |
-| Writing the FAT             | The file has its previous size; some clusters may be allocated but unused, which a PC check reclaims |
-| Writing the directory entry | The file has either its previous or its new size and first cluster                                   |
-| Between `Sync` calls        | Data written after the last completed `Sync` may be lost                                             |
+| Interrupted during          | State after the next mount                                                                                        |
+|-----------------------------|-------------------------------------------------------------------------------------------------------------------|
+| Writing data clusters       | The file has its previous size and contents; the new clusters are not yet allocated                               |
+| Writing the FAT             | The file has its previous size; some clusters may be allocated but unused, which a PC check reclaims              |
+| Writing the directory entry | The file has either its previous or its new size and first cluster                                                |
+| An overwrite inside a file  | Every sector holds either its previous or its new contents                                                        |
+| `Remove`                    | The file exists or not; its clusters may stay allocated but unused                                                |
+| `Rename`                    | The entry exists under its old name, its new name or both; in the last case both names refer to the same clusters |
+| Between `Sync` calls        | Data written after the last completed `Sync` may be lost                                                          |
 
-These guarantees assume that the device writes a sector either completely or not at all.
+Because the cache flushes the device between ranks, these guarantees also hold on devices that cache writes.
+They assume that the device writes a sector either completely or not at all.
 Some SD cards corrupt a sector that is being written when power fails, and some even corrupt other sectors that the card's controller was moving at the time.
 FAT has no checksums, so such corruption cannot be detected or repaired by the filesystem.
 Where this matters, use cards with power-loss protection, or store critical data in the NOR filesystem.
-The power-cut sweep described in [Testing.md](Testing.md) verifies the guarantees above under the assumption of atomic sector writes, and separately reports what happens with torn sector writes.
+The power-cut sweep described in [Testing.md](Testing.md) verifies the guarantees above under the assumption of atomic sector writes, also when the device loses or reorders unflushed writes, and separately reports what happens with torn sector writes.
+
+## Limits
+
+A write beyond 4 GiB minus one byte writes up to that size and completes with `noSpace`.
+A directory holds at most 65536 entries, and the fixed root directory of FAT12 and FAT16 the number given in its boot sector.
 
 ## Formatting
 
 `fs::FatFormatter` creates a volume on a block device.
-For SD cards, it follows the SD Association file system specification: the cluster size and the start of the partition and of the data area are chosen so that clusters never straddle an allocation unit of the card.
-SDSC cards are formatted as FAT12 or FAT16, and SDHC and SDXC cards as FAT32.
-Formatting writes only the metadata and discards the rest of the device.
+It follows the SD Association file system specification, part 2 of the SD specifications: the type, the cluster size and the alignment of the data area are chosen from the capacity of the card.
+
+| Capacity     | Type  | Sectors per cluster | Boundary unit in sectors |
+|--------------|-------|---------------------|--------------------------|
+| Up to 8 MB   | FAT12 | 16                  | 16                       |
+| Up to 64 MB  | FAT12 | 32                  | 32                       |
+| Up to 256 MB | FAT16 | 32                  | 32                       |
+| Up to 1 GB   | FAT16 | 32                  | 64                       |
+| Up to 2 GB   | FAT16 | 64                  | 64                       |
+| Up to 32 GB  | FAT32 | 64                  | 8192                     |
+| Larger       | FAT32 | 64                  | 32768                    |
+
+The specification formats cards larger than 32 GB, SDXC cards, with exFAT; the formatter uses FAT32 for them, as exFAT is not supported.
+These values have not yet been checked against the specification document itself; they are compared with cards formatted by the SD Memory Card Formatter of the SD Association in the on-target phase described in [Roadmap.md](Roadmap.md).
+
+The device holds an MBR with one primary partition, and the system area, from the boot sector up to and including the fixed root directory, ends on a boundary unit, so that the data area starts on one and clusters never straddle one.
+On FAT12 and FAT16, the start of the partition absorbs the difference; on FAT32, the partition starts on a boundary unit and the reserved sectors absorb it.
+When the allocation unit of the card is known, it can be passed in `FatFormatConfig` and is used as the boundary unit.
+Without an MBR, which `FatFormatConfig` can select, the volume starts at the first sector and the reserved sectors absorb the difference.
+
+The formatter writes 2 copies of the FAT by default, as the specification requires, and the number is configurable.
+The fixed root directory of FAT12 and FAT16 holds 512 entries; on FAT32, FSINFO is in sector 1 and a backup of the boot sector in sector 6.
+The boot sector has the volume label `NO NAME` and the volume ID given in `FatFormatConfig`.
+Formatting writes the MBR, the boot sector, FSINFO and their backups, the FAT with zeros except its first two entries, and the root directory with zeros, then discards the rest of the device and flushes it.
+
+## Configuration
+
+```cpp
+hal::BlockDevice& sdCard = ...;
+fs::FatFileSystem::WithStorage<4, 8> fatVolume{ sdCard, fs::FatConfig{ .blocksPerAllocationUnit = 8192, .timerServiceId = infra::localTimeTimerServiceId } };
+```
+
+The template arguments of `fs::FatFileSystem::WithStorage<Files, CacheSectors, Limits>` are the number of open files, the number of sectors in the cache, and an optional `fs::FatLimits` with the other sizes:
+
+| `fs::FatLimits`  | Default | Sizes                                                         |
+|------------------|---------|---------------------------------------------------------------|
+| `directories`    | 1       | The open directory handles                                    |
+| `pathOperations` | 2       | The slots for waiting operations on paths, such as `Open`     |
+| `extentsPerFile` | 4       | The extent cache of every open file                           |
+| `closedFiles`    | 2       | The closed files whose last run is remembered                 |
+| `freeRuns`       | 8       | The cache of free runs                                        |
+| `maxNameBytes`   | 255     | The longest name in UTF-8 bytes, and the buffer that holds it |
+
+`fs::FatConfig` holds the settings that need no storage:
+
+| `fs::FatConfig`           | Default                       | Meaning                                                         |
+|---------------------------|-------------------------------|-----------------------------------------------------------------|
+| `maxPathBytes`            | 255                           | The longest path in UTF-8 bytes                                 |
+| `idleDelay`               | 10 ms                         | The idle time after which the background scan of the FAT starts |
+| `discard`                 | `true`                        | Whether freed clusters are discarded                            |
+| `blocksPerAllocationUnit` | 0                             | The allocation unit of the card in blocks, 0 when it is unknown |
+| `timerServiceId`          | `infra::systemTimerServiceId` | The timer service that gives the time of timestamps             |
+
+## RAM
+
+The sector cache takes most of the RAM of a volume: every cache sector costs its 512 bytes and an entry of a few bytes.
+`fs::FatFileSystem::WithStorage<2, 8>` needs about 5.8 KiB on a 32-bit target, 4.1 KiB of which is the cache; every further open file costs about 200 bytes.
+FatFs needs less, about 1.7 KiB with one open file, because it works with one sector buffer per volume and one per file; the metrics report the RAM of every subject next to its results.
 
 ## Testing
 
-The FAT filesystem is tested on `hal::BlockDeviceStub` from EmIL, with volumes created by `fs::FatFormatter` in memory.
+The FAT filesystem is tested on `hal::BlockDeviceStub` from EmIL and on `fs::SparseBlockDevice`, which holds FAT32 volumes of tens of megabytes in a few kilobytes, with volumes created by `fs::FatFormatter` and arranged with `fs::FatImageBuilder` in memory.
 Interoperability tests create images with `mkfs.fat`, write them with the library, check them with `fsck.fat` and read them back with `mtools`, and the reverse.
 The power-cut sweep and the metrics W-2, R-2 and M-1 to M-3 cover the behaviour described above.
 See [Testing.md](Testing.md) and [Metrics.md](Metrics.md).

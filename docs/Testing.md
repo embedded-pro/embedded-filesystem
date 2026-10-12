@@ -30,6 +30,7 @@ fs/fat/test_doubles/...
 Tests use GoogleTest and GoogleMock.
 Mocks are always `testing::StrictMock`, never `testing::NiceMock`.
 Tests follow the same rules as production code: no heap allocation, bounded containers, and ranges built with `infra::MakeRange`, `infra::Head` and `infra::DiscardHead`.
+A FAT32 volume needs at least 65525 clusters, so FAT32 tests run on `fs::SparseBlockDevice` instead of a block device that holds every block in RAM.
 Test names describe the behaviour, in the form `TEST_F(FatFileSystemTest, append_after_reopen_does_not_walk_cluster_chain)`, and the body is arranged as arrange, act, assert.
 
 ## Asynchronous tests
@@ -41,14 +42,16 @@ Time-dependent behaviour, such as the idle delay before background work, is test
 
 ## Test doubles
 
-| Double                                                     | From            | Use                                                                                                                                                                                   |
-|------------------------------------------------------------|-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `hal::FlashStub`                                           | EmIL            | NOR flash in RAM: programming is a bitwise AND, erase sets 0xff, `stopAfterWriteSteps` stops writing after a number of steps                                                          |
-| `hal::BlockDeviceStub`                                     | EmIL            | Block device in RAM, with `FailNextOperationWith` to inject errors                                                                                                                    |
-| `hal::FlashMock`, `hal::BlockDeviceMock`                   | EmIL            | Exact request sequences, where the order of device requests is the behaviour under test                                                                                               |
-| `metrics::MeteredFlash`, `metrics::MeteredBlockDevice`     | This repository | Counting requests, bytes, erases per block and simulated time                                                                                                                         |
-| `metrics::PowerCutFlash`, `metrics::PowerCutBlockDevice`   | This repository | Cutting power at a given write step: a NOR program or erase not started, partial or completed; a block unwritten, written or torn, optionally losing every write since the last flush |
-| `metrics::NorPowerCutSweep`, `metrics::BlockPowerCutSweep` | This repository | Running an operation once per cut point and mode, and verifying the image after each cut                                                                                              |
+| Double                                                     | From                                   | Use                                                                                                                                                                                   |
+|------------------------------------------------------------|----------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `hal::FlashStub`                                           | EmIL                                   | NOR flash in RAM: programming is a bitwise AND, erase sets 0xff, `stopAfterWriteSteps` stops writing after a number of steps                                                          |
+| `hal::BlockDeviceStub`                                     | EmIL                                   | Block device in RAM, with `FailNextOperationWith` to inject errors                                                                                                                    |
+| `hal::FlashMock`, `hal::BlockDeviceMock`                   | EmIL                                   | Exact request sequences, where the order of device requests is the behaviour under test                                                                                               |
+| `metrics::MeteredFlash`, `metrics::MeteredBlockDevice`     | This repository                        | Counting requests, bytes, erases per block and simulated time                                                                                                                         |
+| `metrics::PowerCutFlash`, `metrics::PowerCutBlockDevice`   | This repository                        | Cutting power at a given write step: a NOR program or erase not started, partial or completed; a block unwritten, written or torn, optionally losing every write since the last flush |
+| `metrics::NorPowerCutSweep`, `metrics::BlockPowerCutSweep` | This repository                        | Running an operation once per cut point and mode, and verifying the image after each cut                                                                                              |
+| `fs::SparseBlockDevice`                                    | This repository, `fs/fat/test_doubles` | Block device that stores only blocks that are not all zeros, so that FAT32 volumes of tens of megabytes fit in a few kilobytes                                                        |
+| `fs::FatImageBuilder`                                      | This repository, `fs/fat/test_doubles` | Arranging directories, files, fragmented chains and raw entries synchronously on a volume, before the operation under test                                                            |
 
 ## Power-cut sweep
 
@@ -61,13 +64,23 @@ After each cut, the device is remounted and checked:
 
 A write step is one program request or one erased sector on NOR flash, and one written block or one discard request on a block device.
 For NOR flash, every cut is repeated with the interrupted step not started, partially done and completed: a partial program programs only the first bytes of the request, and a partial erase leaves the second half of the sector programmed.
-For block devices, every cut is repeated with the interrupted block left unwritten, written completely and torn, where only the first bytes of the block hold the new data; a run with loss of unflushed writes models a device cache that is not written back.
+For block devices, every cut is repeated with the interrupted block left unwritten, written completely and torn, where only the first bytes of the block hold the new data.
+A run with loss of unflushed writes models a device cache that is not written back, and a run that keeps the writes of the interrupted request but loses the earlier unflushed ones models a device cache that writes back in another order.
 The result of the sweep is metric P-1 in [Metrics.md](Metrics.md).
 
 The sweep is implemented by `metrics::NorPowerCutSweep` and `metrics::BlockPowerCutSweep` in `metrics/power_cut`.
 It takes three functions: one that prepares the device, one that runs the operation under test, and one that verifies the device after a cut and returns the reason of an inconsistency.
 Each run starts from the image left by the preparation, in a fresh environment with its own event dispatcher and virtual clock, and each verification runs in another fresh environment, as a device would after a reset.
 For large operations, the number of cut points can be limited; the points are then sampled with a fixed stride, so that the same commit always runs the same cuts.
+
+On FAT volumes, the sweep runs in `metrics/fat` on small volumes of each FAT type, and checks after each cut that:
+
+* the library mounts the volume;
+* an independent checker, which parses the image without the code of `fs/fat`, finds every link in range, no free or bad cluster in a chain, no cluster in two chains, and every chain at least as long as the size of its file;
+* every file holds, sector by sector, either its contents before the interrupted operation or its contents after it.
+
+Chains longer than their file, lost clusters, orphaned long name entries and copies of the FAT that lag behind the first one are allowed after a cut, as described in [Fat.md](Fat.md#behaviour-on-power-loss), and the one exception to clusters in two chains is the old and the new name of an interrupted `Rename`.
+The run without a cut must pass the checker in its strict mode, which allows none of these.
 
 ## Interoperability tests for FAT
 
@@ -77,8 +90,8 @@ Interoperability tests check that FAT volumes are exchanged correctly with the t
 * files written into an image with `mtools` are read back by the library;
 * an image created by `fs::FatFormatter` passes `fsck.fat -n`.
 
-These tests need `dosfstools` and `mtools`; they carry the CTest label `interop` and are skipped when the tools are not installed.
-CI installs both.
+These tests need `dosfstools` and `mtools`, and image files on the host, so they live in `metrics/interop` and are built with the metrics.
+They carry the CTest label `interop` and are skipped when the tools are not installed; the metrics workflow installs both.
 
 ## Metric tests
 
