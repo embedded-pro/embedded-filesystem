@@ -67,9 +67,23 @@ TEST_F(WorkloadsTest, fill_volume_writes_static_files_up_to_the_fill_level)
     EXPECT_TRUE(HoldsPattern("/fill/127", 1127));
 }
 
+TEST_F(WorkloadsTest, fill_volume_counts_the_space_the_filesystem_already_uses)
+{
+    subject.files["/existing"] = std::vector<uint8_t>(56 * 1024);
+
+    EXPECT_EQ(72 * 1024, metrics::FillVolume(runner, 50, parameters, 0));
+}
+
+TEST_F(WorkloadsTest, fill_volume_queries_the_usage_after_every_file)
+{
+    metrics::FillVolume(runner, 10, parameters, 0);
+
+    EXPECT_EQ(26, Phase("fill", metrics::Operation::usage).size());
+}
+
 TEST_F(WorkloadsTest, fill_volume_stops_when_the_volume_is_full)
 {
-    subject.files["/large"] = std::vector<uint8_t>(200 * 1024);
+    subject.unreportedBytes = 200 * 1024;
 
     EXPECT_EQ(56 * 1024, metrics::FillVolume(runner, 90, parameters, 0));
 }
@@ -152,13 +166,13 @@ TEST_F(WorkloadsTest, workloads_fill_the_volume_first_when_asked)
     EXPECT_EQ(96 * 1024, metrics::TotalUserBytes(Phase("fill", metrics::Operation::write)));
 }
 
-TEST_F(WorkloadsTest, random_overwrite_reserves_its_largest_file_when_filling)
+TEST_F(WorkloadsTest, random_overwrite_reserves_twice_its_largest_file_when_filling)
 {
     parameters.fillPercent = 50;
 
     metrics::RandomOverwrite(runner, parameters);
 
-    EXPECT_EQ(96 * 1024, metrics::TotalUserBytes(Phase("fill", metrics::Operation::write)));
+    EXPECT_EQ(64 * 1024, metrics::TotalUserBytes(Phase("fill", metrics::Operation::write)));
 }
 
 TEST_F(WorkloadsTest, small_files_reserves_its_window_when_filling)

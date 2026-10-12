@@ -26,8 +26,11 @@ namespace metrics
         remove,
         makeDirectory,
         list,
+        usage,
         idle
     };
+
+    std::string_view OperationName(Operation operation);
 
     struct CallRecord
     {
@@ -45,7 +48,10 @@ namespace metrics
     public:
         Runner(VirtualTime& time, FileSystemUnderTest& subject, const DeviceProbe& device);
 
+        using PhaseObserver = std::function<void(const std::string& endedPhase)>;
+
         void SetPhase(std::string phase);
+        void ObservePhases(PhaseObserver observer);
 
         fs::Result Format();
         fs::Result Mount();
@@ -61,6 +67,7 @@ namespace metrics
         fs::Result Remove(std::string_view path);
         fs::Result MakeDirectory(std::string_view path);
         std::optional<std::vector<DirectoryEntry>> List(std::string_view path);
+        std::optional<VolumeUsage> QueryUsage();
         void Idle(infra::Duration duration);
         bool Settle(infra::Duration limit);
 
@@ -80,6 +87,7 @@ namespace metrics
         FileSystemUnderTest& subject;
         const DeviceProbe& device;
         std::string phase;
+        PhaseObserver phaseObserver;
         std::vector<CallRecord> records;
         bool interrupted{ false };
     };

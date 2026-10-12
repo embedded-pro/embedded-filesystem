@@ -12,6 +12,7 @@ target_link_libraries(metrics.workload_test PUBLIC
 )
 
 target_sources(metrics.workload_test PRIVATE
+    TestCompletionQueue.cpp
     TestMetricComputations.cpp
     TestPattern.cpp
     TestRandom.cpp

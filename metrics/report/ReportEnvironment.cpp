@@ -1,5 +1,7 @@
 #include "metrics/report/ReportEnvironment.hpp"
+#include <filesystem>
 #include <string_view>
+#include <system_error>
 
 namespace metrics
 {
@@ -15,6 +17,9 @@ namespace metrics
 
     void ReportEnvironment::TearDown()
     {
+        std::error_code error;
+        std::filesystem::create_directories(std::filesystem::path{ path }.parent_path(), error);
+
         if (!report.WriteTo(path))
             ADD_FAILURE() << "The metrics report could not be written to " << path;
     }

@@ -196,26 +196,74 @@ class RegressionTest(unittest.TestCase):
 
 
 class MarkdownTest(unittest.TestCase):
-    def test_markdown_has_a_row_per_result_with_its_outcome(self):
-        report = {
-            "devices": {"nor-qspi-16m": NOR},
-            "results": [
-                result(metric="W-2", value=1.02345, unit="ratio", fill=50, target="<= 1.1", **{"pass": True}),
-                result(metric="W-1", value=None),
-            ],
-        }
+    def report(self, *results, devices=None):
+        return {"devices": devices if devices is not None else {"nor-qspi-16m": NOR}, "results": list(results)}
 
-        text = merge_report.markdown(report)
+    def test_markdown_summarizes_the_outcomes(self):
+        text = merge_report.markdown(self.report(result(target="<= 1", **{"pass": True}), result(metric="W-2"), result(metric="W-4", **{"pass": False})))
 
-        self.assertIn("| W-2 | L1 | 50 % | embedded-filesystem/nor | nor-qspi-16m | 1.023 | ratio | <= 1.1 | ✅ | 7680 |", text)
-        self.assertIn("| W-1 | L1 |  | embedded-filesystem/nor | nor-qspi-16m | n/a | B/s |  | reported | 7680 |", text)
-        self.assertIn("2 results: 1 passed, 0 failed, 1 reported.", text)
-        self.assertIn("| nor-qspi-16m | sectors | 4096 |", text)
+        self.assertIn("3 results: 1 passed, 1 failed, 1 reported.", text)
 
-    def test_markdown_shows_regressions_with_the_value_on_main(self):
-        report = {"devices": {}, "results": [result(value=94.0, baselineValue=100.0, regression=True, **{"pass": False})]}
+    def test_markdown_has_a_table_per_device_with_a_column_per_subject(self):
+        text = merge_report.markdown(
+            self.report(
+                result(subject="littlefs/default", value=2.0),
+                result(subject="embedded-filesystem/nor", value=1.02345, target=">= baselines", **{"pass": True}),
+                result(subject="fatfs/default", device="sd-card-256m", value=3.0),
+            )
+        )
 
-        self.assertIn("❌ worse than main (100)", merge_report.markdown(report))
+        self.assertIn("### nor-qspi-16m", text)
+        self.assertIn("### sd-card-256m", text)
+        self.assertIn("| Metric | Workload | Fill | Unit | embedded-filesystem/nor | littlefs/default |", text)
+        self.assertIn("| W-1 | L1 |  | B/s | 1.023 ✅ | 2 |", text)
+        self.assertIn("| RAM |  |  | B | 7680 | 7680 |", text)
+
+    def test_markdown_rows_follow_the_metric_number_the_workload_numbers_and_the_fill(self):
+        text = merge_report.markdown(
+            self.report(
+                result(metric="W-10", workload="L1"),
+                result(metric="W-2", workload="L1 4096 64"),
+                result(metric="W-2", workload="L1 4096 512"),
+                result(metric="W-2", workload="L1 512 64", fill=50),
+                result(metric="W-2", workload="L1 512 64", fill=10),
+            )
+        )
+
+        rows = [line.split(" | ")[0:3] for line in text.splitlines() if line.startswith("| W-")]
+        self.assertEqual(
+            [["| W-2", "L1 512 64", "10 %"], ["| W-2", "L1 512 64", "50 %"], ["| W-2", "L1 4096 64", ""], ["| W-2", "L1 4096 512", ""], ["| W-10", "L1", ""]],
+            rows,
+        )
+
+    def test_markdown_leaves_a_cell_empty_when_a_subject_has_no_result(self):
+        text = merge_report.markdown(self.report(result(subject="littlefs/default", metric="W-1"), result(subject="littlefs/tuned", metric="W-2")))
+
+        self.assertIn("| W-1 | L1 |  | B/s | 1 |  |", text)
+
+    def test_markdown_shows_values_that_cannot_be_measured(self):
+        text = merge_report.markdown(self.report(result(value=None)))
+
+        self.assertIn("| W-1 | L1 |  | B/s | n/a |", text)
+
+    def test_markdown_lists_missed_targets_and_regressions(self):
+        text = merge_report.markdown(
+            self.report(
+                result(metric="W-2", value=1.5, unit="ratio", fill=50, target="<= 1.1", **{"pass": False}),
+                result(value=94.0, baselineValue=100.0, regression=True, **{"pass": False}),
+            )
+        )
+
+        self.assertIn("### Missed targets and regressions", text)
+        self.assertIn("- W-2 L1 at 50 %, embedded-filesystem/nor on nor-qspi-16m: 1.5 ratio, expected <= 1.1", text)
+        self.assertIn("- W-1 L1, embedded-filesystem/nor on nor-qspi-16m: 94 B/s, expected main: 100", text)
+        self.assertIn("94 ❌ (main: 100)", text)
+
+    def test_markdown_without_failures_has_no_failure_list(self):
+        self.assertNotIn("Missed targets", merge_report.markdown(self.report(result())))
+
+    def test_markdown_describes_the_device_models(self):
+        self.assertIn("| nor-qspi-16m | sectors | 4096 |", merge_report.markdown(self.report(result())))
 
 
 class MainTest(unittest.TestCase):

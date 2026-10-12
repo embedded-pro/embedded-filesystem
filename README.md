@@ -80,7 +80,7 @@ ctest --preset host
 
 Other presets build with coverage instrumentation (`coverage`), with a single-configuration generator (`host-single-Debug`), and for Cortex-M4, Cortex-M7 and Cortex-M33 (`cortex-m4`, `cortex-m7`, `cortex-m33`, built with `cortex-m4-RelWithDebInfo` and so on).
 
-The metrics harness, which is being built in phase 4 of the roadmap, has its own optimized Linux preset:
+The metrics harness measures FatFs and littlefs on models of NOR flash and SD cards, and has its own optimized Linux preset; it writes `build/metrics/metrics/metrics.md`, which the metrics workflow posts on every pull request:
 
 ```bash
 cmake --preset metrics

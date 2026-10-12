@@ -1,6 +1,7 @@
 #include "metrics/device/MeteredFlash.hpp"
 #include "infra/event/EventDispatcher.hpp"
 #include "infra/util/ReallyAssert.hpp"
+#include <algorithm>
 
 namespace metrics
 {
@@ -143,24 +144,17 @@ namespace metrics
         if (size == 0)
             return;
 
-        for (auto unit = address / model.programUnit; unit <= (address + size - 1) / model.programUnit; ++unit)
-        {
-            if (programmed[unit])
-                ++counters.programUnitRewrites;
-
-            programmed[unit] = true;
-        }
+        auto begin = programmed.begin() + address / model.programUnit;
+        auto end = programmed.begin() + (address + size - 1) / model.programUnit + 1;
+        counters.programUnitRewrites += std::count(begin, end, true);
+        std::fill(begin, end, true);
     }
 
     void MeteredFlash::TrackErase(uint32_t beginIndex, uint32_t endIndex)
     {
         for (auto sector = beginIndex; sector != endIndex; ++sector)
-        {
             ++eraseCounts[sector];
 
-            auto start = AddressOfSector(sector);
-            for (auto unit = start / model.programUnit; unit != (start + SizeOfSector(sector)) / model.programUnit; ++unit)
-                programmed[unit] = false;
-        }
+        std::fill(programmed.begin() + AddressOfSector(beginIndex) / model.programUnit, programmed.begin() + AddressOfSector(endIndex) / model.programUnit, false);
     }
 }

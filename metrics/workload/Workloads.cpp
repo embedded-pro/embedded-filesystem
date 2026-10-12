@@ -147,17 +147,21 @@ namespace metrics
         runner.SetPhase("fill");
         runner.MakeDirectory("/fill");
 
-        auto capacity = runner.Device().CapacityBytes();
-        auto target = (capacity - std::min(capacity, reservedBytes)) * percent / 100;
         auto fileSize = Scaled(64 * kibibyte, parameters);
+        auto usage = runner.QueryUsage();
+        if (!usage)
+            return 0;
+
+        auto target = (usage->totalBytes - std::min(usage->totalBytes, reservedBytes)) * percent / 100;
         uint64_t filled = 0;
 
-        for (uint32_t index = 0; filled + fileSize <= target && !runner.Interrupted(); ++index)
+        for (uint32_t index = 0; usage && usage->usedBytes + fileSize <= target; ++index)
         {
             if (!WriteFile(runner, Path("/fill", index), 1000 + index, fileSize, std::min(fileSize, chunkSize)))
                 break;
 
             filled += fileSize;
+            usage = runner.QueryUsage();
         }
 
         return filled;
@@ -208,7 +212,7 @@ namespace metrics
 
     void RandomOverwrite(Runner& runner, const WorkloadParameters& parameters)
     {
-        Prepare(runner, "L3", parameters, std::max(Scaled(4 * mebibyte, parameters), overwriteSize));
+        Prepare(runner, "L3", parameters, 2 * std::max(Scaled(4 * mebibyte, parameters), overwriteSize));
 
         Random random{ parameters.seed };
         uint32_t fileId = 300;

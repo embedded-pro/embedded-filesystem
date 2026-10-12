@@ -38,6 +38,30 @@ TEST_F(RunnerTest, a_call_is_recorded_with_the_current_phase_and_its_result)
     EXPECT_EQ(fs::Result::success, runner.Records()[0].result);
 }
 
+TEST(OperationNameTest, names_every_operation)
+{
+    EXPECT_EQ("format", metrics::OperationName(metrics::Operation::format));
+    EXPECT_EQ("seek", metrics::OperationName(metrics::Operation::seek));
+    EXPECT_EQ("expectSize", metrics::OperationName(metrics::Operation::expectSize));
+    EXPECT_EQ("usage", metrics::OperationName(metrics::Operation::usage));
+    EXPECT_EQ("idle", metrics::OperationName(metrics::Operation::idle));
+}
+
+TEST_F(RunnerTest, the_phase_observer_hears_of_every_phase_that_ends)
+{
+    std::vector<std::string> ended;
+    runner.ObservePhases([&ended](const std::string& phase)
+        {
+            ended.push_back(phase);
+        });
+
+    runner.SetPhase("a");
+    runner.SetPhase("a");
+    runner.SetPhase("b");
+
+    EXPECT_EQ((std::vector<std::string>{ "", "a" }), ended);
+}
+
 TEST_F(RunnerTest, a_write_records_its_user_bytes_latency_and_device_work)
 {
     auto file = OpenForWriting();
@@ -107,6 +131,14 @@ TEST_F(RunnerTest, list_returns_the_entries_of_the_directory)
 
     ASSERT_TRUE(entries.has_value());
     EXPECT_EQ((std::vector<metrics::DirectoryEntry>{ { "a", false, 3 }, { "b", false, 5 } }), *entries);
+}
+
+TEST_F(RunnerTest, query_usage_returns_the_usage_reported_by_the_subject)
+{
+    subject.files["/file"] = std::vector<uint8_t>(100);
+
+    EXPECT_EQ((metrics::VolumeUsage{ 100, 64 * 4096 }), runner.QueryUsage());
+    EXPECT_EQ(metrics::Operation::usage, runner.Records().back().operation);
 }
 
 TEST_F(RunnerTest, a_call_completed_from_inside_the_call_aborts)

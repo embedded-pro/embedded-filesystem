@@ -2,8 +2,8 @@
 #define METRICS_WORKLOAD_TEST_DOUBLES_FAKE_FILE_SYSTEM_HPP
 
 #include "hal/interfaces/Flash.hpp"
+#include "metrics/workload/CompletionQueue.hpp"
 #include "metrics/workload/FileSystemUnderTest.hpp"
-#include <deque>
 #include <map>
 #include <set>
 #include <string>
@@ -37,11 +37,13 @@ namespace metrics
         void MakeDirectory(std::string_view path, const std::function<void(fs::Result result)>& onDone) override;
         void List(std::string_view path, const std::function<void(fs::Result result, std::vector<DirectoryEntry> entries)>& onDone) override;
 
+        void QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone) override;
         void IdleHint(const std::function<void()>& onDone) override;
 
         bool completeSynchronously{ false };
         bool neverComplete{ false };
         uint32_t idleHints{ 0 };
+        uint64_t unreportedBytes{ 0 };
         std::map<std::string, std::vector<uint8_t>> files;
         std::set<std::string> directories;
 
@@ -53,7 +55,6 @@ namespace metrics
         };
 
         void Complete(const std::function<void(fs::Result result)>& onDone, fs::Result result);
-        void Defer(const std::function<void()>& action);
         uint32_t DeviceAddress(FileHandle file, std::size_t size) const;
         uint64_t UsedBytes() const;
 
@@ -62,7 +63,7 @@ namespace metrics
         std::vector<OpenFile> openFiles;
         std::vector<uint8_t> deviceBuffer;
         std::function<void(fs::Result result)> pendingCompletion;
-        std::deque<std::function<void()>> deferred;
+        CompletionQueue completions;
     };
 }
 
