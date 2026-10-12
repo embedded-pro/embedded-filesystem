@@ -277,6 +277,34 @@ Releasing the last reference to a file without closing it writes back and commit
 A handle returns to its pool once the last `infra::SharedPtr` and `infra::WeakPtr` to it are released.
 `Unmount` writes back every open file and completes even if handles are still referenced; afterwards, calls on those handles complete with `notMounted`, or with `mediaRemoved` after the medium was removed, and the handles return to their pools when they are released.
 
+## Shared building blocks
+
+The building blocks in `fs/common` are shared by both filesystems.
+Each one is sized at compile time:
+
+| Building block   | Sized by                                                             | RAM                        |
+|------------------|----------------------------------------------------------------------|----------------------------|
+| `fs::PathLimits` | The longest name and the longest path in UTF-8 bytes, 255 by default | None: paths are not copied |
+
+### Paths
+
+A path is validated once, in one pass, when the operation that receives it starts, with `fs::ValidatePath`.
+It is then walked one component at a time with `fs::PathComponents`, so that each step of a lookup handles one name and the walk needs no recursion.
+`fs::SplitLast` splits a path into its parent directory and its last name, for the operations that create, remove or rename an entry.
+Components are views into the path of the caller; nothing is copied.
+
+### Device results
+
+The results of `hal::BlockDevice` are mapped onto `fs::Result` by `fs::ToResult`:
+
+| `hal::BlockDevice::Result`         | `fs::Result`   | Because                                                |
+|------------------------------------|----------------|--------------------------------------------------------|
+| `success`                          | `success`      |                                                        |
+| `notPresent`                       | `mediaRemoved` | The card was removed                                   |
+| `writeProtected`                   | `readOnly`     | The card is locked                                     |
+| `outOfRange`                       | `corrupted`    | The volume points outside the device                   |
+| `timeout`, `crcError` and `failed` | `deviceError`  | The device failed; the medium itself may still be good |
+
 ## Configuration
 
 All storage is sized at compile time, following the `WithStorage` pattern of EmIL.
