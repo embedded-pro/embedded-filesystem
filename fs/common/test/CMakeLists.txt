@@ -5,6 +5,7 @@ emil_add_test(fs.common_test)
 target_link_libraries(fs.common_test PUBLIC
     gmock_main
     fs.common
+    hal.interfaces_test_doubles
     infra.event_test_helper
     infra.timer_test_helper
     infra.util_test_helper
@@ -16,4 +17,5 @@ target_sources(fs.common_test PRIVATE
     TestHandlePool.cpp
     TestOperationQueue.cpp
     TestPath.cpp
+    TestSectorCache.cpp
 )

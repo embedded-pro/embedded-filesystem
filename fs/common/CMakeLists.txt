@@ -19,6 +19,8 @@ target_sources(fs.common PRIVATE
     OperationQueue.hpp
     Path.cpp
     Path.hpp
+    SectorCache.cpp
+    SectorCache.hpp
 )
 
 if (EMFS_BUILD_TESTS)
