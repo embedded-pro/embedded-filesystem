@@ -59,7 +59,7 @@ jobs:
           configurePresetAdditionalArgs: "['-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache', '-DEMFS_METRICS_BASELINE=${{ github.workspace }}/baseline/metrics.json']"
       - name: Run the metrics
         run: ctest --preset metrics --parallel "$(nproc)"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ always() }}
         with:
           name: metrics-report
@@ -74,7 +74,7 @@ jobs:
           path: build/metrics/metrics/metrics.md
       - name: Upload test logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: metrics-test-logs
           path: build/metrics/Testing/Temporary/
