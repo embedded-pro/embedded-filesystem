@@ -15,7 +15,7 @@ namespace fs
     public:
         using Allocate = infra::Function<infra::SharedPtr<FatDirectory>()>;
 
-        FatOpenDirectory(FatVolume& volume, const FatOpenDirectoryCall& call, const Allocate& allocate, const infra::Function<void(Result result)>& onFinished);
+        FatOpenDirectory(FatVolume& volume, FatOpenDirectoryCall&& call, const Allocate& allocate, const infra::Function<void(Result result)>& onFinished);
         FatOpenDirectory(const FatOpenDirectory& other) = delete;
         FatOpenDirectory& operator=(const FatOpenDirectory& other) = delete;
         ~FatOpenDirectory();

@@ -11,7 +11,7 @@ namespace fs
     class FatStat
     {
     public:
-        FatStat(FatVolume& volume, const FatStatCall& call, const infra::Function<void(Result result)>& onFinished);
+        FatStat(FatVolume& volume, FatStatCall&& call, const infra::Function<void(Result result)>& onFinished);
         FatStat(const FatStat& other) = delete;
         FatStat& operator=(const FatStat& other) = delete;
         ~FatStat();

@@ -218,6 +218,35 @@ TEST_F(FatFileSystemTest, mount_completes_from_the_event_dispatcher)
     ExpectMount();
 }
 
+TEST_F(FatFileSystemTest, unmount_from_the_mount_completion_completes_once)
+{
+    Format();
+    volume.Mount([this](fs::Result result)
+        {
+            mountDone.callback(result);
+            StartUnmount();
+        });
+
+    EXPECT_CALL(mountDone, callback(fs::Result::success));
+    EXPECT_CALL(unmountDone, callback(fs::Result::success));
+    ExecuteAllActions();
+}
+
+TEST_F(FatFileSystemTest, mount_from_the_failed_mount_completion_completes_once)
+{
+    Format();
+    device.FailNextOperationWith(hal::BlockDevice::Result::crcError);
+    volume.Mount([this](fs::Result result)
+        {
+            mountDone.callback(result);
+            StartMount();
+        });
+
+    EXPECT_CALL(mountDone, callback(fs::Result::deviceError));
+    EXPECT_CALL(mountDone, callback(fs::Result::success));
+    ExecuteAllActions();
+}
+
 TEST_F(FatFileSystemTest, unformatted_device_is_corrupted)
 {
     ExpectMount(fs::Result::corrupted);
