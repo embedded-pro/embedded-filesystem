@@ -16,7 +16,7 @@ namespace fs
         : public hal::BlockDevice
     {
     public:
-        template<std::size_t StoredBlocks, std::size_t BytesPerBlock = 512>
+        template<std::size_t Slots, std::size_t BytesPerBlock = 512>
         class WithStorage;
 
         SparseBlockDevice(uint32_t numberOfBlocks, uint32_t blockSize, infra::MemoryRange<uint32_t> blockNumbers, infra::ByteRange contents);
@@ -63,17 +63,17 @@ namespace fs
 
     namespace detail
     {
-        template<std::size_t StoredBlocks, std::size_t BytesPerBlock>
+        template<std::size_t Slots, std::size_t BytesPerBlock>
         struct SparseBlockDeviceStorage
         {
-            std::array<uint32_t, StoredBlocks> blockNumberStorage;
-            std::array<uint8_t, StoredBlocks * BytesPerBlock> contentStorage;
+            std::array<uint32_t, Slots> blockNumberStorage;
+            std::array<uint8_t, Slots * BytesPerBlock> contentStorage;
         };
     }
 
-    template<std::size_t StoredBlocks, std::size_t BytesPerBlock>
+    template<std::size_t Slots, std::size_t BytesPerBlock>
     class SparseBlockDevice::WithStorage
-        : private detail::SparseBlockDeviceStorage<StoredBlocks, BytesPerBlock>
+        : private detail::SparseBlockDeviceStorage<Slots, BytesPerBlock>
         , public SparseBlockDevice
     {
     public:

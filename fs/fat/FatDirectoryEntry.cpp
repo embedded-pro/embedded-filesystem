@@ -128,7 +128,7 @@ namespace fs
         {
             auto unit = encoder.Next();
             StoreLittle16(out, offset, unit.value_or(ended ? padding : terminator));
-            ended = ended || !unit;
+            ended = ended || !unit.has_value();
         }
     }
 

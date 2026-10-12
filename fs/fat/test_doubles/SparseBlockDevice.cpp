@@ -87,7 +87,7 @@ namespace fs
     {
         really_assert(out.size() == blockSize && block < numberOfBlocks);
 
-        if (auto slot = SlotOf(block))
+        if (auto slot = SlotOf(block); slot.has_value())
             infra::Copy(infra::MakeConst(Contents(*slot)), out);
         else
             std::ranges::fill(out, uint8_t{ 0 });
@@ -108,7 +108,7 @@ namespace fs
 
         auto slot = SlotOf(block);
 
-        if (!slot)
+        if (!slot.has_value())
             slot = SlotOf(unused);
 
         really_assert(slot.has_value());
@@ -183,7 +183,7 @@ namespace fs
 
     void SparseBlockDevice::Free(uint32_t block)
     {
-        if (auto slot = SlotOf(block))
+        if (auto slot = SlotOf(block); slot.has_value())
             blockNumbers[*slot] = unused;
     }
 
