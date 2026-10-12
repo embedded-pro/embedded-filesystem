@@ -48,7 +48,7 @@ namespace fs
         }
         else if (run.Covers(target))
             onDone(Result::success, run);
-        else if (!next)
+        else if (!next.has_value())
             onDone(Result::corrupted, run);
         else
         {

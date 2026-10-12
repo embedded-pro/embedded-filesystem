@@ -16,7 +16,7 @@ namespace fs
 {
     inline void PrintTo(const EntryInfo& info, std::ostream* stream)
     {
-        *stream << "{ \"" << std::string_view(info.name.data(), info.name.size()) << "\", " << (info.type == EntryType::directory ? "directory" : "file") << ", " << info.size << " }";
+        *stream << R"({ ")" << std::string_view(info.name.data(), info.name.size()) << R"(", )" << (info.type == EntryType::directory ? "directory" : "file") << ", " << info.size << " }";
     }
 }
 
