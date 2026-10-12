@@ -149,6 +149,24 @@ TEST_F(FatDirectoryReaderTest, stops_when_the_visitor_stops_and_resumes_after_it
     EXPECT_EQ(3, visitor.names.size());
 }
 
+TEST_F(FatDirectoryReaderTest, resumes_in_the_next_cluster_after_an_entry_that_ends_a_cluster)
+{
+    auto directory = builder->AddDirectory(0, "", "SUBDIR     ");
+    builder->AddDirectory(0, "", "OTHER      ");
+    AddNumberedFiles(directory, 16);
+    visitor.stopAfter = 14;
+    auto cursor = reader.Start(directory);
+
+    ExpectRead(cursor);
+    EXPECT_EQ(14, visitor.names.size());
+    ExpectRead(cursor);
+
+    ASSERT_EQ(16, visitor.names.size());
+    EXPECT_EQ("F0000014.TXT", visitor.names[14]);
+    EXPECT_EQ("F0000015.TXT", visitor.names[15]);
+    EXPECT_TRUE(cursor.done);
+}
+
 TEST_F(FatDirectoryReaderTest, entries_after_the_end_marker_are_not_read)
 {
     builder->AddFile(0, "", "FIRST      ", infra::ConstByteRange());
@@ -273,6 +291,21 @@ TEST_F(FatDirectoryReaderOnSmallFat12Test, full_fixed_root_ends_at_its_last_sect
 
     EXPECT_EQ(512, visitor.names.size());
     EXPECT_EQ(std::nullopt, visitor.endAt);
+    EXPECT_TRUE(cursor.done);
+}
+
+TEST_F(FatDirectoryReaderOnSmallFat12Test, read_after_the_last_entry_of_the_fixed_root_is_done)
+{
+    AddNumberedFiles(0, 511);
+    AddNumberedFiles(builder->AddDirectory(0, "", "SUBDIR     "), 1);
+    visitor.stopAfter = 512;
+    auto cursor = reader.Start(0);
+
+    ExpectRead(cursor);
+    EXPECT_FALSE(cursor.done);
+    ExpectRead(cursor);
+
+    EXPECT_EQ(512, visitor.names.size());
     EXPECT_TRUE(cursor.done);
 }
 

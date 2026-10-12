@@ -51,6 +51,7 @@ namespace fs
         uint32_t SectorOf(FatEntryPosition position) const;
 
     private:
+        void Resume();
         void ReadSector();
         void OnSector(Result result, infra::ConstByteRange contents);
         bool FeedEntry(infra::ConstByteRange entry);
@@ -59,6 +60,7 @@ namespace fs
         void Done(Result result);
         uint32_t EntriesPerSector() const;
         uint32_t EntriesPerCluster() const;
+        bool AtEndOfSector() const;
         bool IsFixedRoot() const;
 
     private:

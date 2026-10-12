@@ -27,10 +27,10 @@ namespace fs
         this->onDone = onDone;
         assembler.Reset();
 
-        if (cursor.done)
+        if (cursor.done || AtEndOfSector())
             infra::EventDispatcher::Instance().Schedule([this]
                 {
-                    Done(Result::success);
+                    Resume();
                 });
         else
             ReadSector();
@@ -41,6 +41,14 @@ namespace fs
         auto first = position.cluster == 0 ? geometry.rootSector : geometry.SectorOfCluster(position.cluster);
 
         return first + position.index / EntriesPerSector();
+    }
+
+    void FatDirectoryReader::Resume()
+    {
+        if (cursor->done)
+            Done(Result::success);
+        else
+            NextSector();
     }
 
     void FatDirectoryReader::ReadSector()
@@ -153,6 +161,11 @@ namespace fs
     uint32_t FatDirectoryReader::EntriesPerCluster() const
     {
         return EntriesPerSector() * geometry.sectorsPerCluster;
+    }
+
+    bool FatDirectoryReader::AtEndOfSector() const
+    {
+        return cursor->index != 0 && cursor->index % EntriesPerSector() == 0;
     }
 
     bool FatDirectoryReader::IsFixedRoot() const
