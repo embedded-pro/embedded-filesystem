@@ -184,6 +184,17 @@ TEST_F(SparseBlockDeviceTest, injected_failure_fails_the_next_request_only)
     EXPECT_EQ(Block{}, Read(5));
 }
 
+TEST_F(SparseBlockDeviceTest, injected_failure_can_let_operations_succeed_first)
+{
+    device.FailNextOperationWith(hal::BlockDevice::Result::timeout, 2);
+    Write(Filled(1), 5);
+    Write(Filled(2), 6);
+    Write(Filled(3), 7, hal::BlockDevice::Result::timeout);
+    Write(Filled(3), 5);
+
+    EXPECT_EQ(Filled(3), Read(5));
+}
+
 TEST_F(SparseBlockDeviceTest, flush_succeeds_unless_a_failure_is_injected)
 {
     device.Flush([this](hal::BlockDevice::Result result)

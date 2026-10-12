@@ -28,7 +28,7 @@ namespace fs
         void EraseBlocks(uint32_t beginBlock, uint32_t endBlock, const infra::Function<void(Result)>& onDone) override;
         void Flush(const infra::Function<void(Result)>& onDone) override;
 
-        void FailNextOperationWith(Result result);
+        void FailNextOperationWith(Result result, uint32_t succeedingFirst = 0);
         void ReadBlock(uint32_t block, infra::ByteRange out) const;
         void WriteBlock(uint32_t block, infra::ConstByteRange data);
 
@@ -53,6 +53,7 @@ namespace fs
         infra::MemoryRange<uint32_t> blockNumbers;
         infra::ByteRange contents;
         std::optional<Result> injectedFailure;
+        uint32_t succeedBeforeFailure{ 0 };
         uint32_t readRequests{ 0 };
         uint32_t writeRequests{ 0 };
         uint32_t eraseRequests{ 0 };

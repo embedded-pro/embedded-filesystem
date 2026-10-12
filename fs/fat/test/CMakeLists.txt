@@ -8,12 +8,14 @@ target_link_libraries(fs.fat_test PUBLIC
     fs.fat_test_doubles
     hal.interfaces_test_doubles
     infra.event_test_helper
+    infra.timer_test_helper
     infra.util_test_helper
 )
 
 target_sources(fs.fat_test PRIVATE
     TestFatBootSector.cpp
     TestFatDirectoryEntry.cpp
+    TestFatFileSystem.cpp
     TestFatFormatLayout.cpp
     TestFatFormatter.cpp
     TestFatFsInfo.cpp

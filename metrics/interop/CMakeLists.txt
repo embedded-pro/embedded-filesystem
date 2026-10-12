@@ -11,10 +11,12 @@ target_link_libraries(metrics.interop_test PUBLIC
     fs.fat
     metrics.device
     infra.event_test_helper
+    infra.timer_test_helper
 )
 
 target_sources(metrics.interop_test PRIVATE
     InteropTools.cpp
     InteropTools.hpp
     TestFormatterInterop.cpp
+    TestMountInterop.cpp
 )
