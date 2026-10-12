@@ -22,12 +22,12 @@ namespace fs
         }
     }
 
-    FatImageBuilder::FatImageBuilder(SparseBlockDevice& device)
+    FatImageBuilder::FatImageBuilder(BlockImage& device)
         : device(device)
     {
         auto first = ReadSector(0);
         uint32_t start = 0;
-        uint32_t sectors = device.NumberOfBlocks();
+        uint32_t sectors = device.Blocks();
         auto parameters = ParseBootSector(infra::MakeRange(first));
 
         if (!parameters)

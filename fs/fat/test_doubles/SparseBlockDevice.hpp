@@ -1,6 +1,7 @@
 #ifndef FS_FAT_TEST_DOUBLES_SPARSE_BLOCK_DEVICE_HPP
 #define FS_FAT_TEST_DOUBLES_SPARSE_BLOCK_DEVICE_HPP
 
+#include "fs/fat/test_doubles/BlockImage.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/ByteRange.hpp"
@@ -14,6 +15,7 @@ namespace fs
 {
     class SparseBlockDevice
         : public hal::BlockDevice
+        , public BlockImage
     {
     public:
         template<std::size_t StoredBlocks, std::size_t BytesPerBlock = 512>
@@ -38,8 +40,9 @@ namespace fs
 
         void FailNextOperationWith(Result result, uint32_t succeedingFirst = 0);
         void Observe(const infra::Function<void(Request request, uint32_t firstBlock)>& observer);
-        void ReadBlock(uint32_t block, infra::ByteRange out) const;
-        void WriteBlock(uint32_t block, infra::ConstByteRange data);
+        uint32_t Blocks() const override;
+        void ReadBlock(uint32_t block, infra::ByteRange out) const override;
+        void WriteBlock(uint32_t block, infra::ConstByteRange data) override;
 
         std::size_t StoredBlocks() const;
         uint32_t ReadRequests() const;

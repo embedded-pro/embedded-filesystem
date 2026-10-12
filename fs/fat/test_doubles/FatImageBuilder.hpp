@@ -3,7 +3,7 @@
 
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatGeometry.hpp"
-#include "fs/fat/test_doubles/SparseBlockDevice.hpp"
+#include "fs/fat/test_doubles/BlockImage.hpp"
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/ByteRange.hpp"
 #include <array>
@@ -16,7 +16,7 @@ namespace fs
     public:
         using Sector = std::array<uint8_t, 512>;
 
-        explicit FatImageBuilder(SparseBlockDevice& device);
+        explicit FatImageBuilder(BlockImage& device);
 
         const FatGeometry& Geometry() const;
         uint32_t RootCluster() const;
@@ -43,7 +43,7 @@ namespace fs
         uint32_t LastCluster(uint32_t first) const;
 
     private:
-        SparseBlockDevice& device;
+        BlockImage& device;
         FatGeometry geometry;
     };
 }

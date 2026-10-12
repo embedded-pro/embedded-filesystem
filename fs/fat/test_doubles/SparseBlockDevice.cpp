@@ -85,6 +85,11 @@ namespace fs
             Complete(Result::success);
     }
 
+    uint32_t SparseBlockDevice::Blocks() const
+    {
+        return numberOfBlocks;
+    }
+
     void SparseBlockDevice::Observe(const infra::Function<void(Request request, uint32_t firstBlock)>& observer)
     {
         this->observer = observer;

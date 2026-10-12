@@ -22,4 +22,5 @@ target_sources(metrics.interop_test PRIVATE
     TestListingInterop.cpp
     TestMountInterop.cpp
     TestReadInterop.cpp
+    TestWriteInterop.cpp
 )
