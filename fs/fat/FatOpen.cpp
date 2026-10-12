@@ -4,9 +4,9 @@
 
 namespace fs
 {
-    FatOpen::FatOpen(FatVolume& volume, const FatOpenCall& call, const Allocate& allocate, const infra::Function<void(Result result)>& onFinished)
+    FatOpen::FatOpen(FatVolume& volume, FatOpenCall&& call, const Allocate& allocate, const infra::Function<void(Result result)>& onFinished)
         : volume(volume)
-        , call(call)
+        , call(std::move(call))
         , allocate(allocate)
         , onFinished(onFinished)
     {}

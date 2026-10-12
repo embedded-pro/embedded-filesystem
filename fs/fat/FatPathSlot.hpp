@@ -7,8 +7,8 @@
 #include "fs/interfaces/File.hpp"
 #include "fs/interfaces/OpenMode.hpp"
 #include "fs/interfaces/Result.hpp"
+#include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/BoundedString.hpp"
-#include "infra/util/Function.hpp"
 #include "infra/util/SharedPtr.hpp"
 #include <optional>
 #include <variant>
@@ -18,20 +18,20 @@ namespace fs
     struct FatStatCall
     {
         infra::BoundedConstString path;
-        infra::Function<void(Result result, const EntryInfo& info)> onDone;
+        infra::AutoResetFunction<void(Result result, const EntryInfo& info)> onDone;
     };
 
     struct FatOpenDirectoryCall
     {
         infra::BoundedConstString path;
-        infra::Function<void(Result result, infra::SharedPtr<Directory> directory)> onDone;
+        infra::AutoResetFunction<void(Result result, infra::SharedPtr<Directory> directory)> onDone;
     };
 
     struct FatOpenCall
     {
         infra::BoundedConstString path;
         OpenMode mode{ OpenMode::read };
-        infra::Function<void(Result result, infra::SharedPtr<File> file)> onDone;
+        infra::AutoResetFunction<void(Result result, infra::SharedPtr<File> file)> onDone;
     };
 
     using FatPathCall = std::variant<FatStatCall, FatOpenDirectoryCall, FatOpenCall>;
