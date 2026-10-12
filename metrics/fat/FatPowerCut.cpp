@@ -32,6 +32,7 @@ namespace
         std::vector<SweepWrite> writes;
         bool closeAtEnd;
         bool atFatSectorEdge;
+        uint32_t expectedSize{ 0 };
     };
 
     struct SweepMode
@@ -169,6 +170,9 @@ public:
         if (file == nullptr)
             return;
 
+        if (sweepCase.expectedSize != 0)
+            volume.ExpectSize(*file, sweepCase.expectedSize);
+
         uint8_t seed = 100;
         for (const auto& write : sweepCase.writes)
         {
@@ -256,7 +260,8 @@ INSTANTIATE_TEST_SUITE_P(Fat, FatPowerCut,
             SweepCase{ "append_across_cluster", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 0 } }, false, false },
             SweepCase{ "append_across_fat_sector", 1, -100, true, fs::OpenMode::append, { { std::nullopt, 200 } }, false, true },
             SweepCase{ "overwrite_three_sectors", 1, 4 * 512, true, fs::OpenMode::readWrite, { { 512, 3 * 512 } }, false, false },
-            SweepCase{ "close_after_writes", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 300 }, { std::nullopt, 300 }, { std::nullopt, 300 } }, true, false })),
+            SweepCase{ "close_after_writes", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 300 }, { std::nullopt, 300 }, { std::nullopt, 300 } }, true, false },
+            SweepCase{ "expect_size_write_close", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 2000 }, { std::nullopt, 2000 } }, true, false, 8000 })),
     ParameterName);
 
 namespace

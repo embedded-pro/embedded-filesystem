@@ -45,6 +45,7 @@ namespace metrics
         fs::Result Mount();
         infra::SharedPtr<fs::File> Open(const std::string& path, fs::OpenMode mode);
         fs::Result Write(fs::File& file, infra::ConstByteRange data);
+        fs::Result ExpectSize(fs::File& file, uint32_t size);
         fs::Result Sync(fs::File& file);
         fs::Result Close(fs::File& file);
 
