@@ -10,11 +10,69 @@ namespace fs
 {
     namespace
     {
-        uint32_t SectorSizeOf(infra::MemoryRange<SectorCache::Entry> entries, infra::ByteRange buffers)
+        using Entry = SectorCache::Entry;
+        using MirroredRegion = SectorCache::MirroredRegion;
+
+        uint32_t SectorSizeOf(infra::MemoryRange<Entry> entries, infra::ByteRange buffers)
         {
             really_assert(!entries.empty() && buffers.size() % entries.size() == 0 && buffers.size() >= entries.size());
 
             return static_cast<uint32_t>(buffers.size() / entries.size());
+        }
+
+        Entry* Find(infra::MemoryRange<Entry> entries, uint32_t sector)
+        {
+            for (auto& entry : entries)
+                if (entry.valid && entry.sector == sector)
+                    return &entry;
+
+            return nullptr;
+        }
+
+        std::pair<uint8_t, uint8_t> EvictionOrder(const Entry& entry)
+        {
+            if (!entry.valid)
+                return { 0, 0 };
+
+            if (!entry.dirty)
+                return { 1, 0 };
+
+            return { 2, entry.rank };
+        }
+
+        Entry& SelectSlot(infra::IntrusiveList<Entry>& leastRecentlyUsed)
+        {
+            return *std::min_element(leastRecentlyUsed.begin(), leastRecentlyUsed.end(), [](const Entry& x, const Entry& y)
+                {
+                    return EvictionOrder(x) < EvictionOrder(y);
+                });
+        }
+
+        Entry* NextModified(infra::MemoryRange<Entry> entries)
+        {
+            Entry* next = nullptr;
+
+            for (auto& entry : entries)
+                if (entry.dirty && (next == nullptr || std::tie(entry.rank, entry.sector) < std::tie(next->rank, next->sector)))
+                    next = &entry;
+
+            return next;
+        }
+
+        uint8_t Copies(const std::optional<MirroredRegion>& region, uint32_t sector)
+        {
+            if (region && sector >= region->firstSector && sector - region->firstSector < region->sectors)
+                return region->copies;
+
+            return 1;
+        }
+
+        uint32_t CopySector(const std::optional<MirroredRegion>& region, uint32_t sector, uint8_t copyIndex)
+        {
+            if (copyIndex == 0 || !region)
+                return sector;
+
+            return sector + copyIndex * region->sectors;
         }
     }
 
@@ -114,7 +172,7 @@ namespace fs
 
     void SectorCache::Access()
     {
-        target = Find(requestedSector);
+        target = Find(entries, requestedSector);
 
         if (target != nullptr)
             Hit();
@@ -134,7 +192,7 @@ namespace fs
 
     void SectorCache::Miss()
     {
-        target = &SelectSlot();
+        target = &SelectSlot(leastRecentlyUsed);
 
         if (target->valid && target->dirty)
         {
@@ -188,7 +246,7 @@ namespace fs
         if (request == Request::overwrite)
         {
             auto contents = BufferOf(*target);
-            std::fill(contents.begin(), contents.end(), 0);
+            std::ranges::fill(contents, uint8_t{ 0 });
         }
 
         target->dirty = true;
@@ -203,7 +261,7 @@ namespace fs
 
     void SectorCache::WriteNextModified()
     {
-        auto next = NextModified();
+        auto next = NextModified(entries);
 
         if (next == nullptr)
             AllWritten();
@@ -228,7 +286,7 @@ namespace fs
 
     void SectorCache::WriteCopy()
     {
-        device.WriteBlocks(BufferOf(*writing), CopySector(*writing, copy), [this](hal::BlockDevice::Result deviceResult)
+        device.WriteBlocks(BufferOf(*writing), CopySector(mirroredRegion, writing->sector, copy), [this](hal::BlockDevice::Result deviceResult)
             {
                 OnWritten(deviceResult);
             });
@@ -238,7 +296,7 @@ namespace fs
     {
         if (deviceResult != hal::BlockDevice::Result::success)
             Complete(ToResult(deviceResult));
-        else if (++copy != Copies(*writing))
+        else if (++copy != Copies(mirroredRegion, writing->sector))
             WriteCopy();
         else
         {
@@ -273,66 +331,10 @@ namespace fs
             onModify(result, contents);
     }
 
-    SectorCache::Entry* SectorCache::Find(uint32_t sector)
-    {
-        for (auto& entry : entries)
-            if (entry.valid && entry.sector == sector)
-                return &entry;
-
-        return nullptr;
-    }
-
-    SectorCache::Entry& SectorCache::SelectSlot()
-    {
-        Entry* clean = nullptr;
-        Entry* modified = nullptr;
-
-        for (auto& entry : leastRecentlyUsed)
-        {
-            if (!entry.valid)
-                return entry;
-
-            if (!entry.dirty && clean == nullptr)
-                clean = &entry;
-
-            if (entry.dirty && (modified == nullptr || entry.rank < modified->rank))
-                modified = &entry;
-        }
-
-        return clean != nullptr ? *clean : *modified;
-    }
-
-    SectorCache::Entry* SectorCache::NextModified()
-    {
-        Entry* next = nullptr;
-
-        for (auto& entry : entries)
-            if (entry.dirty && (next == nullptr || std::tie(entry.rank, entry.sector) < std::tie(next->rank, next->sector)))
-                next = &entry;
-
-        return next;
-    }
-
     void SectorCache::Touch(Entry& entry)
     {
         leastRecentlyUsed.erase(entry);
         leastRecentlyUsed.push_back(entry);
-    }
-
-    uint8_t SectorCache::Copies(const Entry& entry) const
-    {
-        if (mirroredRegion && entry.sector >= mirroredRegion->firstSector && entry.sector - mirroredRegion->firstSector < mirroredRegion->sectors)
-            return mirroredRegion->copies;
-
-        return 1;
-    }
-
-    uint32_t SectorCache::CopySector(const Entry& entry, uint8_t copyIndex) const
-    {
-        if (copyIndex == 0)
-            return entry.sector;
-
-        return entry.sector + copyIndex * mirroredRegion->sectors;
     }
 
     infra::ByteRange SectorCache::BufferOf(const Entry& entry) const

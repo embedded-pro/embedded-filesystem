@@ -81,12 +81,7 @@ namespace fs
         void Complete(Result completionResult);
         void Deliver();
 
-        Entry* Find(uint32_t sector);
-        Entry& SelectSlot();
-        Entry* NextModified();
         void Touch(Entry& entry);
-        uint8_t Copies(const Entry& entry) const;
-        uint32_t CopySector(const Entry& entry, uint8_t copyIndex) const;
         infra::ByteRange BufferOf(const Entry& entry) const;
 
     private:
