@@ -76,6 +76,7 @@ Each volume executes one operation at a time and issues at most one device reque
 An operation claims the `fs::OperationQueue` of its volume before its first device request and releases it when it completes; claims are granted in order, always from the event dispatcher.
 The queue is bounded by what can claim it: every handle has one call in flight at most, and the volume has a fixed number of slots for the operations on paths, such as `Open`, `Remove` and `Rename`.
 A call that finds its handle busy, or no free slot, completes with `Result::busy`; such completions wait in a bounded `fs::DeferredCompletions` until the event dispatcher delivers them.
+A queue must outlive the claims on it, so its claimers are declared after it; a volume may then be destroyed while a device request is still in flight, as the power-cut sweep does.
 
 Background work, such as erasing obsolete NOR blocks or scanning the FAT for free clusters, runs only when the queue is empty and after a configurable idle delay.
 The idle delay starts when a foreground operation releases the queue and no other operation is waiting, so a volume without work never wakes the processor.
@@ -88,10 +89,14 @@ The lifecycle of a volume is a `services::TableStateMachine` from EmIL, as descr
 
 ```text
 Unmounted --Mount--> Mounting --Mounted--> Mounted --Unmount--> Unmounting --Unmounted--> Unmounted
-                         |                    |
-                         +--Failed--> Fault <-+--MediaRemoved / Corrupted
+                      |    ^                  |                      |
+                   Failed  Mount        MediaRemoved           MediaRemoved
+                      |    |                  |                      |
+                      +--> Fault <------------+----------------------+
 ```
 
+A volume that cannot be mounted, because the device fails or the volume is corrupted, ends in `Fault`, and so does a volume whose medium is removed; `Mount` starts again from `Fault`.
+A FAT volume reports the corruption that an operation finds to that operation and stays mounted, so that other files remain accessible, as described in [Fat.md](Fat.md#corruption).
 Background work has its own machine, for instance `Idle`, `Collecting` and `Erasing` on NOR volumes.
 Device completions are passed to the machine through `Completion<Ev>()`, so a completion that arrives after the machine has left the state that started it, for instance after the card was removed, is discarded instead of corrupting the volume.
 
@@ -127,7 +132,8 @@ void FatReadOperation::OnSectorsRead(fs::Result result)
 }
 ```
 
-Operation objects are allocated from fixed-size pools inside the volume, so the number of operations in flight is bounded at compile time.
+Because a volume runs one operation at a time, the state of the running operation lives in one `std::variant` of operation classes inside the volume, emplaced when the operation is granted the queue.
+The parameters of a call that waits for the queue stay in the slot of its handle or of its path operation, so the number of operations in flight is bounded at compile time.
 
 ## Public API
 
@@ -263,7 +269,7 @@ A directory handle has no `Close`; releasing the last reference returns it to it
 Paths are absolute within the volume, use `/` as separator and are encoded in UTF-8; `/` is the root directory.
 A path that is empty, relative or ends with `/`, an empty component, `.`, `..` and the NUL character complete with `invalidPath`.
 A name or a path longer than the limits of the volume completes with `nameTooLong`.
-FAT volumes compare names case-insensitively for ASCII letters and reject the characters that FAT reserves; NOR volumes compare names byte by byte.
+FAT volumes compare names case-insensitively for ASCII letters and reject the characters that FAT reserves, as described in [Fat.md](Fat.md#names); NOR volumes compare names byte by byte.
 
 ### Sharing
 
@@ -326,7 +332,7 @@ All storage is sized at compile time, following the `WithStorage` pattern of EmI
 
 ```cpp
 hal::BlockDevice& sdCard = ...;
-fs::FatFileSystem::WithStorage<4, 8> fatVolume{ sdCard };
+fs::FatFileSystem::WithStorage<4, 8> fatVolume{ sdCard, fs::FatConfig{ .blocksPerAllocationUnit = 8192, .timerServiceId = infra::localTimeTimerServiceId } };
 
 constexpr fs::NorConfig norConfig{
     .maxBlocks = 4096,
@@ -340,7 +346,7 @@ hal::Flash& norFlash = ...;
 fs::NorFileSystem::WithStorage<norConfig, 4> norVolume{ norFlash };
 ```
 
-For FAT, the template arguments are the number of open files and the number of sectors in the cache.
+For FAT, the template arguments are the number of open files and the number of sectors in the cache, followed by an optional `fs::FatLimits` with the other sizes; `fs::FatConfig` holds the settings that need no storage, such as the allocation unit of the card and the timer service that gives the time of timestamps, as described in [Fat.md](Fat.md#configuration).
 For NOR, they are the configuration and the number of open files.
 The free-block bitmap and the erase-count table are sized by `maxBlocks`, the largest number of erase blocks the volume may span, as described in [NorFilesystem.md](NorFilesystem.md); mounting a device with more blocks fails with `Result::unsupported`.
 

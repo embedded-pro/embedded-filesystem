@@ -47,14 +47,26 @@ CRC-protected records are added to `fs/common` with the NOR journal in phase 7.
 
 ## Phase 6: FAT
 
-1. Mount: MBR and boot sector, BIOS parameter block, FAT type, FSINFO.
-2. Directories: short names, long names, lookup by path.
-3. Reading: cluster chains and the extent cache.
-4. Allocation: FSINFO hint, free-run cache and contiguous runs.
-5. Writing: write, append, create, remove, rename, make directory and truncate, and multi-block write-back (M-1).
-6. Durability: ordered write-back through the ranks of the sector cache, `Sync` with `Flush`, discard, the dirty flag.
-7. Formatting with SD alignment.
-8. Power-cut sweep and interoperability tests.
+The design is settled in [Fat.md](Fat.md) first.
+The formatter comes early, because every later test and the metrics need formatted volumes, and the power-cut sweep grows with every step that adds a write path.
+
+1. On-disk structures: the boot sector, the partition table, FSINFO, the geometry of a volume and the entries of the FAT.
+2. Names: UTF-8, the rules for names, short names and the codecs of directory entries.
+3. Formatting with SD alignment, the sparse block device for FAT32 tests, and the first interoperability tests.
+4. Direct transfers, discards and the flush between ranks in the sector cache.
+5. Mount and unmount, and the lifecycle of a volume.
+6. Reading directory entries, with long names.
+7. Lookup by path, `Stat` and listing directories.
+8. Reading files through cluster chains and the extent cache.
+9. Allocation: the FSINFO hint, the free-run cache, contiguous and aligned runs, the background scan and `Usage`.
+10. The independent consistency checker for FAT images.
+11. Writing, `Sync` and `Close` of existing files, with the first power-cut sweep.
+12. Creating files with long names and short aliases, and `ExpectSize`.
+13. `Remove` with discard and `MakeDirectory`, and the FAT subject of the metrics.
+14. `Rename` and `Truncate`.
+15. Multi-block write-back in the sector cache (M-1).
+16. The dirty flag, FSINFO at unmount, and the sweep with reordered unflushed writes.
+17. The targets of embedded-filesystem in the metrics, and P-1.
 
 ## Phase 7: NOR
 
