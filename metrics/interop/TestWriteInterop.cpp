@@ -243,6 +243,96 @@ TEST_P(WriteInterop, created_files_list_in_mtools_and_pass_fsck)
     EXPECT_EQ(contents, read);
 }
 
+TEST_P(WriteInterop, made_directories_and_removed_entries_pass_fsck)
+{
+    auto original = Pattern(5000, 2);
+    std::ofstream{ directory / "an old long name.txt", std::ios::binary }.write(reinterpret_cast<const char*>(original.data()), static_cast<std::streamsize>(original.size()));
+    std::ofstream{ directory / "kept.txt", std::ios::binary }.write(reinterpret_cast<const char*>(original.data()), static_cast<std::streamsize>(original.size()));
+    ASSERT_EQ(0, Run("mkfs.fat -C " + GetParam().options + " " + image + " " + std::to_string(GetParam().kibibytes)).exitCode);
+    ASSERT_EQ(0, Run("mmd -i " + image + " ::/old").exitCode);
+    ASSERT_EQ(0, Run("mcopy -i " + image + " '" + (directory / "an old long name.txt").string() + "' '" + (directory / "kept.txt").string() + "' ::/").exitCode);
+    ASSERT_EQ(0, Run("mcopy -i " + image + " '" + (directory / "kept.txt").string() + "' ::/old/").exitCode);
+
+    metrics::ImageBlockDevice device{ metrics::BlocksInImage(image) };
+    device.LoadFrom(image);
+    fs::FatFileSystem::WithStorage<1, 8> volume{ device };
+    auto call = [this](const auto& start)
+    {
+        return Wait(start);
+    };
+    ASSERT_EQ(fs::Result::success, call([&volume](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           volume.Mount(onDone);
+                                       }));
+
+    for (const char* path : { "/New Folder", "/New Folder/Sub", "/another" })
+        EXPECT_EQ(fs::Result::success, call([&volume, path](const infra::Function<void(fs::Result)>& onDone)
+                                           {
+                                               volume.MakeDirectory(path, onDone);
+                                           }))
+            << path;
+
+    infra::SharedPtr<fs::File> file;
+    volume.Open("/New Folder/Sub/inside.bin", fs::OpenMode::write, [&file](fs::Result result, infra::SharedPtr<fs::File> opened)
+        {
+            EXPECT_EQ(fs::Result::success, result);
+            file = opened;
+        });
+    ExecuteAllActions();
+    ASSERT_NE(nullptr, file);
+    EXPECT_EQ(fs::Result::success, call([&file, &original](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           file->Write(infra::MakeRange(original), onDone);
+                                       }));
+    EXPECT_EQ(fs::Result::success, call([&file](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           file->Close(onDone);
+                                       }));
+    file = nullptr;
+
+    for (const char* path : { "/an old long name.txt", "/old/kept.txt", "/old", "/another" })
+        EXPECT_EQ(fs::Result::success, call([&volume, path](const infra::Function<void(fs::Result)>& onDone)
+                                           {
+                                               volume.Remove(path, onDone);
+                                           }))
+            << path;
+
+    EXPECT_EQ(fs::Result::success, call([&volume](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           volume.Unmount(onDone);
+                                       }));
+    device.Save(image);
+
+    auto fsck = Run("fsck.fat -n " + image);
+    EXPECT_EQ(0, fsck.exitCode) << fsck.output;
+
+    std::ifstream stream{ image, std::ios::binary };
+    auto check = metrics::CheckFatImage([&stream](uint32_t sector)
+        {
+            std::vector<uint8_t> contents(512);
+            stream.seekg(std::streamoff{ sector } * 512);
+            stream.read(reinterpret_cast<char*>(contents.data()), 512);
+            return contents;
+        },
+        metrics::FatCheckMode::strict);
+    EXPECT_EQ(std::nullopt, check.problem);
+    EXPECT_EQ(0u, check.orphanedLongNames);
+
+    auto listing = Run("mdir -b -/ -i " + image + " ::/");
+    ASSERT_EQ(0, listing.exitCode) << listing.output;
+    std::set<std::string> listed;
+    std::istringstream lines{ listing.output };
+    for (std::string line; std::getline(lines, line);)
+        if (line.starts_with("::"))
+            listed.insert(line.substr(2));
+    EXPECT_EQ((std::set<std::string>{ "/kept.txt", "/New Folder/", "/New Folder/Sub/", "/New Folder/Sub/inside.bin" }), listed);
+
+    ASSERT_EQ(0, Run("mcopy -n -i " + image + " '::/New Folder/Sub/inside.bin' '" + (directory / "back.bin").string() + "'").exitCode);
+    std::ifstream back{ directory / "back.bin", std::ios::binary };
+    std::vector<uint8_t> read{ std::istreambuf_iterator<char>(back), std::istreambuf_iterator<char>() };
+    EXPECT_EQ(original, read);
+}
+
 INSTANTIATE_TEST_SUITE_P(Images, WriteInterop,
     testing::Values(WriteCase{ "fat12", "-F 12 -s 2", 4096 },
         WriteCase{ "fat16", "-F 16 -s 1", 16384 },

@@ -115,7 +115,7 @@ namespace fs
         {
             EncodeLongEntry(longName, static_cast<uint8_t>(ordinal), ordinal == longEntries, checksum, infra::MakeRange(raw));
             WriteRawEntry(position, infra::MakeRange(raw));
-            ++position.index;
+            position = After(position);
         }
 
         EncodeShortEntry(entry, infra::MakeRange(raw));
@@ -250,7 +250,19 @@ namespace fs
         auto next = AllocateChain(1);
         ZeroCluster(next);
         SetFatEntry(last, next);
-        return FatEntryPosition{ next, 0 };
+
+        if (used == EntriesPerCluster(cluster))
+            return FatEntryPosition{ next, 0 };
+
+        return FatEntryPosition{ last, used };
+    }
+
+    FatEntryPosition FatImageBuilder::After(FatEntryPosition position) const
+    {
+        if (position.cluster != 0 && position.index + 1 == EntriesPerCluster(position.cluster))
+            return FatEntryPosition{ FatEntry(position.cluster), 0 };
+
+        return FatEntryPosition{ position.cluster, position.index + 1 };
     }
 
     uint32_t FatImageBuilder::EntriesPerCluster(uint32_t directory) const

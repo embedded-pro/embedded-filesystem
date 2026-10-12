@@ -39,6 +39,7 @@ namespace fs
         void ZeroCluster(uint32_t cluster);
         uint32_t FreeCluster(uint32_t from) const;
         FatEntryPosition EndOfDirectory(uint32_t directory, uint32_t slots);
+        FatEntryPosition After(FatEntryPosition position) const;
         uint32_t EntriesPerCluster(uint32_t directory) const;
         uint32_t LastCluster(uint32_t first) const;
 

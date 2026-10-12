@@ -7,6 +7,7 @@
 #include "metrics/suite/MetricRecorder.hpp"
 #include "gtest/gtest.h"
 #include <algorithm>
+#include <functional>
 #include <iterator>
 #include <optional>
 #include <ostream>
@@ -129,6 +130,41 @@ namespace
         { "lost", { 0, metrics::InterruptedBlock::unwritten, true }, true },
         { "torn", { 0, metrics::InterruptedBlock::torn }, false },
     };
+
+    using Context = metrics::BlockPowerCutSweep::Context;
+    using Verifier = std::function<std::optional<std::string>(Context& context, metrics::FatCheckMode mode)>;
+
+    metrics::SweepResult SweepWith(const metrics::BlockDeviceModel& model, const SweepMode& mode, const metrics::BlockPowerCutSweep::Phase& setUp, const metrics::BlockPowerCutSweep::Phase& operate, const Verifier& verify)
+    {
+        metrics::BlockPowerCutSweep sweep{ model, { mode.cut } };
+        if (model.numberOfBlocks > metrics::fatSweep16.numberOfBlocks)
+            sweep.LimitCutPoints(256);
+
+        bool uncut = true;
+        return sweep.Run(setUp, operate, [&verify, &uncut](Context& context)
+            {
+                return verify(context, std::exchange(uncut, false) ? metrics::FatCheckMode::strict : metrics::FatCheckMode::afterCut);
+            });
+    }
+
+    void SweepEveryMode(const metrics::BlockDeviceModel& model, const std::string& caseName, const std::function<metrics::SweepResult(const SweepMode& mode)>& sweep)
+    {
+        metrics::MetricRecorder recorder{ metrics::GlobalReport(), "embedded-filesystem/fat", model.name, sizeof(fs::FatFileSystem::WithStorage<1, 8>) };
+
+        for (const auto& mode : modes)
+        {
+            auto result = sweep(mode);
+            recorder.Record("P-1", caseName + " " + mode.name, "ratio", metrics::Better::higher, result.ConsistentShare());
+
+            if (mode.mustHold)
+            {
+                EXPECT_TRUE(result.failures.empty()) << mode.name << ": " << result.failures.size() << " failures, the first at step "
+                                                     << (result.failures.empty() || !result.failures.front().step ? std::string("uncut") : std::to_string(*result.failures.front().step))
+                                                     << ": " << (result.failures.empty() ? std::string() : result.failures.front().reason);
+                EXPECT_NE(0u, result.writeSteps) << mode.name;
+            }
+        }
+    }
 }
 
 class FatPowerCut
@@ -211,22 +247,17 @@ public:
 
     metrics::SweepResult Sweep(const SweepMode& mode)
     {
-        metrics::BlockPowerCutSweep sweep{ model, { mode.cut } };
-        if (model.numberOfBlocks > metrics::fatSweep16.numberOfBlocks)
-            sweep.LimitCutPoints(256);
-
-        bool uncut = true;
-        return sweep.Run([this](auto& context)
+        return SweepWith(
+            model, mode, [this](Context& context)
             {
                 SetUpVolume(context);
             },
-            [this](auto& context)
+            [this](Context& context)
             {
                 Operate(context);
             },
-            [this, &uncut](auto& context)
+            [this](Context& context, metrics::FatCheckMode mode)
             {
-                auto mode = std::exchange(uncut, false) ? metrics::FatCheckMode::strict : metrics::FatCheckMode::afterCut;
                 return Verify(context, mode);
             });
     }
@@ -237,21 +268,10 @@ TEST_P(FatPowerCut, every_cut_leaves_a_consistent_volume_with_previous_or_new_co
     if (sweepCase.atFatSectorEdge && model.numberOfBlocks / ClusterBytesOf(model) * model.blockSize * 3 / 2 < model.blockSize * 2)
         GTEST_SKIP() << "the FAT of " << model.name << " has no second sector";
 
-    metrics::MetricRecorder recorder{ metrics::GlobalReport(), "embedded-filesystem/fat", model.name, sizeof(fs::FatFileSystem::WithStorage<1, 8>) };
-
-    for (const auto& mode : modes)
-    {
-        auto result = Sweep(mode);
-        recorder.Record("P-1", sweepCase.name + " " + mode.name, "ratio", metrics::Better::higher, result.ConsistentShare());
-
-        if (mode.mustHold)
+    SweepEveryMode(model, sweepCase.name, [this](const SweepMode& mode)
         {
-            EXPECT_TRUE(result.failures.empty()) << mode.name << ": " << result.failures.size() << " failures, the first at step "
-                                                 << (result.failures.empty() || !result.failures.front().step ? std::string("uncut") : std::to_string(*result.failures.front().step))
-                                                 << ": " << (result.failures.empty() ? std::string() : result.failures.front().reason);
-            EXPECT_NE(0u, result.writeSteps) << mode.name;
-        }
-    }
+            return Sweep(mode);
+        });
 }
 
 INSTANTIATE_TEST_SUITE_P(Fat, FatPowerCut,
@@ -266,18 +286,28 @@ INSTANTIATE_TEST_SUITE_P(Fat, FatPowerCut,
 
 namespace
 {
-    struct CreateCase
+    enum class EntryOperation : uint8_t
+    {
+        create,
+        remove,
+        makeDirectory
+    };
+
+    struct EntryCase
     {
         std::string name;
+        EntryOperation operation;
         bool inDirectory;
         int32_t fillersBeforeClusterEnd;
         uint32_t bytes;
         bool closeAtEnd;
+        bool fragmented{ false };
+        bool directory{ false };
     };
 
-    using CreateParameter = std::tuple<const metrics::BlockDeviceModel*, CreateCase>;
+    using EntryParameter = std::tuple<const metrics::BlockDeviceModel*, EntryCase>;
 
-    std::string CreateParameterName(const testing::TestParamInfo<CreateParameter>& info)
+    std::string EntryParameterName(const testing::TestParamInfo<EntryParameter>& info)
     {
         auto name = std::string(std::get<0>(info.param)->name) + "_" + std::get<1>(info.param).name;
         std::replace(name.begin(), name.end(), '-', '_');
@@ -294,77 +324,97 @@ namespace
             builder.AddFile(directory, "", name, infra::ConstByteRange());
         }
     }
+
+    void FillWithStaleData(const fs::FatImageBuilder& builder, metrics::SweepImage& image, uint32_t cluster, uint32_t blockSize)
+    {
+        std::vector<uint8_t> stale(blockSize, 0x41);
+        for (uint32_t sector = 0; sector != builder.Geometry().sectorsPerCluster; ++sector)
+            image.WriteBlock(builder.Geometry().SectorOfCluster(cluster) + sector, infra::MakeRange(stale));
+    }
 }
 
-class FatCreatePowerCut
-    : public testing::TestWithParam<CreateParameter>
+class FatEntryPowerCut
+    : public testing::TestWithParam<EntryParameter>
 {
 public:
     const metrics::BlockDeviceModel& model{ *std::get<0>(GetParam()) };
-    const CreateCase& createCase{ std::get<1>(GetParam()) };
+    const EntryCase& entryCase{ std::get<1>(GetParam()) };
     uint32_t clusterBytes{ ClusterBytesOf(model) };
-    std::string path{ std::string(createCase.inDirectory ? "/Directory" : "") + "/Created Long Name.txt" };
-    std::vector<uint8_t> data{ Pattern(createCase.bytes, 7) };
+    std::string parent{ entryCase.inDirectory ? "/Directory" : "" };
+    std::string path{ parent + (entryCase.operation == EntryOperation::makeDirectory ? "/New Directory" : "/Created Long Name.txt") };
+    std::string inside{ path + "/Inside.txt" };
+    std::vector<uint8_t> data{ Pattern(entryCase.bytes, 7) };
     std::size_t originalEntries{ 0 };
 
-    void SetUpVolume(metrics::SweepContext<hal::BlockDevice>& context)
+    void SetUpVolume(Context& context)
     {
         ASSERT_EQ(fs::Result::success, metrics::Format(context, metrics::SweepFormat(model)));
         metrics::SweepImage image{ context };
         fs::FatImageBuilder builder{ image };
         builder.AddFile(0, "", "FIRST   TXT", infra::ConstByteRange());
 
-        uint32_t parent = builder.RootCluster();
-        if (createCase.inDirectory)
+        uint32_t directory = builder.RootCluster();
+        if (entryCase.inDirectory)
         {
-            parent = builder.AddDirectory(parent, "Directory", "DIRECT~1   ");
-            std::vector<uint8_t> stale(model.blockSize, 0x41);
-            for (uint32_t sector = 0; sector != builder.Geometry().sectorsPerCluster; ++sector)
-                image.WriteBlock(builder.Geometry().SectorOfCluster(parent + 1) + sector, infra::MakeRange(stale));
+            directory = builder.AddDirectory(directory, "Directory", "DIRECT~1   ");
+            FillWithStaleData(builder, image, directory + 1, model.blockSize);
         }
 
         auto entriesPerCluster = clusterBytes / fs::directoryEntryBytes;
-        auto reserved = createCase.inDirectory ? 2 : 1;
-        AddFillers(builder, parent, static_cast<uint32_t>(createCase.fillersBeforeClusterEnd < 0 ? static_cast<int32_t>(entriesPerCluster) - reserved + createCase.fillersBeforeClusterEnd : createCase.fillersBeforeClusterEnd));
+        auto reserved = entryCase.inDirectory ? 2 : 1;
+        AddFillers(builder, directory, static_cast<uint32_t>(entryCase.fillersBeforeClusterEnd < 0 ? static_cast<int32_t>(entriesPerCluster) - reserved + entryCase.fillersBeforeClusterEnd : entryCase.fillersBeforeClusterEnd));
+
+        if (entryCase.operation == EntryOperation::remove && entryCase.directory)
+            builder.AddDirectory(directory, "Created Long Name.txt", "CREATE~1TXT");
+        else if (entryCase.operation == EntryOperation::remove)
+            builder.AddFile(directory, "Created Long Name.txt", "CREATE~1TXT", infra::MakeRange(data), entryCase.fragmented);
+        else if (entryCase.operation == EntryOperation::makeDirectory)
+            FillWithStaleData(builder, image, builder.Geometry().type == fs::FatType::fat32 ? builder.RootCluster() + 1 : 2, model.blockSize);
 
         originalEntries = metrics::CheckFatImage(metrics::ReaderOf(context), metrics::FatCheckMode::strict).entries.size();
     }
 
-    void Operate(metrics::SweepContext<hal::BlockDevice>& context)
+    void Operate(Context& context)
     {
         metrics::SweepVolume volume{ context };
         volume.Mount();
-        auto file = volume.Open(path, fs::OpenMode::write);
+
+        if (entryCase.operation == EntryOperation::remove)
+            volume.Remove(path);
+        else if (entryCase.operation == EntryOperation::makeDirectory)
+        {
+            if (volume.MakeDirectory(path) == fs::Result::success)
+                CreateFile(volume, inside);
+        }
+        else
+            CreateFile(volume, path);
+    }
+
+    void CreateFile(metrics::SweepVolume& volume, const std::string& name)
+    {
+        auto file = volume.Open(name, fs::OpenMode::write);
         if (file == nullptr)
             return;
 
         if (!data.empty())
             volume.Write(*file, infra::MakeRange(data));
 
-        if (createCase.closeAtEnd)
+        if (entryCase.closeAtEnd)
             volume.Close(*file);
         else
             volume.Sync(*file);
     }
 
-    std::optional<std::string> Verify(metrics::SweepContext<hal::BlockDevice>& context, metrics::FatCheckMode mode)
+    std::optional<std::string> Verify(Context& context, metrics::FatCheckMode mode)
     {
         auto reader = metrics::ReaderOf(context);
         auto check = metrics::CheckFatImage(reader, mode);
         if (check.problem)
             return check.problem;
 
-        const auto* created = check.Find(path);
-        auto expectedEntries = originalEntries + (created != nullptr ? 1 : 0);
-        if (check.entries.size() != expectedEntries)
-            return std::to_string(check.entries.size()) + " entries instead of " + std::to_string(expectedEntries);
-
-        if (created == nullptr && mode == metrics::FatCheckMode::strict)
-            return "the new file is missing";
-
-        if (created != nullptr)
-            if (auto difference = Compare(metrics::ReadContents(reader, check, *created), {}, data))
-                return difference;
+        auto problem = entryCase.operation == EntryOperation::remove ? VerifyRemoval(reader, check, mode) : VerifyCreation(reader, check, mode);
+        if (problem)
+            return problem;
 
         metrics::SweepVolume volume{ context };
         if (volume.Mount() != fs::Result::success)
@@ -373,52 +423,76 @@ public:
         return std::nullopt;
     }
 
+    std::optional<std::string> VerifyCreation(const metrics::SectorReader& reader, const metrics::FatCheck& check, metrics::FatCheckMode mode) const
+    {
+        const auto* created = check.Find(path);
+        const auto* file = entryCase.operation == EntryOperation::makeDirectory ? check.Find(inside) : created;
+        auto expectedEntries = originalEntries + (created != nullptr ? 1 : 0) + (file != nullptr && file != created ? 1 : 0);
+
+        if (check.entries.size() != expectedEntries)
+            return std::to_string(check.entries.size()) + " entries instead of " + std::to_string(expectedEntries);
+
+        if (mode == metrics::FatCheckMode::strict && file == nullptr)
+            return "the new file is missing";
+
+        if (file != nullptr)
+            return Compare(metrics::ReadContents(reader, check, *file), {}, data);
+
+        return std::nullopt;
+    }
+
+    std::optional<std::string> VerifyRemoval(const metrics::SectorReader& reader, const metrics::FatCheck& check, metrics::FatCheckMode mode) const
+    {
+        const auto* removed = check.Find(path);
+        auto expectedEntries = originalEntries - (removed != nullptr ? 0 : 1);
+
+        if (check.entries.size() != expectedEntries)
+            return std::to_string(check.entries.size()) + " entries instead of " + std::to_string(expectedEntries);
+
+        if (mode == metrics::FatCheckMode::strict && removed != nullptr)
+            return "the removed entry is still there";
+
+        if (removed != nullptr && !entryCase.directory && metrics::ReadContents(reader, check, *removed) != data)
+            return "the file that was being removed lost its contents";
+
+        return std::nullopt;
+    }
+
     metrics::SweepResult Sweep(const SweepMode& mode)
     {
-        metrics::BlockPowerCutSweep sweep{ model, { mode.cut } };
-        if (model.numberOfBlocks > metrics::fatSweep16.numberOfBlocks)
-            sweep.LimitCutPoints(256);
-
-        bool uncut = true;
-        return sweep.Run([this](auto& context)
+        return SweepWith(
+            model, mode, [this](Context& context)
             {
                 SetUpVolume(context);
             },
-            [this](auto& context)
+            [this](Context& context)
             {
                 Operate(context);
             },
-            [this, &uncut](auto& context)
+            [this](Context& context, metrics::FatCheckMode mode)
             {
-                auto mode = std::exchange(uncut, false) ? metrics::FatCheckMode::strict : metrics::FatCheckMode::afterCut;
                 return Verify(context, mode);
             });
     }
 };
 
-TEST_P(FatCreatePowerCut, every_cut_leaves_the_new_file_absent_or_complete)
+TEST_P(FatEntryPowerCut, every_cut_leaves_the_entry_in_its_previous_or_its_new_state)
 {
-    metrics::MetricRecorder recorder{ metrics::GlobalReport(), "embedded-filesystem/fat", model.name, sizeof(fs::FatFileSystem::WithStorage<1, 8>) };
-
-    for (const auto& mode : modes)
-    {
-        auto result = Sweep(mode);
-        recorder.Record("P-1", createCase.name + " " + mode.name, "ratio", metrics::Better::higher, result.ConsistentShare());
-
-        if (mode.mustHold)
+    SweepEveryMode(model, entryCase.name, [this](const SweepMode& mode)
         {
-            EXPECT_TRUE(result.failures.empty()) << mode.name << ": " << result.failures.size() << " failures, the first at step "
-                                                 << (result.failures.empty() || !result.failures.front().step ? std::string("uncut") : std::to_string(*result.failures.front().step))
-                                                 << ": " << (result.failures.empty() ? std::string() : result.failures.front().reason);
-            EXPECT_NE(0u, result.writeSteps) << mode.name;
-        }
-    }
+            return Sweep(mode);
+        });
 }
 
-INSTANTIATE_TEST_SUITE_P(Fat, FatCreatePowerCut,
+INSTANTIATE_TEST_SUITE_P(Fat, FatEntryPowerCut,
     testing::Combine(testing::Values(&metrics::fatSweep12, &metrics::fatSweep16, &metrics::fatSweep32),
-        testing::Values(CreateCase{ "create_and_sync", false, 0, 0, false },
-            CreateCase{ "create_spanning_sectors", false, 14, 0, false },
-            CreateCase{ "create_with_directory_growth", true, -1, 0, false },
-            CreateCase{ "create_write_and_close", false, 0, 1000, true })),
-    CreateParameterName);
+        testing::Values(EntryCase{ "create_and_sync", EntryOperation::create, false, 0, 0, false },
+            EntryCase{ "create_spanning_sectors", EntryOperation::create, false, 14, 0, false },
+            EntryCase{ "create_with_directory_growth", EntryOperation::create, true, -1, 0, false },
+            EntryCase{ "create_write_and_close", EntryOperation::create, false, 0, 1000, true },
+            EntryCase{ "remove_file", EntryOperation::remove, false, 0, 3000, false },
+            EntryCase{ "remove_fragmented_file", EntryOperation::remove, false, 0, 3000, false, true },
+            EntryCase{ "remove_spanning_sectors", EntryOperation::remove, false, 13, 600, false },
+            EntryCase{ "remove_directory", EntryOperation::remove, true, 0, 0, false, false, true },
+            EntryCase{ "make_directory_then_create_and_sync", EntryOperation::makeDirectory, false, 0, 600, false })),
+    EntryParameterName);
