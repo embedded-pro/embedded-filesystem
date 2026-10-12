@@ -37,9 +37,11 @@ target_sources(fs.fat_test PRIVATE
     TestFatPartitionTable.cpp
     TestFatRead.cpp
     TestFatShortName.cpp
+    TestFatShortNameGeneration.cpp
     TestFatTable.cpp
     TestFatTableReader.cpp
     TestFatTableWriter.cpp
+    TestFatTimestamp.cpp
     TestFatUsage.cpp
     TestFatWrite.cpp
     TestSparseBlockDevice.cpp

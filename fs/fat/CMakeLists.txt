@@ -76,6 +76,8 @@ target_sources(fs.fat PRIVATE
     FatRunLocator.hpp
     FatShortName.cpp
     FatShortName.hpp
+    FatShortNameGeneration.cpp
+    FatShortNameGeneration.hpp
     FatStat.cpp
     FatStat.hpp
     FatSync.cpp
@@ -86,6 +88,8 @@ target_sources(fs.fat PRIVATE
     FatTableReader.hpp
     FatTableWriter.cpp
     FatTableWriter.hpp
+    FatTimestamp.cpp
+    FatTimestamp.hpp
     FatUnmount.cpp
     FatUnmount.hpp
     FatUsage.cpp
