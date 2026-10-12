@@ -67,6 +67,22 @@ namespace
                 });
         }
 
+        void Flush()
+        {
+            Cache().Flush([this](fs::Result result)
+                {
+                    writeBackDone.callback(result);
+                });
+        }
+
+        void ReadOnce(uint32_t sector)
+        {
+            Cache().ReadOnce(sector, [this](fs::Result result, infra::ConstByteRange contents)
+                {
+                    readDone.callback(result, ToSector(contents));
+                });
+        }
+
         void ExpectReadHit(uint32_t sector, const Sector& contents)
         {
             Read(sector);
@@ -85,6 +101,8 @@ namespace
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> writeBackDone;
         std::optional<Sector> overwritten;
     };
+
+    constexpr std::pair<uint32_t, Sector> flushed{ 0xffffffff, Sector{} };
 
     class SectorCacheTest
         : public SectorCacheTestBase
@@ -112,6 +130,14 @@ namespace
                 });
         }
 
+        void ExpectFlush()
+        {
+            EXPECT_CALL(device, Flush(testing::_)).WillOnce([this](const infra::Function<void(hal::BlockDevice::Result)>& onDone)
+                {
+                    deviceDone = onDone;
+                });
+        }
+
         void CompleteDevice(hal::BlockDevice::Result result = hal::BlockDevice::Result::success)
         {
             ASSERT_TRUE(static_cast<bool>(deviceDone));
@@ -134,7 +160,10 @@ namespace
         {
             testing::InSequence sequence;
             for (const auto& [sector, contents] : writes)
-                ExpectWrite(sector, contents);
+                if (sector == flushed.first)
+                    ExpectFlush();
+                else
+                    ExpectWrite(sector, contents);
 
             WriteBack();
             for (std::size_t index = 0; index != writes.size(); ++index)
@@ -144,7 +173,8 @@ namespace
         }
 
         testing::StrictMock<hal::BlockDeviceMock> device;
-        fs::SectorCache::WithStorage<3, 4> cache{ device };
+        fs::FlushBarrier barrier{ device };
+        fs::SectorCache::WithStorage<3, 4> cache{ barrier };
         infra::Function<void(hal::BlockDevice::Result)> deviceDone;
     };
 
@@ -264,7 +294,7 @@ TEST_F(SectorCacheTest, write_back_writes_lower_ranks_first)
     Overwrite(50, 0, b);
     Overwrite(10, 1, c);
 
-    ExpectWritesCompleted({ { 50, b }, { 10, c }, { 100, a } });
+    ExpectWritesCompleted({ { 50, b }, flushed, { 10, c }, flushed, { 100, a } });
 }
 
 TEST_F(SectorCacheTest, write_back_within_rank_is_in_ascending_sector_order)
@@ -371,15 +401,17 @@ TEST_F(SectorCacheTest, modifying_with_another_rank_writes_back_everything_first
     {
         testing::InSequence sequence;
         ExpectWrite(5, a);
+        ExpectFlush();
         ExpectWrite(6, b);
     }
     Modify(5, 2, c);
     CompleteDevice();
     CompleteDevice();
+    CompleteDevice();
     EXPECT_CALL(modifyDone, callback(fs::Result::success));
     ExecuteAllActions();
 
-    ExpectWritesCompleted({ { 5, c } });
+    ExpectWritesCompleted({ flushed, { 5, c } });
 }
 
 TEST_F(SectorCacheTest, modifying_with_the_same_rank_writes_nothing)
@@ -391,7 +423,7 @@ TEST_F(SectorCacheTest, modifying_with_the_same_rank_writes_nothing)
     EXPECT_CALL(modifyDone, callback(fs::Result::success));
     ExecuteAllActions();
 
-    ExpectWritesCompleted({ { 6, b }, { 5, c } });
+    ExpectWritesCompleted({ { 6, b }, flushed, { 5, c } });
 }
 
 TEST_F(SectorCacheTest, mirrored_sector_is_written_to_every_copy_in_turn)
@@ -477,6 +509,153 @@ TEST_F(SectorCacheTest, clear_drops_every_sector)
     Load(6, b);
 }
 
+TEST_F(SectorCacheTest, eviction_obeys_the_flush_barrier)
+{
+    Overwrite(5, 0, a);
+    ExpectWritesCompleted({ { 5, a } });
+    Overwrite(10, 1, b);
+    Overwrite(20, 1, c);
+    Overwrite(30, 1, d);
+
+    testing::InSequence sequence;
+    ExpectFlush();
+    ExpectWrite(10, b);
+    ExpectRead(40, a);
+    Read(40);
+    CompleteDevice();
+    CompleteDevice();
+    CompleteDevice();
+
+    EXPECT_CALL(readDone, callback(fs::Result::success, testing::Optional(a)));
+    ExecuteAllActions();
+}
+
+TEST_F(SectorCacheTest, flush_writes_back_then_flushes_the_device)
+{
+    Overwrite(5, 0, a);
+
+    testing::InSequence sequence;
+    ExpectWrite(5, a);
+    ExpectFlush();
+    Flush();
+    CompleteDevice();
+    CompleteDevice();
+
+    ExpectWriteBackDone();
+}
+
+TEST_F(SectorCacheTest, flush_without_writes_needs_no_device_request)
+{
+    Flush();
+
+    ExpectWriteBackDone();
+}
+
+TEST_F(SectorCacheTest, flush_after_write_back_only_flushes_the_device)
+{
+    Overwrite(5, 0, a);
+    ExpectWritesCompleted({ { 5, a } });
+
+    ExpectFlush();
+    Flush();
+    CompleteDevice();
+
+    ExpectWriteBackDone();
+}
+
+TEST_F(SectorCacheTest, failed_flush_is_reported_and_keeps_the_writes_unflushed)
+{
+    Overwrite(5, 0, a);
+    ExpectWritesCompleted({ { 5, a } });
+
+    ExpectFlush();
+    Flush();
+    CompleteDevice(hal::BlockDevice::Result::timeout);
+    ExpectWriteBackDone(fs::Result::deviceError);
+
+    ExpectFlush();
+    Flush();
+    CompleteDevice();
+    ExpectWriteBackDone();
+}
+
+TEST_F(SectorCacheTest, flush_completes_from_the_event_dispatcher)
+{
+    Flush();
+    testing::Mock::VerifyAndClearExpectations(&writeBackDone);
+
+    ExpectWriteBackDone();
+}
+
+TEST_F(SectorCacheTest, read_once_hit_keeps_the_order_of_use)
+{
+    Load(10, a);
+    Load(20, b);
+    Load(30, c);
+
+    ReadOnce(10);
+    EXPECT_CALL(readDone, callback(fs::Result::success, testing::Optional(a)));
+    ExecuteAllActions();
+
+    Load(40, d);
+    ExpectReadHit(20, b);
+    Load(10, a);
+}
+
+TEST_F(SectorCacheTest, read_once_miss_leaves_its_slot_least_recently_used)
+{
+    Load(10, a);
+    Load(20, b);
+
+    ExpectRead(30, c);
+    ReadOnce(30);
+    CompleteDevice();
+    EXPECT_CALL(readDone, callback(fs::Result::success, testing::Optional(c)));
+    ExecuteAllActions();
+
+    Load(40, d);
+    ExpectReadHit(10, a);
+    ExpectReadHit(20, b);
+    Load(30, c);
+}
+
+TEST_F(SectorCacheTest, read_once_evicts_a_clean_sector)
+{
+    Overwrite(10, 0, a);
+    Load(20, b);
+    Overwrite(30, 0, c);
+
+    ExpectRead(40, d);
+    ReadOnce(40);
+    CompleteDevice();
+    EXPECT_CALL(readDone, callback(fs::Result::success, testing::Optional(d)));
+    ExecuteAllActions();
+
+    ExpectWritesCompleted({ { 10, a }, { 30, c } });
+}
+
+TEST_F(SectorCacheTest, read_once_with_only_modified_sectors_is_busy)
+{
+    Overwrite(10, 0, a);
+    Overwrite(20, 0, b);
+    Overwrite(30, 0, c);
+
+    ReadOnce(40);
+    EXPECT_CALL(readDone, callback(fs::Result::busy, testing::Eq(std::nullopt)));
+    ExecuteAllActions();
+
+    ExpectWritesCompleted({ { 10, a }, { 20, b }, { 30, c } });
+}
+
+TEST_F(SectorCacheTest, read_once_returns_a_modified_sector)
+{
+    Overwrite(10, 2, a);
+
+    ReadOnce(10);
+    EXPECT_CALL(readDone, callback(fs::Result::success, testing::Optional(a)));
+    ExecuteAllActions();
+}
+
 TEST_F(SectorCacheTest, reports_its_sector_size)
 {
     EXPECT_EQ(4, cache.SectorSize());
@@ -494,7 +673,8 @@ namespace
         }
 
         hal::BlockDeviceStub::WithStorage<64> device{ 4 };
-        fs::SectorCache::WithStorage<2, 4> cache{ device };
+        fs::FlushBarrier barrier{ device };
+        fs::SectorCache::WithStorage<2, 4> cache{ barrier };
     };
 }
 

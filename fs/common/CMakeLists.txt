@@ -13,6 +13,10 @@ target_sources(fs.common PRIVATE
     BlockDeviceResult.hpp
     DeferredCompletions.cpp
     DeferredCompletions.hpp
+    DirectTransfers.cpp
+    DirectTransfers.hpp
+    FlushBarrier.cpp
+    FlushBarrier.hpp
     HandlePool.cpp
     HandlePool.hpp
     OperationQueue.cpp
