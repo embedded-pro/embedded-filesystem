@@ -99,6 +99,7 @@ A volume that cannot be mounted, because the device fails or the volume is corru
 A FAT volume reports the corruption that an operation finds to that operation and stays mounted, so that other files remain accessible, as described in [Fat.md](Fat.md#corruption).
 Background work has its own machine, for instance `Idle`, `Collecting` and `Erasing` on NOR volumes.
 Device completions are passed to the machine through `Completion<Ev>()`, so a completion that arrives after the machine has left the state that started it, for instance after the card was removed, is discarded instead of corrupting the volume.
+The completions of `Mount` and `Unmount` are delivered through the deferred completions, so a callback that mounts or unmounts again does not re-enter the machine while it is still dispatching.
 
 ### Operations as explicit state machines
 

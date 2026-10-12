@@ -13,7 +13,6 @@
 #include "fs/fat/FatVolumeState.hpp"
 #include "fs/interfaces/FileSystem.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
-#include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/BoundedVector.hpp"
 #include "infra/util/MemoryRange.hpp"
 #include "services/fsm/StateMachineDefinition.hpp"
@@ -62,17 +61,18 @@ namespace fs
         Result Unavailable() const;
         bool IsMounted() const;
 
-        void BeginMount(const FatMountRequested& request);
+        void BeginMount();
         void StartMount();
-        void BeginUnmount(const FatUnmountRequested& request);
+        void BeginUnmount();
         void StartUnmount();
         void LifecycleOperationDone(Result result);
         void Entered(Result result);
+        void DeferCompletion(infra::Function<void(Result result)>& onDone, Result result);
 
         FatPathSlot* FreePathSlot();
         void StartPathCall(FatPathSlot& slot, FatPathCall&& call);
         void RunPathCall(FatPathSlot& slot);
-        void RunStat(const FatStatCall& call);
+        void RunStat(FatStatCall& call) const;
 
     private:
         hal::BlockDevice& device;
@@ -85,8 +85,8 @@ namespace fs
         OperationQueue::Claimer lifecycleClaimer;
         infra::MemoryRange<FatPathSlot> pathSlots;
         Machine::WithStorage<2> lifecycle;
-        infra::AutoResetFunction<void(Result result)> onMountDone;
-        infra::AutoResetFunction<void(Result result)> onUnmountDone;
+        infra::Function<void(Result result)> onMountDone;
+        infra::Function<void(Result result)> onUnmountDone;
         infra::Function<void(Result result)> lifecycleDone;
         Result lifecycleResult{ Result::success };
         std::variant<std::monostate, FatMount> operation;
@@ -133,14 +133,14 @@ namespace fs
     constexpr std::array<FatFileSystem::Machine::Transition, 6> FatFileSystem::Rows()
     {
         return {
-            Machine::Row<FatUnmounted, FatMountRequested, FatMounting>(nullptr, [](FatFileSystem& volume, FatUnmounted&, const FatMountRequested& request)
+            Machine::Row<FatUnmounted, FatMountRequested, FatMounting>(nullptr, [](FatFileSystem& volume, FatUnmounted&, const FatMountRequested&)
                 {
-                    volume.BeginMount(request);
+                    volume.BeginMount();
                     return FatMounting{};
                 }),
-            Machine::Row<FatFault, FatMountRequested, FatMounting>(nullptr, [](FatFileSystem& volume, FatFault&, const FatMountRequested& request)
+            Machine::Row<FatFault, FatMountRequested, FatMounting>(nullptr, [](FatFileSystem& volume, FatFault&, const FatMountRequested&)
                 {
-                    volume.BeginMount(request);
+                    volume.BeginMount();
                     return FatMounting{};
                 }),
             Machine::Row<FatMounting, FatMountDone, FatMounted>([](FatFileSystem&, const FatMounting&, const FatMountDone& done)
@@ -151,9 +151,9 @@ namespace fs
                 {
                     return FatFault{ done.result };
                 }),
-            Machine::Row<FatMounted, FatUnmountRequested, FatUnmounting>(nullptr, [](FatFileSystem& volume, FatMounted&, const FatUnmountRequested& request)
+            Machine::Row<FatMounted, FatUnmountRequested, FatUnmounting>(nullptr, [](FatFileSystem& volume, FatMounted&, const FatUnmountRequested&)
                 {
-                    volume.BeginUnmount(request);
+                    volume.BeginUnmount();
                     return FatUnmounting{};
                 }),
             Machine::Row<FatUnmounting, FatUnmountDone, FatUnmounted>(nullptr, [](FatFileSystem& volume, FatUnmounting&, const FatUnmountDone& done)
