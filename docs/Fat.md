@@ -30,10 +30,24 @@ The volume dirty flag in the FAT is set while the volume is mounted for writing 
 
 ## Sector cache
 
-All metadata accesses go through a sector cache with a compile-time number of sectors.
-The cache is write-back: modified sectors stay in RAM until they are evicted, until `Sync`, or until `Unmount`.
-A modified FAT sector is written to every copy of the FAT when it is written back.
+All metadata accesses go through `fs::SectorCache`, a write-back cache with a compile-time number of sectors: modified sectors stay in RAM until they are evicted, until `Sync`, or until `Unmount`.
+Every modified sector carries a rank, which orders the writes:
+
+| Rank | Sectors                                                     |
+|------|-------------------------------------------------------------|
+| 0    | Data, and the clusters of a directory that was just created |
+| 1    | The FAT                                                     |
+| 2    | Existing directory entries                                  |
+
+Writing back writes the sectors of the lowest rank first, and within a rank in ascending sector order.
+When the cache is full, it replaces a free slot, else the least recently used sector that is not modified, else the least recently used sector of the lowest modified rank; so making room writes at most one sector, and never a sector of a higher rank before one of a lower rank.
+A sector that is modified again with another rank first makes the cache write back everything.
+A write that fails leaves its sector modified, and writing back stops at the first failure, so a sector of a higher rank is never written after a failed write of a lower rank.
+FAT sectors are written to the first FAT and then to every other copy in turn.
+The cache issues one device request at a time.
+
 Transfers that cover whole clusters bypass the cache and go directly between the caller's buffer and the device, as multi-block requests.
+Before such a write, the cache discards the sectors it holds of that range; after such a read, it copies the sectors it holds of that range over the buffer, so that the caller sees the latest contents.
 As everywhere in EmIL, a buffer passed to `Read` or `Write` must stay valid until the operation completes.
 
 ## Open files
@@ -60,7 +74,9 @@ The order of writes is fixed so that a power loss never leaves a directory entry
 2. The FAT entries that link the new clusters are written, to every copy of the FAT in turn.
 3. The directory entry, with the new size and first cluster, is written.
 
-`Sync` writes back every modified sector of the file in this order and then calls `Flush` on the block device, so that data in the device's own cache is also made durable.
+The ranks of the sector cache enforce this order.
+An operation that needs the reverse order, such as `Remove`, which clears the directory entry before it frees the clusters in the FAT, writes back the cache between the two steps.
+`Sync` writes back every modified sector in this order and then calls `Flush` on the block device, so that data in the device's own cache is also made durable.
 FSINFO is updated on `Sync` and on `Unmount`, but because it is only a hint, an outdated FSINFO after a power loss is harmless.
 
 ## Discard

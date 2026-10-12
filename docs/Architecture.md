@@ -285,12 +285,13 @@ A handle returns to its pool once the last `infra::SharedPtr` and `infra::WeakPt
 The building blocks in `fs/common` are shared by both filesystems.
 Each one is sized at compile time:
 
-| Building block                            | Sized by                                                             | RAM                                                  |
-|-------------------------------------------|----------------------------------------------------------------------|------------------------------------------------------|
-| `fs::PathLimits`                          | The longest name and the longest path in UTF-8 bytes, 255 by default | None: paths are not copied                           |
-| `fs::OperationQueue`                      | Claimed by the handles and the path-operation slots of the volume    | A claimable resource, an idle timer and its callback |
-| `fs::DeferredCompletions::WithMaxSize<N>` | N completions with `busy` that wait for the event dispatcher         | N completions                                        |
-| `fs::HandlePool<Handle, N>`               | N handles, constructed once with the volume                          | N handles                                            |
+| Building block                                      | Sized by                                                                  | RAM                                                  |
+|-----------------------------------------------------|---------------------------------------------------------------------------|------------------------------------------------------|
+| `fs::PathLimits`                                    | The longest name and the longest path in UTF-8 bytes, 255 by default      | None: paths are not copied                           |
+| `fs::OperationQueue`                                | Claimed by the handles and the path-operation slots of the volume         | A claimable resource, an idle timer and its callback |
+| `fs::DeferredCompletions::WithMaxSize<N>`           | N completions with `busy` that wait for the event dispatcher              | N completions                                        |
+| `fs::HandlePool<Handle, N>`                         | N handles, constructed once with the volume                               | N handles                                            |
+| `fs::SectorCache::WithStorage<Sectors, SectorSize>` | Sectors buffers of SectorSize bytes, 512 by default; see [Fat.md](Fat.md) | Sectors buffers and their entries                    |
 
 ### Paths
 
