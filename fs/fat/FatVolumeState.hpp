@@ -1,6 +1,7 @@
 #ifndef FS_FAT_FAT_VOLUME_STATE_HPP
 #define FS_FAT_FAT_VOLUME_STATE_HPP
 
+#include "fs/fat/FatAllocationUnits.hpp"
 #include "fs/fat/FatFsInfo.hpp"
 #include "fs/fat/FatGeometry.hpp"
 #include <cstdint>
@@ -15,6 +16,7 @@ namespace fs
         std::optional<bool> cleanAtMount;
         std::optional<uint32_t> freeClusters;
         bool tableChanged{ false };
+        std::optional<FatAllocationUnits> allocationUnits;
     };
 }
 

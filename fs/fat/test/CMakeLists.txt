@@ -15,6 +15,7 @@ target_link_libraries(fs.fat_test PUBLIC
 target_sources(fs.fat_test PRIVATE
     FatFileSystemFixture.hpp
     FatVolumeFixture.hpp
+    TestFatAllocationUnits.cpp
     TestFatAllocator.cpp
     TestFatBackgroundScan.cpp
     TestFatBootSector.cpp
@@ -26,6 +27,7 @@ target_sources(fs.fat_test PRIVATE
     TestFatDirectoryReader.cpp
     TestFatEntryAssembler.cpp
     TestFatEntrySetWriter.cpp
+    TestFatExpectSize.cpp
     TestFatExtentCache.cpp
     TestFatFileSystem.cpp
     TestFatFormatLayout.cpp
@@ -39,6 +41,7 @@ target_sources(fs.fat_test PRIVATE
     TestFatOpen.cpp
     TestFatPartitionTable.cpp
     TestFatRead.cpp
+    TestFatRunSearch.cpp
     TestFatShortName.cpp
     TestFatShortNameGeneration.cpp
     TestFatTable.cpp

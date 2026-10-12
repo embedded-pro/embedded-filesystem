@@ -160,7 +160,9 @@ When the volume is full, writes complete with `noSpace`.
 ## ExpectSize
 
 `ExpectSize` reserves a contiguous run of free clusters for the expected size, following the allocation rules above, and the writes of the file then take their clusters from it.
+It reads the FAT from the cluster after the last cluster of the file, and otherwise from the cursor, until it finds such a run; other files skip the reserved clusters.
 The reservation is kept in RAM only: nothing is written for it, and `Close` returns what was not used.
+A later `ExpectSize` replaces the reservation, and one for a size that the clusters of the file already hold drops it.
 When no run of that length is free, it reserves the longest run it finds; it never completes with `noSpace`.
 
 ## Writing

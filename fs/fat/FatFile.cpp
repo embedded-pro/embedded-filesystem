@@ -46,6 +46,11 @@ namespace fs
         return state;
     }
 
+    const FatOpenFile& FatFile::State() const
+    {
+        return state;
+    }
+
     void FatFile::Detach()
     {
         volume.OpenFiles().erase(*this);
@@ -98,9 +103,17 @@ namespace fs
         volume.Defer(onDone, Pending() || !state.Writable() ? Unwritable() : Result::unsupported);
     }
 
-    void FatFile::ExpectSize(uint32_t, const infra::Function<void(Result result)>& onDone)
+    void FatFile::ExpectSize(uint32_t size, const infra::Function<void(Result result)>& onDone)
     {
-        volume.Defer(onDone, Pending() || !state.Writable() ? Unwritable() : Result::unsupported);
+        if (Pending() || !state.Writable())
+        {
+            volume.Defer(onDone, Unwritable());
+            return;
+        }
+
+        expectedSize = size;
+        this->onDone = onDone;
+        Claim(Call::expectSize);
     }
 
     void FatFile::Sync(const infra::Function<void(Result result)>& onDone)
@@ -177,6 +190,8 @@ namespace fs
             StartRead();
         else if (call == Call::write)
             StartWrite();
+        else if (call == Call::expectSize)
+            StartExpectSize();
         else
             StartSync();
     }
@@ -194,6 +209,16 @@ namespace fs
     void FatFile::StartWrite()
     {
         volume.Operation().emplace<FatWrite>(volume, state, extents, writeData, [this](Result result)
+                              {
+                                  volume.Report(result);
+                                  Done(result);
+                              })
+            .Start();
+    }
+
+    void FatFile::StartExpectSize()
+    {
+        volume.Operation().emplace<FatExpectSize>(volume, state, extents, expectedSize, [this](Result result)
                               {
                                   volume.Report(result);
                                   Done(result);

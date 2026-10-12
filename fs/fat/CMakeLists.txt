@@ -13,6 +13,8 @@ target_link_libraries(fs.fat PUBLIC
 target_sources(fs.fat PRIVATE
     CodePage437.cpp
     CodePage437.hpp
+    FatAllocationUnits.cpp
+    FatAllocationUnits.hpp
     FatAllocator.cpp
     FatAllocator.hpp
     FatBackgroundScan.cpp
@@ -38,6 +40,8 @@ target_sources(fs.fat PRIVATE
     FatEntrySetWriter.hpp
     FatEntryUpdate.cpp
     FatEntryUpdate.hpp
+    FatExpectSize.cpp
+    FatExpectSize.hpp
     FatExtentCache.cpp
     FatExtentCache.hpp
     FatFile.cpp
@@ -76,8 +80,12 @@ target_sources(fs.fat PRIVATE
     FatRanks.hpp
     FatRead.cpp
     FatRead.hpp
+    FatReservation.cpp
+    FatReservation.hpp
     FatRunLocator.cpp
     FatRunLocator.hpp
+    FatRunSearch.cpp
+    FatRunSearch.hpp
     FatShortName.cpp
     FatShortName.hpp
     FatShortNameGeneration.cpp

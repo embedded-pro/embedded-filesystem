@@ -1,5 +1,6 @@
 #include "fs/fat/FatVolume.hpp"
 #include "fs/fat/FatFile.hpp"
+#include <algorithm>
 
 namespace fs
 {
@@ -9,6 +10,7 @@ namespace fs
         , deferred(parts.deferred)
         , cacheSectors(parts.cacheSectors)
         , timerServiceId(config.timerServiceId)
+        , blocksPerAllocationUnit(config.blocksPerAllocationUnit)
         , limits{ parts.nameBuffer.size(), config.maxPathBytes }
         , onMediaRemoved(onMediaRemoved)
         , transfers(parts.barrier, parts.cache)
@@ -18,7 +20,7 @@ namespace fs
         , chain(parts.cache, state.geometry)
         , locator(chain)
         , tableWriter(parts.cache, state.geometry)
-        , allocator(parts.cache, state, tableWriter)
+        , allocator(parts.cache, state, tableWriter, *this)
         , entryUpdate(parts.cache, reader, config.timerServiceId)
         , closedFiles(parts.closedFiles)
         , freeSpace(parts.cache, state)
@@ -119,6 +121,11 @@ namespace fs
         return operation;
     }
 
+    const FatReservations& FatVolume::Reservations() const
+    {
+        return *this;
+    }
+
     FatDateTime FatVolume::Timestamp() const
     {
         return ToFatDateTime(infra::Now(timerServiceId));
@@ -147,6 +154,7 @@ namespace fs
     void FatVolume::MarkMounted()
     {
         closedFiles.Clear();
+        state.allocationUnits = AllocationUnitsOf(state.geometry, blocksPerAllocationUnit);
         freeSpace.Restart();
         allocator.Reset();
         ++generation;
@@ -163,6 +171,14 @@ namespace fs
             openFiles.front().Detach();
 
         unavailable = reason == Result::mediaRemoved ? Result::mediaRemoved : Result::notMounted;
+    }
+
+    bool FatVolume::Reserved(uint32_t cluster) const
+    {
+        return std::ranges::any_of(openFiles, [cluster](const FatFile& file)
+            {
+                return file.State().reservation.Contains(cluster);
+            });
     }
 
     void FatVolume::Report(Result result)

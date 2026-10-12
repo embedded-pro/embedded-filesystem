@@ -4,10 +4,11 @@
 
 namespace fs
 {
-    FatAllocator::FatAllocator(SectorCache& cache, FatVolumeState& volume, FatTableWriter& writer)
+    FatAllocator::FatAllocator(SectorCache& cache, FatVolumeState& volume, FatTableWriter& writer, const FatReservations& reservations)
         : cache(cache)
         , volume(volume)
         , writer(writer)
+        , reservations(reservations)
     {}
 
     FatAllocator::~FatAllocator() = default;
@@ -32,12 +33,17 @@ namespace fs
 
     void FatAllocator::Grow(std::optional<uint32_t> last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
     {
-        Start(last, clusters, true, onDone);
+        Start(last, clusters, true, nullptr, onDone);
+    }
+
+    void FatAllocator::Grow(std::optional<uint32_t> last, uint32_t clusters, FatReservation& reservation, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
+    {
+        Start(last, clusters, true, &reservation, onDone);
     }
 
     void FatAllocator::Take(uint32_t last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
     {
-        Start(last, clusters, false, onDone);
+        Start(last, clusters, false, nullptr, onDone);
     }
 
     void FatAllocator::Link(const infra::Function<void(Result result)>& onDone)
@@ -48,11 +54,12 @@ namespace fs
         LinkAfterBarrier();
     }
 
-    void FatAllocator::Start(std::optional<uint32_t> last, uint32_t clusters, bool link, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
+    void FatAllocator::Start(std::optional<uint32_t> last, uint32_t clusters, bool link, FatReservation* reservation, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
     {
         really_assert(clusters != 0);
 
         this->last = last;
+        own = reservation;
         this->onDone = onDone;
         linkWhenTaken = link;
         wanted = clusters;
@@ -98,6 +105,9 @@ namespace fs
             Take(*found);
         else if (preferredOnly)
         {
+            if (own != nullptr)
+                *own = FatReservation{};
+
             preferredOnly = false;
             candidate = cursor;
             examined = 0;
@@ -121,7 +131,7 @@ namespace fs
             candidate = After(cluster) != 0 ? After(cluster) : 2;
             ++examined;
 
-            if (!location.straddles && ReadEntry(geometry.type, cluster, contents, infra::ConstByteRange()) == 0)
+            if (!location.straddles && ReadEntry(geometry.type, cluster, contents, infra::ConstByteRange()) == 0 && Available(cluster))
                 return cluster;
 
             if (preferredOnly)
@@ -155,6 +165,12 @@ namespace fs
 
         if (allocated == 0)
             first = cluster;
+
+        if (own != nullptr && own->count != 0 && own->first == cluster)
+        {
+            ++own->first;
+            --own->count;
+        }
 
         if (contiguous == allocated && cluster == first + allocated)
             ++contiguous;
@@ -222,6 +238,9 @@ namespace fs
         if (allocated != 0)
             return After(previous);
 
+        if (own != nullptr && own->count != 0)
+            return own->first;
+
         if (last)
             return After(*last);
 
@@ -231,6 +250,11 @@ namespace fs
     bool FatAllocator::IsCluster(uint32_t cluster) const
     {
         return volume.geometry.IsCluster(cluster);
+    }
+
+    bool FatAllocator::Available(uint32_t cluster) const
+    {
+        return !reservations.Reserved(cluster) || (own != nullptr && own->Contains(cluster));
     }
 
     uint32_t FatAllocator::After(uint32_t cluster) const

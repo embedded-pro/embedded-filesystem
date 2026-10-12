@@ -27,6 +27,16 @@ namespace
         infra::BoundedVector<infra::BoundedString::WithStorage<255>>::WithMaxSize<64> names;
     };
 
+    class NoReservations
+        : public fs::FatReservations
+    {
+    public:
+        bool Reserved(uint32_t) const override
+        {
+            return false;
+        }
+    };
+
     fs::ShortEntry Entry(const char (&name)[12])
     {
         fs::ShortEntry entry;
@@ -109,7 +119,8 @@ namespace
 
         fs::FatVolumeState state;
         fs::FatTableWriter tableWriter{ cache, state.geometry };
-        fs::FatAllocator allocator{ cache, state, tableWriter };
+        NoReservations reservations;
+        fs::FatAllocator allocator{ cache, state, tableWriter, reservations };
         std::array<uint8_t, 255> nameBuffer{};
         fs::FatEntryAssembler assembler{ infra::MakeRange(nameBuffer) };
         fs::FatDirectoryReader reader{ cache, state.geometry, assembler };

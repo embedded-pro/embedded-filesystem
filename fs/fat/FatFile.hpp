@@ -33,6 +33,7 @@ namespace fs
 
         void Open(const FatScannedEntry& scanned, OpenMode mode);
         FatOpenFile& State();
+        const FatOpenFile& State() const;
         void Detach();
 
         uint32_t Size() const override;
@@ -51,6 +52,7 @@ namespace fs
             none,
             read,
             write,
+            expectSize,
             sync,
             close,
             implicitClose
@@ -62,6 +64,7 @@ namespace fs
         void Granted();
         void StartRead();
         void StartWrite();
+        void StartExpectSize();
         void StartSync();
         void ReadDone(Result result, std::size_t bytesRead);
         void Done(Result result);
@@ -78,6 +81,7 @@ namespace fs
         Call call{ Call::none };
         infra::ByteRange readBuffer;
         infra::ConstByteRange writeData;
+        uint32_t expectedSize{ 0 };
         infra::SharedPtr<FatFile> self;
         infra::AutoResetFunction<void(Result result, std::size_t bytesRead)> onRead;
         infra::AutoResetFunction<void(Result result)> onDone;
