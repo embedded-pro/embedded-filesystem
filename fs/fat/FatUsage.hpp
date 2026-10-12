@@ -12,7 +12,7 @@ namespace fs
     class FatUsage
     {
     public:
-        FatUsage(FatVolume& volume, const FatUsageCall& call, const infra::Function<void(Result result)>& onFinished);
+        FatUsage(FatVolume& volume, FatUsageCall&& call, const infra::Function<void(Result result)>& onFinished);
         FatUsage(const FatUsage& other) = delete;
         FatUsage& operator=(const FatUsage& other) = delete;
         ~FatUsage();

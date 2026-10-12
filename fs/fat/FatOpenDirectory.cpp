@@ -4,9 +4,9 @@
 
 namespace fs
 {
-    FatOpenDirectory::FatOpenDirectory(FatVolume& volume, const FatOpenDirectoryCall& call, const Allocate& allocate, const infra::Function<void(Result result)>& onFinished)
+    FatOpenDirectory::FatOpenDirectory(FatVolume& volume, FatOpenDirectoryCall&& call, const Allocate& allocate, const infra::Function<void(Result result)>& onFinished)
         : volume(volume)
-        , call(call)
+        , call(std::move(call))
         , allocate(allocate)
         , onFinished(onFinished)
     {}
