@@ -135,7 +135,7 @@ namespace fs
     {
         if (result != Result::success)
             Done(result);
-        else if (!next)
+        else if (!next.has_value())
         {
             cursor->done = true;
             Done(Result::success);
