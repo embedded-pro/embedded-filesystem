@@ -103,11 +103,6 @@ namespace
         void ExpectUnsupportedCallsCompleteWith(fs::Result result)
         {
             testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
-            volume.Open("/a", fs::OpenMode::read, [&done](fs::Result result, infra::SharedPtr<fs::File> file)
-                {
-                    EXPECT_EQ(nullptr, file);
-                    done.callback(result);
-                });
             volume.Remove("/a", [&done](fs::Result result)
                 {
                     done.callback(result);
@@ -126,7 +121,7 @@ namespace
                     done.callback(result);
                 });
 
-            EXPECT_CALL(done, callback(result)).Times(5);
+            EXPECT_CALL(done, callback(result)).Times(4);
             ExecuteAllActions();
         }
 
@@ -140,7 +135,12 @@ namespace
                     EXPECT_EQ(nullptr, directory);
                     done.callback(result);
                 });
-            EXPECT_CALL(done, callback(result));
+            volume.Open("/a", fs::OpenMode::read, [&done](fs::Result result, infra::SharedPtr<fs::File> file)
+                {
+                    EXPECT_EQ(nullptr, file);
+                    done.callback(result);
+                });
+            EXPECT_CALL(done, callback(result)).Times(2);
             ExecuteAllActions();
         }
 

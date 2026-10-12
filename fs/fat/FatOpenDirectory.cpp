@@ -1,4 +1,6 @@
 #include "fs/fat/FatOpenDirectory.hpp"
+#include "fs/fat/FatDirectory.hpp"
+#include "fs/fat/FatVolume.hpp"
 
 namespace fs
 {
@@ -47,7 +49,7 @@ namespace fs
         if (!walk.FoundDirectory())
             return Result::notADirectory;
 
-        if (!walk.FoundRoot() && !volume.State().geometry.IsCluster(walk.FoundCluster()))
+        if (!walk.FoundRoot() && !volume.Geometry().IsCluster(walk.FoundCluster()))
             return Result::corrupted;
 
         return Result::success;

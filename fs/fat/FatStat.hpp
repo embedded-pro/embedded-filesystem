@@ -2,12 +2,13 @@
 #define FS_FAT_FAT_STAT_HPP
 
 #include "fs/fat/FatPathSlot.hpp"
-#include "fs/fat/FatVolume.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/Function.hpp"
 
 namespace fs
 {
+    class FatVolume;
+
     class FatStat
     {
     public:

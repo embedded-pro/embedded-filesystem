@@ -8,9 +8,12 @@ namespace fs
         , deferred(parts.deferred)
         , limits{ parts.nameBuffer.size(), config.maxPathBytes }
         , onMediaRemoved(onMediaRemoved)
+        , transfers(parts.barrier, parts.cache)
         , assembler(parts.nameBuffer)
         , reader(parts.cache, state.geometry, assembler)
         , walk(reader, state.geometry)
+        , chain(parts.cache, state.geometry)
+        , closedFiles(parts.closedFiles)
         , queue(config.idleDelay, [] {})
     {}
 
@@ -26,6 +29,11 @@ namespace fs
         return cache;
     }
 
+    DirectTransfers& FatVolume::Transfers()
+    {
+        return transfers;
+    }
+
     PathLimits FatVolume::Limits() const
     {
         return limits;
@@ -34,6 +42,11 @@ namespace fs
     FatVolumeState& FatVolume::State()
     {
         return state;
+    }
+
+    const FatGeometry& FatVolume::Geometry() const
+    {
+        return state.geometry;
     }
 
     FatDirectoryReader& FatVolume::Reader()
@@ -46,9 +59,24 @@ namespace fs
         return walk;
     }
 
+    FatChainWalk& FatVolume::Chain()
+    {
+        return chain;
+    }
+
+    FatClosedFiles& FatVolume::ClosedFiles()
+    {
+        return closedFiles;
+    }
+
     OperationQueue& FatVolume::Queue()
     {
         return queue;
+    }
+
+    FatOperation& FatVolume::Operation()
+    {
+        return operation;
     }
 
     uint32_t FatVolume::Generation() const
@@ -73,6 +101,7 @@ namespace fs
 
     void FatVolume::MarkMounted()
     {
+        closedFiles.Clear();
         ++generation;
         mounted = true;
     }

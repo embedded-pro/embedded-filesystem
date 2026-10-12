@@ -30,7 +30,9 @@ target_sources(fs.fat_test PRIVATE
     TestFatGeometry.cpp
     TestFatLookup.cpp
     TestFatName.cpp
+    TestFatOpen.cpp
     TestFatPartitionTable.cpp
+    TestFatRead.cpp
     TestFatShortName.cpp
     TestFatTable.cpp
     TestFatTableReader.cpp

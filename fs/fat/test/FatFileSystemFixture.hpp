@@ -94,6 +94,41 @@ public:
         return opened;
     }
 
+    infra::SharedPtr<fs::File> ExpectOpen(infra::BoundedConstString path, fs::OpenMode mode = fs::OpenMode::read, fs::Result result = fs::Result::success)
+    {
+        infra::SharedPtr<fs::File> opened;
+        volume.Open(path, mode, [this, &opened](fs::Result result, infra::SharedPtr<fs::File> file)
+            {
+                opened = file;
+                openDone.callback(result);
+            });
+        EXPECT_CALL(openDone, callback(result));
+        ExecuteAllActions();
+        EXPECT_EQ(result == fs::Result::success, opened != nullptr);
+        return opened;
+    }
+
+    void StartRead(fs::File& file, infra::ByteRange buffer)
+    {
+        file.Read(buffer, [this](fs::Result result, std::size_t bytesRead)
+            {
+                readDone.callback(result, bytesRead);
+            });
+    }
+
+    void ExpectRead(fs::File& file, infra::ByteRange buffer, fs::Result result, std::size_t bytesRead)
+    {
+        StartRead(file, buffer);
+        EXPECT_CALL(readDone, callback(result, bytesRead));
+        ExecuteAllActions();
+    }
+
+    void ExpectDone(fs::Result result)
+    {
+        EXPECT_CALL(done, callback(result));
+        ExecuteAllActions();
+    }
+
     void StartNext(fs::Directory& directory)
     {
         directory.Next([this](fs::Result result, std::optional<fs::EntryInfo> entry)
@@ -112,11 +147,13 @@ public:
     fs::SparseBlockDevice::WithStorage<160> device;
     fs::FatFormatter::WithStorage<8> formatter{ device };
     std::optional<fs::FatImageBuilder> builder;
-    fs::FatFileSystem::WithStorage<1, 4> volume{ device };
+    fs::FatFileSystem::WithStorage<2, 4> volume{ device };
     testing::StrictMock<infra::MockCallback<void(fs::Result)>> lifecycleDone;
     testing::StrictMock<infra::MockCallback<void(fs::Result, const fs::EntryInfo&)>> statDone;
     testing::StrictMock<infra::MockCallback<void(fs::Result)>> openDone;
     testing::StrictMock<infra::MockCallback<void(fs::Result, std::optional<fs::EntryInfo>)>> nextDone;
+    testing::StrictMock<infra::MockCallback<void(fs::Result, std::size_t)>> readDone;
+    testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
 };
 
 #endif

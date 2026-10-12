@@ -34,7 +34,7 @@ namespace fs
     void FatFileSystem::Mount(const infra::Function<void(Result result)>& onDone)
     {
         if (lifecycle.Dispatch(FatMountRequested{ onDone }) != services::DispatchResult::transitioned)
-            volume.Reject(onDone, Result::busy);
+            volume.Defer(onDone, Result::busy);
     }
 
     void FatFileSystem::Unmount(const infra::Function<void(Result result)>& onDone)
@@ -43,14 +43,14 @@ namespace fs
             return;
 
         if (std::holds_alternative<FatMounting>(lifecycle.CurrentState()) || std::holds_alternative<FatUnmounting>(lifecycle.CurrentState()))
-            volume.Reject(onDone, Result::busy);
+            volume.Defer(onDone, Result::busy);
         else
-            volume.Reject(onDone, Unavailable());
+            volume.Defer(onDone, Unavailable());
     }
 
-    void FatFileSystem::Open(infra::BoundedConstString, OpenMode, const infra::Function<void(Result result, infra::SharedPtr<File> file)>& onDone)
+    void FatFileSystem::Open(infra::BoundedConstString path, OpenMode mode, const infra::Function<void(Result result, infra::SharedPtr<File> file)>& onDone)
     {
-        volume.Reject(onDone, IsMounted() ? Result::unsupported : Unavailable());
+        StartPathCall(path, FatOpenCall{ path, mode, onDone });
     }
 
     void FatFileSystem::OpenDirectory(infra::BoundedConstString path, const infra::Function<void(Result result, infra::SharedPtr<Directory> directory)>& onDone)
@@ -65,22 +65,22 @@ namespace fs
 
     void FatFileSystem::Remove(infra::BoundedConstString, const infra::Function<void(Result result)>& onDone)
     {
-        volume.Reject(onDone, IsMounted() ? Result::unsupported : Unavailable());
+        volume.Defer(onDone, IsMounted() ? Result::unsupported : Unavailable());
     }
 
     void FatFileSystem::Rename(infra::BoundedConstString, infra::BoundedConstString, const infra::Function<void(Result result)>& onDone)
     {
-        volume.Reject(onDone, IsMounted() ? Result::unsupported : Unavailable());
+        volume.Defer(onDone, IsMounted() ? Result::unsupported : Unavailable());
     }
 
     void FatFileSystem::MakeDirectory(infra::BoundedConstString, const infra::Function<void(Result result)>& onDone)
     {
-        volume.Reject(onDone, IsMounted() ? Result::unsupported : Unavailable());
+        volume.Defer(onDone, IsMounted() ? Result::unsupported : Unavailable());
     }
 
     void FatFileSystem::Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone)
     {
-        volume.Reject(onDone, IsMounted() ? Result::unsupported : Unavailable());
+        volume.Defer(onDone, IsMounted() ? Result::unsupported : Unavailable());
     }
 
     FatVolume& FatFileSystem::Volume()
@@ -121,11 +121,11 @@ namespace fs
             {
                 return FatMountDone{ result };
             });
-        operation.emplace<FatMount>(volume.Device(), volume.Cache(), volume.State(), [this](Result result)
-            {
-                LifecycleOperationDone(result);
-            });
-        std::get<FatMount>(operation).Start();
+        volume.Operation().emplace<FatMount>(volume.Device(), volume.Cache(), volume.State(), [this](Result result)
+                              {
+                                  LifecycleOperationDone(result);
+                              })
+            .Start();
     }
 
     void FatFileSystem::BeginUnmount(const FatUnmountRequested& request)
@@ -171,9 +171,9 @@ namespace fs
     void FatFileSystem::StartPathCall(infra::BoundedConstString path, Call&& call)
     {
         if (!IsMounted())
-            volume.Reject(call.onDone, Unavailable());
+            volume.Defer(call.onDone, Unavailable());
         else if (auto validation = ValidatePath(path, volume.Limits()); validation != Result::success)
-            volume.Reject(call.onDone, validation);
+            volume.Defer(call.onDone, validation);
         else if (auto slot = FreePathSlot())
         {
             slot->call = std::forward<Call>(call);
@@ -183,7 +183,7 @@ namespace fs
                 });
         }
         else
-            volume.Reject(call.onDone, Result::busy);
+            volume.Defer(call.onDone, Result::busy);
     }
 
     FatPathSlot* FatFileSystem::FreePathSlot()
@@ -221,14 +221,21 @@ namespace fs
             volume.Report(result);
         };
 
-        auto allocate = [this]
+        auto allocateDirectory = [this]
         {
             return AllocateDirectory();
         };
 
+        auto allocateFile = [this]
+        {
+            return AllocateFile();
+        };
+
         if (auto* stat = std::get_if<FatStatCall>(&call))
-            operation.emplace<FatStat>(volume, *stat, finished).Start();
+            volume.Operation().emplace<FatStat>(volume, *stat, finished).Start();
+        else if (auto* openDirectory = std::get_if<FatOpenDirectoryCall>(&call))
+            volume.Operation().emplace<FatOpenDirectory>(volume, *openDirectory, allocateDirectory, finished).Start();
         else
-            operation.emplace<FatOpenDirectory>(volume, std::get<FatOpenDirectoryCall>(call), allocate, finished).Start();
+            volume.Operation().emplace<FatOpen>(volume, std::get<FatOpenCall>(call), allocateFile, finished).Start();
     }
 }

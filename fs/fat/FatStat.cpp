@@ -1,4 +1,5 @@
 #include "fs/fat/FatStat.hpp"
+#include "fs/fat/FatVolume.hpp"
 
 namespace fs
 {

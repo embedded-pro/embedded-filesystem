@@ -18,7 +18,7 @@ namespace fs
     void FatDirectory::Next(const infra::Function<void(Result result, std::optional<EntryInfo> entry)>& onDone)
     {
         if (this->onDone)
-            volume.Reject(onDone, Result::busy);
+            volume.Defer(onDone, Result::busy);
         else
         {
             this->onDone = onDone;
