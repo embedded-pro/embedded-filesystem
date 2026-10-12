@@ -27,7 +27,7 @@ namespace fs
         this->firstBlock = firstBlock;
         this->rank = rank;
         this->onDone = onDone;
-        writeAfterFlush = lowestUnflushedRank && *lowestUnflushedRank < rank;
+        writeAfterFlush = lowestUnflushedRank.has_value() && *lowestUnflushedRank < rank;
 
         if (writeAfterFlush)
             device.Flush([this](hal::BlockDevice::Result result)
