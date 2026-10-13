@@ -181,7 +181,7 @@ namespace fs
             });
     }
 
-    void FatVolume::Report(Result result)
+    void FatVolume::Report(Result result) const
     {
         if (result == Result::mediaRemoved)
             onMediaRemoved();

@@ -40,7 +40,7 @@ namespace fs
     {
         const auto& state = volume.State();
 
-        if (!state.geometry.fsInfoSector || !state.tableChanged)
+        if (!state.geometry.fsInfoSector.has_value() || !state.tableChanged)
         {
             Flush(Result::success);
             return;
@@ -63,7 +63,7 @@ namespace fs
             });
     }
 
-    void FatUnmount::Done(Result result)
+    void FatUnmount::Done(Result result) const
     {
         volume.Cache().Clear();
         volume.Cache().SetMirroredRegion(std::nullopt);

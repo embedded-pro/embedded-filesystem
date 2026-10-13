@@ -22,7 +22,7 @@ namespace fs
         void CommitNextFile();
         void WriteFsInfo();
         void Flush(Result previous);
-        void Done(Result result);
+        void Done(Result result) const;
 
     private:
         FatVolume& volume;

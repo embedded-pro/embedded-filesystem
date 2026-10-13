@@ -39,6 +39,7 @@ namespace fs
         void Take(uint32_t cluster);
         void Taken(Result result, uint32_t cluster);
         void Finish(Result result);
+        void FinishAllocated(Result result);
         void LinkAfterBarrier();
         void LinkLast();
         void Done(Result result);

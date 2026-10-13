@@ -17,7 +17,7 @@ namespace fs
     {
         cursor = 2;
 
-        if (volume.cleanAtMount == true && volume.fsInfo && volume.fsInfo->nextFree && IsCluster(*volume.fsInfo->nextFree))
+        if (volume.cleanAtMount == true && volume.fsInfo.has_value() && volume.fsInfo->nextFree.has_value() && IsCluster(*volume.fsInfo->nextFree))
             cursor = *volume.fsInfo->nextFree;
     }
 
@@ -175,13 +175,13 @@ namespace fs
         if (contiguous == allocated && cluster == first + allocated)
             ++contiguous;
 
-        barrier = barrier || (last && writer.SectorOf(cluster) != writer.SectorOf(*last));
+        barrier = barrier || (last.has_value() && writer.SectorOf(cluster) != writer.SectorOf(*last));
         previous = cluster;
         ++allocated;
         volume.tableChanged = true;
         cursor = After(cluster) != 0 ? After(cluster) : 2;
 
-        if (volume.freeClusters)
+        if (volume.freeClusters.has_value())
             --*volume.freeClusters;
 
         Next();
@@ -193,7 +193,13 @@ namespace fs
             Done(result);
         else if (allocated == 0)
             Done(Result::noSpace);
-        else if (!last || !linkWhenTaken)
+        else
+            FinishAllocated(result);
+    }
+
+    void FatAllocator::FinishAllocated(Result result)
+    {
+        if (!last.has_value() || !linkWhenTaken)
             Done(result);
         else
         {
@@ -241,7 +247,7 @@ namespace fs
         if (own != nullptr && own->count != 0)
             return own->first;
 
-        if (last)
+        if (last.has_value())
             return After(*last);
 
         return 0;

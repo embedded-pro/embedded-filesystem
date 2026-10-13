@@ -23,7 +23,7 @@ namespace fs
     public:
         using Allocate = infra::Function<infra::SharedPtr<FatFile>()>;
 
-        FatOpen(FatVolume& volume, const FatOpenCall& call, const Allocate& allocate, const infra::Function<void(Result result)>& onFinished);
+        FatOpen(FatVolume& volume, FatOpenCall&& call, const Allocate& allocate, const infra::Function<void(Result result)>& onFinished);
         FatOpen(const FatOpen& other) = delete;
         FatOpen& operator=(const FatOpen& other) = delete;
         ~FatOpen();
