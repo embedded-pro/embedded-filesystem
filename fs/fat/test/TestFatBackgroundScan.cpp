@@ -58,6 +58,11 @@ namespace
         FatBackgroundScanOnFat32Test()
             : FatBackgroundScanTest(81920)
         {}
+
+        uint32_t FatSectorsAfterTheFirst() const
+        {
+            return ((builder->Geometry().clusterCount + 2) * 4 + 511) / 512 - 1;
+        }
     };
 }
 
@@ -194,13 +199,15 @@ TEST_F(FatBackgroundScanTest, unmount_requested_while_the_scan_waits_for_the_que
     EXPECT_EQ(before, device.ReadRequests());
 }
 
-TEST_F(FatBackgroundScanOnFat32Test, clean_volume_needs_no_scan)
+TEST_F(FatBackgroundScanOnFat32Test, clean_volume_is_scanned_for_free_runs_once_per_mount)
 {
     auto before = device.ReadRequests();
 
     ForwardTime(idleDelay);
+    ExpectStat("/", fs::Result::success, fs::EntryInfo{ "", fs::EntryType::directory, 0 });
+    ForwardTime(idleDelay);
 
-    EXPECT_EQ(before, device.ReadRequests());
+    EXPECT_EQ(before + FatSectorsAfterTheFirst(), device.ReadRequests());
     ExpectUsageFromMemory();
 }
 

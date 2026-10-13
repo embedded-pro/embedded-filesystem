@@ -34,6 +34,7 @@ target_sources(fs.fat_test PRIVATE
     TestFatFileSystem.cpp
     TestFatFormatLayout.cpp
     TestFatFormatter.cpp
+    TestFatFreeRuns.cpp
     TestFatFreeSpaceScan.cpp
     TestFatFsInfo.cpp
     TestFatGeometry.cpp

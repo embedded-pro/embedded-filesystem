@@ -100,6 +100,7 @@ namespace fs
         DeferredCompletions& deferred;
         infra::ByteRange nameBuffer;
         infra::MemoryRange<FatClosedFile> closedFiles;
+        infra::MemoryRange<FatReservation> freeRuns;
         uint32_t cacheSectors;
     };
 

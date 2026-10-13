@@ -13,7 +13,7 @@ namespace fs
 
     void FatUsage::Start()
     {
-        if (volume.FreeSpace().Done())
+        if (volume.State().freeClusters.has_value())
             Complete(Result::success);
         else
             volume.FreeSpace().Step([this](Result result)

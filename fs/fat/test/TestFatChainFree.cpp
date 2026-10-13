@@ -32,7 +32,7 @@ namespace
         fs::DirectTransfers transfers{ barrier, tinyCache };
         fs::FatVolumeState state;
         fs::FatTableWriter writer{ tinyCache, state.geometry };
-        fs::FatFreeSpaceScan freeSpace{ tinyCache, state };
+        fs::FatFreeSpaceScan freeSpace{ tinyCache, state, infra::MemoryRange<fs::FatReservation>() };
         fs::FatChainFree chain{ tinyCache, transfers, state, writer, freeSpace, true };
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
     };

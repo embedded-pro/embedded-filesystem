@@ -140,11 +140,13 @@ Opening one of them again, with the same first cluster and size, starts with tha
 
 ## Allocation
 
-Free clusters are found through a cursor, initialised from the FSINFO next-free hint, and through a cache of `FatLimits::freeRuns` free runs, 8 by default.
-When the volume is idle, a background scan of the FAT fills the cache of free runs and counts the free clusters, so that a foreground allocation rarely needs to read the FAT.
+Free clusters are found through a cursor, initialised from the FSINFO next-free hint.
+When the volume is idle, a background scan of the FAT counts the free clusters and keeps the longest free runs it finds in a cache of `FatLimits::freeRuns` runs, 8 by default.
 The scan checks before every device request whether a foreground operation is waiting, and yields to it.
+A cluster that is allocated leaves the cache of free runs, and a cluster that is freed does not join it, so every cluster in the cache is free.
 `Usage` reports the free clusters counted by this scan; when the scan has not finished, the first `Usage` completes it, and from then on the count is kept in RAM until `Unmount`.
-On a clean FAT32 volume, the free count of FSINFO is used instead, so neither the scan nor `Usage` reads the FAT to count.
+Clusters allocated or freed while the scan runs are counted in the sectors it has already read.
+On a clean FAT32 volume, the free count of FSINFO is used instead, so `Usage` does not read the FAT; the scan runs there only to fill the cache of free runs.
 Clusters are allocated in this order:
 
 1. A file with a reservation takes its clusters from the reservation.

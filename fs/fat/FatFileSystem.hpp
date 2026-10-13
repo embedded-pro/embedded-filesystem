@@ -94,7 +94,7 @@ namespace fs
 
     namespace detail
     {
-        template<std::size_t CacheSectors, std::size_t Completions, std::size_t NameBytes, std::size_t ClosedFiles>
+        template<std::size_t CacheSectors, std::size_t Completions, std::size_t NameBytes, std::size_t ClosedFiles, std::size_t FreeRunSlots>
         struct FatVolumeStorage
         {
             explicit FatVolumeStorage(hal::BlockDevice& device)
@@ -107,22 +107,23 @@ namespace fs
             DeferredCompletions::WithMaxSize<Completions> deferredStorage;
             std::array<uint8_t, NameBytes> nameStorage{};
             std::array<FatClosedFile, ClosedFiles> closedStorage{};
+            std::array<FatReservation, FreeRunSlots> freeRunStorage{};
         };
     }
 
     template<std::size_t Files, std::size_t CacheSectors, FatLimits Limits>
     class FatFileSystem::WithStorage
-        : private detail::FatVolumeStorage<CacheSectors, Files + Limits.directories + Limits.pathOperations + 2, Limits.maxNameBytes, Limits.closedFiles>
+        : private detail::FatVolumeStorage<CacheSectors, Files + Limits.directories + Limits.pathOperations + 2, Limits.maxNameBytes, Limits.closedFiles, Limits.freeRuns>
         , public FatFileSystem
     {
         static_assert(Files > 0 && CacheSectors > 2 && Limits.directories > 0 && Limits.pathOperations > 0 && Limits.extentsPerFile > 0);
 
-        using Storage = detail::FatVolumeStorage<CacheSectors, Files + Limits.directories + Limits.pathOperations + 2, Limits.maxNameBytes, Limits.closedFiles>;
+        using Storage = detail::FatVolumeStorage<CacheSectors, Files + Limits.directories + Limits.pathOperations + 2, Limits.maxNameBytes, Limits.closedFiles, Limits.freeRuns>;
 
     public:
         explicit WithStorage(hal::BlockDevice& device, const FatConfig& config = {})
             : Storage(device)
-            , FatFileSystem(FatVolumeParts{ device, this->barrierStorage, this->cacheStorage, this->deferredStorage, infra::MakeRange(this->nameStorage), infra::MakeRange(this->closedStorage), CacheSectors }, config)
+            , FatFileSystem(FatVolumeParts{ device, this->barrierStorage, this->cacheStorage, this->deferredStorage, infra::MakeRange(this->nameStorage), infra::MakeRange(this->closedStorage), infra::MakeRange(this->freeRunStorage), CacheSectors }, config)
         {
             for (std::size_t index = 0; index != Limits.pathOperations; ++index)
                 pathSlots.emplace_back(Volume().Queue());
