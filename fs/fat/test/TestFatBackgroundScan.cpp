@@ -203,3 +203,24 @@ TEST_F(FatBackgroundScanOnFat32Test, clean_volume_needs_no_scan)
     EXPECT_EQ(before, device.ReadRequests());
     ExpectUsageFromMemory();
 }
+
+TEST_F(FatBackgroundScanTest, clusters_taken_in_a_counted_sector_during_the_scan_are_used)
+{
+    builder->AddFile(0, "", "NOTES   TXT", infra::ConstByteRange());
+    StartScan();
+    auto file = ExpectOpen("/notes.txt", fs::OpenMode::write);
+    std::array<uint8_t, 1024> data{};
+
+    file->Write(infra::MakeRange(data), [this](fs::Result result)
+        {
+            done.callback(result);
+        });
+    ExpectDone(fs::Result::success);
+
+    volume.Usage([this](fs::Result result, fs::VolumeUsage usage)
+        {
+            usageDone.callback(result, usage.usedBytes);
+        });
+    EXPECT_CALL(usageDone, callback(fs::Result::success, 2 * 512));
+    ExecuteAllActions();
+}

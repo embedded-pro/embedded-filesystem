@@ -152,3 +152,46 @@ TEST_F(FatFreeSpaceScanOnFat32Test, root_cluster_of_fat32_is_used)
 
     EXPECT_EQ(geometry.clusterCount - 1, state.freeClusters);
 }
+
+TEST_F(FatFreeSpaceScanTest, cluster_allocated_in_a_counted_sector_is_used)
+{
+    ExpectStep();
+
+    scan.Allocated(2);
+    ScanAll();
+
+    EXPECT_EQ(geometry.clusterCount - 1, state.freeClusters);
+}
+
+TEST_F(FatFreeSpaceScanTest, cluster_allocated_in_a_sector_not_yet_counted_is_left_to_the_scan)
+{
+    ExpectStep();
+
+    scan.Allocated(300);
+    ScanAll();
+
+    EXPECT_EQ(geometry.clusterCount, state.freeClusters);
+}
+
+TEST_F(FatFreeSpaceScanTest, cluster_freed_in_a_counted_sector_is_free)
+{
+    std::array<uint8_t, 1500> contents{};
+    builder->AddFile(0, "", "FILE    BIN", infra::MakeRange(contents), true);
+    ExpectStep();
+
+    scan.Freed(2);
+    ScanAll();
+
+    EXPECT_EQ(geometry.clusterCount - 2, state.freeClusters);
+}
+
+TEST_F(FatFreeSpaceScanTest, known_count_follows_allocated_and_freed_clusters)
+{
+    state.freeClusters = 10;
+
+    scan.Allocated(2);
+    scan.Allocated(300);
+    scan.Freed(4);
+
+    EXPECT_EQ(9, state.freeClusters);
+}

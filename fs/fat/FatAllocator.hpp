@@ -2,6 +2,7 @@
 #define FS_FAT_FAT_ALLOCATOR_HPP
 
 #include "fs/common/SectorCache.hpp"
+#include "fs/fat/FatFreeSpaceScan.hpp"
 #include "fs/fat/FatReservation.hpp"
 #include "fs/fat/FatTableWriter.hpp"
 #include "fs/fat/FatVolumeState.hpp"
@@ -17,7 +18,7 @@ namespace fs
     class FatAllocator
     {
     public:
-        FatAllocator(SectorCache& cache, FatVolumeState& volume, FatTableWriter& writer, const FatReservations& reservations);
+        FatAllocator(SectorCache& cache, FatVolumeState& volume, FatTableWriter& writer, const FatReservations& reservations, FatFreeSpaceScan& freeSpace);
         FatAllocator(const FatAllocator& other) = delete;
         FatAllocator& operator=(const FatAllocator& other) = delete;
         ~FatAllocator();
@@ -53,6 +54,7 @@ namespace fs
         FatVolumeState& volume;
         FatTableWriter& writer;
         const FatReservations& reservations;
+        FatFreeSpaceScan& freeSpace;
         FatReservation* own{ nullptr };
         uint32_t cursor{ 2 };
         std::optional<uint32_t> last;

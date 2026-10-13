@@ -22,6 +22,8 @@ namespace fs
         void Restart();
         bool Done() const;
         void Step(const infra::Function<void(Result result)>& onDone);
+        void Allocated(uint32_t taken);
+        void Freed(uint32_t released);
 
     private:
         void OnSector(Result result, infra::ConstByteRange contents);

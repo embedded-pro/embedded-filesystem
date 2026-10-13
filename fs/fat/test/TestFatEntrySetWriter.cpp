@@ -120,7 +120,8 @@ namespace
         fs::FatVolumeState state;
         fs::FatTableWriter tableWriter{ cache, state.geometry };
         NoReservations reservations;
-        fs::FatAllocator allocator{ cache, state, tableWriter, reservations };
+        fs::FatFreeSpaceScan freeSpace{ cache, state };
+        fs::FatAllocator allocator{ cache, state, tableWriter, reservations, freeSpace };
         std::array<uint8_t, 255> nameBuffer{};
         fs::FatEntryAssembler assembler{ infra::MakeRange(nameBuffer) };
         fs::FatDirectoryReader reader{ cache, state.geometry, assembler };

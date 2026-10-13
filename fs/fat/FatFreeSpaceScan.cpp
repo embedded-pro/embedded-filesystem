@@ -34,6 +34,22 @@ namespace fs
             });
     }
 
+    void FatFreeSpaceScan::Allocated(uint32_t taken)
+    {
+        if (volume.freeClusters.has_value())
+            --*volume.freeClusters;
+        else if (taken < cluster)
+            --freeClusters;
+    }
+
+    void FatFreeSpaceScan::Freed(uint32_t released)
+    {
+        if (volume.freeClusters.has_value())
+            ++*volume.freeClusters;
+        else if (released < cluster)
+            ++freeClusters;
+    }
+
     void FatFreeSpaceScan::OnSector(Result result, infra::ConstByteRange contents)
     {
         if (result == Result::success)

@@ -98,7 +98,8 @@ namespace
         fs::FatVolumeState state;
         fs::FatTableWriter writer{ cache, state.geometry };
         RangeReservations reservations;
-        fs::FatAllocator allocator{ cache, state, writer, reservations };
+        fs::FatFreeSpaceScan freeSpace{ cache, state };
+        fs::FatAllocator allocator{ cache, state, writer, reservations, freeSpace };
         testing::StrictMock<infra::MockCallback<void(fs::Result, uint32_t, uint32_t)>> grown;
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> flushed;
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> linked;

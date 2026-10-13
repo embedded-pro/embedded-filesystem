@@ -4,11 +4,12 @@
 
 namespace fs
 {
-    FatAllocator::FatAllocator(SectorCache& cache, FatVolumeState& volume, FatTableWriter& writer, const FatReservations& reservations)
+    FatAllocator::FatAllocator(SectorCache& cache, FatVolumeState& volume, FatTableWriter& writer, const FatReservations& reservations, FatFreeSpaceScan& freeSpace)
         : cache(cache)
         , volume(volume)
         , writer(writer)
         , reservations(reservations)
+        , freeSpace(freeSpace)
     {}
 
     FatAllocator::~FatAllocator() = default;
@@ -180,9 +181,7 @@ namespace fs
         ++allocated;
         volume.tableChanged = true;
         cursor = After(cluster) != 0 ? After(cluster) : 2;
-
-        if (volume.freeClusters.has_value())
-            --*volume.freeClusters;
+        freeSpace.Allocated(cluster);
 
         Next();
     }

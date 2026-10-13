@@ -20,12 +20,12 @@ namespace fs
         , walk(reader, state.geometry)
         , chain(parts.cache, state.geometry)
         , locator(chain)
-        , tableWriter(parts.cache, state.geometry)
-        , allocator(parts.cache, state, tableWriter, *this)
-        , entryUpdate(parts.cache, reader, config.timerServiceId)
-        , chainFree(parts.cache, transfers, state, tableWriter, config.discard)
-        , closedFiles(parts.closedFiles)
         , freeSpace(parts.cache, state)
+        , tableWriter(parts.cache, state.geometry)
+        , allocator(parts.cache, state, tableWriter, *this, freeSpace)
+        , entryUpdate(parts.cache, reader, config.timerServiceId)
+        , chainFree(parts.cache, transfers, state, tableWriter, freeSpace, config.discard)
+        , closedFiles(parts.closedFiles)
         , queue(config.idleDelay, [this]
               {
                   background.Idle();
