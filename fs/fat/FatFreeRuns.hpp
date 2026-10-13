@@ -24,11 +24,8 @@ namespace fs
         std::optional<uint32_t> WholeUnit(const FatAllocationUnits& units, uint32_t from, const FatReservations& reservations) const;
 
     private:
-        void Offer(const FatReservation& run);
-
-    private:
         infra::MemoryRange<FatReservation> storage;
-        FatReservation open;
+        FatReservation extending;
     };
 }
 

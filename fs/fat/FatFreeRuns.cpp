@@ -38,6 +38,14 @@ namespace fs
             if (candidate.has_value() && (!earliest.has_value() || *candidate < *earliest))
                 earliest = candidate;
         }
+
+        void KeepIfLonger(infra::MemoryRange<FatReservation> storage, const FatReservation& run)
+        {
+            auto shortest = std::ranges::min_element(storage, {}, &FatReservation::count);
+
+            if (shortest != storage.end() && shortest->count < run.count)
+                *shortest = run;
+        }
     }
 
     FatFreeRuns::FatFreeRuns(infra::MemoryRange<FatReservation> storage)
@@ -48,37 +56,37 @@ namespace fs
 
     void FatFreeRuns::Clear()
     {
-        std::fill(storage.begin(), storage.end(), FatReservation{});
-        open = FatReservation{};
+        std::ranges::fill(storage, FatReservation{});
+        extending = FatReservation{};
     }
 
     void FatFreeRuns::Extend(uint32_t cluster)
     {
-        if (open.count != 0 && EndOf(open) == cluster)
-            ++open.count;
+        if (extending.count != 0 && EndOf(extending) == cluster)
+            ++extending.count;
         else
         {
             Close();
-            open = FatReservation{ cluster, 1 };
+            extending = FatReservation{ cluster, 1 };
         }
     }
 
     void FatFreeRuns::Close()
     {
-        Offer(open);
-        open = FatReservation{};
+        KeepIfLonger(storage, extending);
+        extending = FatReservation{};
     }
 
     void FatFreeRuns::Take(uint32_t cluster)
     {
-        if (open.Contains(cluster))
+        if (extending.Contains(cluster))
         {
-            Offer(FatReservation{ open.first, cluster - open.first });
-            open = FatReservation{ cluster + 1, EndOf(open) - cluster - 1 };
+            KeepIfLonger(storage, FatReservation{ extending.first, cluster - extending.first });
+            extending = FatReservation{ cluster + 1, EndOf(extending) - cluster - 1 };
             return;
         }
 
-        auto run = std::find_if(storage.begin(), storage.end(), [cluster](const FatReservation& candidate)
+        auto run = std::ranges::find_if(storage, [cluster](const FatReservation& candidate)
             {
                 return candidate.Contains(cluster);
             });
@@ -88,7 +96,7 @@ namespace fs
 
         FatReservation after{ cluster + 1, EndOf(*run) - cluster - 1 };
         run->count = cluster - run->first;
-        Offer(after);
+        KeepIfLonger(storage, after);
     }
 
     std::optional<uint32_t> FatFreeRuns::WholeUnit(const FatAllocationUnits& units, uint32_t from, const FatReservations& reservations) const
@@ -105,19 +113,9 @@ namespace fs
         for (const auto& run : storage)
             consider(run);
 
-        consider(open);
+        consider(extending);
 
         return atOrAfter.has_value() ? atOrAfter : lowest;
     }
 
-    void FatFreeRuns::Offer(const FatReservation& run)
-    {
-        auto shortest = std::min_element(storage.begin(), storage.end(), [](const FatReservation& left, const FatReservation& right)
-            {
-                return left.count < right.count;
-            });
-
-        if (shortest != storage.end() && shortest->count < run.count)
-            *shortest = run;
-    }
 }
