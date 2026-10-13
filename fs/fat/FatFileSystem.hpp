@@ -77,7 +77,7 @@ namespace fs
         void StartPathCall(infra::BoundedConstString path, Call&& call);
         template<class Call>
         void StartCall(Call&& call);
-        FatPathSlot* FreePathSlot();
+        FatPathSlot* FreePathSlot() const;
         void RunPathCall(FatPathSlot& slot);
         void RunOperation(FatPathSlot& slot, FatPathCall& call);
 
