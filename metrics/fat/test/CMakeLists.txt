@@ -15,4 +15,5 @@ target_sources(metrics.fat_test PRIVATE
     TestFatChecker.cpp
     TestFatSubject.cpp
     TestFatSweep.cpp
+    TestFatTargets.cpp
 )

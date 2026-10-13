@@ -1,9 +1,17 @@
+#include "metrics/report/Targets.hpp"
 #include "metrics/suite/MetricRecorder.hpp"
 #include "metrics/workload/test/FakeSubjectFixture.hpp"
 #include "gmock/gmock.h"
 
 namespace
 {
+    class TargetsMock
+        : public metrics::Targets
+    {
+    public:
+        MOCK_METHOD(std::optional<metrics::Target>, For, (std::string_view metric, std::string_view workload), (const, override));
+    };
+
     class MetricRecorderTest
         : public testing::Test
         , public metrics::FakeSubjectFixture
@@ -45,6 +53,44 @@ TEST_F(MetricRecorderTest, record_diagnostic_adds_a_result_that_is_not_compared_
     EXPECT_DOUBLE_EQ(0.5, result.value);
     EXPECT_EQ(std::nullopt, result.fill);
     EXPECT_TRUE(result.diagnostic);
+}
+
+TEST_F(MetricRecorderTest, record_attaches_the_target_of_the_metric_and_workload)
+{
+    testing::StrictMock<TargetsMock> targets;
+    metrics::MetricRecorder withTargets{ report, "fake", "fake-nor", 1234, &targets };
+    EXPECT_CALL(targets, For(std::string_view{ "W-2" }, std::string_view{ "L2" })).WillOnce(testing::Return(metrics::AtMost(1.1)));
+
+    withTargets.Record("W-2", "L2", "ratio", metrics::Better::lower, 1.2, 50);
+
+    ASSERT_EQ(1, report.Results().size());
+    const auto& result = report.Results()[0];
+    ASSERT_TRUE(result.target.has_value());
+    EXPECT_EQ("<= 1.1", result.target->Text());
+    EXPECT_EQ(false, result.pass);
+}
+
+TEST_F(MetricRecorderTest, record_of_a_metric_without_a_target_stays_reported)
+{
+    testing::StrictMock<TargetsMock> targets;
+    metrics::MetricRecorder withTargets{ report, "fake", "fake-nor", 1234, &targets };
+    EXPECT_CALL(targets, For(std::string_view{ "R-3" }, std::string_view{ "L6 lookup 10" })).WillOnce(testing::Return(std::nullopt));
+
+    withTargets.Record("R-3", "L6 lookup 10", "ms", metrics::Better::lower, 1.0);
+
+    ASSERT_EQ(1, report.Results().size());
+    EXPECT_EQ(std::nullopt, report.Results()[0].target);
+}
+
+TEST_F(MetricRecorderTest, record_diagnostic_attaches_no_target)
+{
+    testing::StrictMock<TargetsMock> targets;
+    metrics::MetricRecorder withTargets{ report, "fake", "fake-nor", 1234, &targets };
+
+    withTargets.RecordDiagnostic("P-1", "append torn", "ratio", metrics::Better::higher, 0.5);
+
+    ASSERT_EQ(1, report.Results().size());
+    EXPECT_EQ(std::nullopt, report.Results()[0].target);
 }
 
 TEST_F(MetricRecorderTest, a_clean_run_has_no_unexpected_result)

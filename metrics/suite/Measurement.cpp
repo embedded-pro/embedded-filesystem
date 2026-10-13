@@ -56,7 +56,7 @@ namespace metrics
         , probe(metered)
         , subject(setup.create(environment.Time(), metered, *setup.model))
         , runner(environment.Time(), *subject, probe)
-        , recorder(GlobalReport(), subject->Name(), setup.model->name, subject->RamBytes())
+        , recorder(GlobalReport(), subject->Name(), setup.model->name, subject->RamBytes(), setup.targets)
         , phaseWrites(metered)
         , scaleDivisor(setup.scaleDivisor)
     {

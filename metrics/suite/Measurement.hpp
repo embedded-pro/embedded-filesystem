@@ -34,6 +34,7 @@ namespace metrics
         const BlockDeviceModel* model;
         uint32_t scaleDivisor;
         std::function<std::shared_ptr<FileSystemUnderTest>(VirtualTime& time, hal::BlockDevice& device, const BlockDeviceModel& model)> create;
+        const Targets* targets{ nullptr };
     };
 
     std::ostream& operator<<(std::ostream& stream, const NorSetup& setup);

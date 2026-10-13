@@ -20,16 +20,18 @@ namespace metrics
         }
     }
 
-    MetricRecorder::MetricRecorder(Report& report, std::string_view subject, std::string_view device, std::size_t ramBytes)
+    MetricRecorder::MetricRecorder(Report& report, std::string_view subject, std::string_view device, std::size_t ramBytes, const Targets* targets)
         : report(report)
         , subject(subject)
         , device(device)
         , ramBytes(ramBytes)
+        , targets(targets)
     {}
 
     void MetricRecorder::Record(std::string_view metric, std::string_view workload, std::string_view unit, Better better, double value, std::optional<uint8_t> fill)
     {
-        report.Add({ std::string{ metric }, std::string{ workload }, subject, device, std::string{ unit }, fill, value, std::nullopt, ramBytes, better });
+        auto target = targets != nullptr ? targets->For(metric, workload) : std::nullopt;
+        report.Add({ std::string{ metric }, std::string{ workload }, subject, device, std::string{ unit }, fill, value, std::move(target), ramBytes, better });
     }
 
     void MetricRecorder::RecordDiagnostic(std::string_view metric, std::string_view workload, std::string_view unit, Better better, double value, std::optional<uint8_t> fill)

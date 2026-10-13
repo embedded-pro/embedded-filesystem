@@ -3,6 +3,7 @@
 #include "fs/fat/test_doubles/FatImageBuilder.hpp"
 #include "metrics/fat/FatChecker.hpp"
 #include "metrics/fat/FatSweep.hpp"
+#include "metrics/fat/FatTargets.hpp"
 #include "metrics/power_cut/PowerCutSweep.hpp"
 #include "metrics/report/Report.hpp"
 #include "metrics/suite/MetricRecorder.hpp"
@@ -179,7 +180,8 @@ namespace
 
     void SweepEveryMode(const metrics::BlockDeviceModel& model, const std::string& caseName, const std::function<metrics::SweepResult(const SweepMode& mode)>& sweep)
     {
-        metrics::MetricRecorder recorder{ metrics::GlobalReport(), "embedded-filesystem/fat", model.name, sizeof(fs::FatFileSystem::WithStorage<1, 8>) };
+        metrics::FatTargets targets{ model };
+        metrics::MetricRecorder recorder{ metrics::GlobalReport(), "embedded-filesystem/fat", model.name, sizeof(fs::FatFileSystem::WithStorage<1, 8>), &targets };
 
         for (const auto& mode : modes)
         {
