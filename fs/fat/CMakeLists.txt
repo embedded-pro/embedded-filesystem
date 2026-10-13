@@ -13,6 +13,8 @@ target_link_libraries(fs.fat PUBLIC
 target_sources(fs.fat PRIVATE
     CodePage437.cpp
     CodePage437.hpp
+    FatAllocator.cpp
+    FatAllocator.hpp
     FatBackgroundScan.cpp
     FatBackgroundScan.hpp
     FatBootSector.cpp
@@ -64,6 +66,7 @@ target_sources(fs.fat PRIVATE
     FatPathSlot.hpp
     FatPathWalk.cpp
     FatPathWalk.hpp
+    FatRanks.hpp
     FatRead.cpp
     FatRead.hpp
     FatShortName.cpp
@@ -74,6 +77,8 @@ target_sources(fs.fat PRIVATE
     FatTable.hpp
     FatTableReader.cpp
     FatTableReader.hpp
+    FatTableWriter.cpp
+    FatTableWriter.hpp
     FatUsage.cpp
     FatUsage.hpp
     FatVolume.cpp

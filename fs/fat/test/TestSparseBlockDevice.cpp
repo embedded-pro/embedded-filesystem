@@ -243,3 +243,30 @@ TEST_F(SparseBlockDeviceTest, counts_requests)
     EXPECT_EQ(1u, device.EraseRequests());
     EXPECT_EQ(1u, device.FlushRequests());
 }
+
+TEST_F(SparseBlockDeviceTest, observer_sees_every_request_in_order)
+{
+    testing::StrictMock<infra::MockCallback<void(fs::SparseBlockDevice::Request, uint32_t)>> observer;
+    device.Observe([&observer](fs::SparseBlockDevice::Request request, uint32_t firstBlock)
+        {
+            observer.callback(request, firstBlock);
+        });
+    testing::Sequence sequence;
+    EXPECT_CALL(observer, callback(fs::SparseBlockDevice::Request::write, 3)).InSequence(sequence);
+    EXPECT_CALL(observer, callback(fs::SparseBlockDevice::Request::read, 3)).InSequence(sequence);
+    EXPECT_CALL(observer, callback(fs::SparseBlockDevice::Request::flush, 0)).InSequence(sequence);
+    EXPECT_CALL(observer, callback(fs::SparseBlockDevice::Request::erase, 2)).InSequence(sequence);
+
+    Write(Filled(1), 3);
+    Read(3);
+    device.Flush([this](hal::BlockDevice::Result result)
+        {
+            done.callback(result);
+        });
+    Expect(hal::BlockDevice::Result::success);
+    device.EraseBlocks(2, 4, [this](hal::BlockDevice::Result result)
+        {
+            done.callback(result);
+        });
+    Expect(hal::BlockDevice::Result::success);
+}

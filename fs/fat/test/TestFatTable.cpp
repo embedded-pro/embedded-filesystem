@@ -78,6 +78,26 @@ TEST(FatTableTest, fat12_entry_straddling_two_sectors)
     EXPECT_EQ(0xabcu, Read(fs::FatType::fat12, 341, sector, next));
 }
 
+TEST(FatTableTest, straddling_fat12_entry_is_written_in_two_parts)
+{
+    for (uint32_t cluster : { 341u, 1365u })
+    {
+        Sector sector;
+        Sector next;
+        sector.fill(0x5a);
+        next.fill(0xa5);
+        auto expectedSector = sector;
+        auto expectedNext = next;
+        Write(fs::FatType::fat12, cluster, 0xabc, expectedSector, expectedNext);
+
+        fs::WriteStraddlingPart(cluster, 0xabc, infra::MakeRange(sector), false);
+        fs::WriteStraddlingPart(cluster, 0xabc, infra::MakeRange(next), true);
+
+        EXPECT_EQ(expectedSector, sector) << cluster;
+        EXPECT_EQ(expectedNext, next) << cluster;
+    }
+}
+
 TEST(FatTableTest, fat12_entry_in_the_next_sector)
 {
     Sector sector{};
