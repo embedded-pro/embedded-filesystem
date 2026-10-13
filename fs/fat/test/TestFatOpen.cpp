@@ -63,9 +63,11 @@ TEST_F(FatOpenTest, existing_file_opens_for_reading_and_writing_at_its_start)
     EXPECT_EQ(0u, file->Position());
 }
 
-TEST_F(FatOpenTest, truncating_an_existing_file_is_not_supported_yet)
+TEST_F(FatOpenTest, opening_an_existing_file_for_writing_truncates_it)
 {
-    ExpectOpen("/notes.txt", fs::OpenMode::write, fs::Result::unsupported);
+    auto file = ExpectOpen("/notes.txt", fs::OpenMode::write);
+
+    EXPECT_EQ(0u, file->Size());
     ExpectOpen("/documents", fs::OpenMode::write, fs::Result::isADirectory);
 }
 

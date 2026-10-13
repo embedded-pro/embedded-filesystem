@@ -31,9 +31,9 @@ namespace
             : FatVolumeFixture(16384, config)
         {}
 
-        void ExpectScan(uint32_t directory, infra::BoundedConstString name, uint8_t slots, const std::optional<fs::ShortNameBytes>& basis = std::nullopt, fs::Result result = fs::Result::success)
+        void ExpectScan(uint32_t directory, infra::BoundedConstString name, uint8_t slots, const std::optional<fs::ShortNameBytes>& basis = std::nullopt, fs::Result result = fs::Result::success, const std::optional<fs::FatEntryPosition>& except = std::nullopt)
         {
-            scan.Scan(directory, name, slots, basis, [this](fs::Result result)
+            scan.Scan(directory, name, slots, basis, except, [this](fs::Result result)
                 {
                     done.callback(result);
                 });
@@ -94,6 +94,18 @@ TEST_F(FatNameScanTest, finds_an_entry_by_its_long_name_ignoring_case)
 
     ASSERT_TRUE(scan.Found().has_value());
     EXPECT_EQ((fs::FatEntryPosition{ 0, 2 }), scan.Found()->shortEntry);
+}
+
+TEST_F(FatNameScanTest, excepted_entry_does_not_match_and_the_scan_goes_on_to_free_slots)
+{
+    builder->AddFile(0, "Long File Name.txt", "LONGFI~1TXT", infra::ConstByteRange());
+
+    ExpectScan(0, "long file name.txt", 3, fs::ShortNameBytes{ 'L', 'O', 'N', 'G', 'F', 'I', ' ', ' ', 'T', 'X', 'T' }, fs::Result::success, fs::FatEntryPosition{ 0, 2 });
+
+    EXPECT_FALSE(scan.Found().has_value());
+    ASSERT_TRUE(scan.Slots().has_value());
+    EXPECT_EQ((fs::FatEntryPosition{ 0, 3 }), scan.Slots()->first);
+    EXPECT_EQ(2u, scan.FreeTail());
 }
 
 TEST_F(FatNameScanTest, finds_an_entry_by_its_alias)

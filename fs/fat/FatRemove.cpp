@@ -1,9 +1,6 @@
 #include "fs/fat/FatRemove.hpp"
 #include "fs/common/Path.hpp"
-#include "fs/fat/FatDirectory.hpp"
-#include "fs/fat/FatFile.hpp"
 #include "fs/fat/FatVolume.hpp"
-#include <algorithm>
 
 namespace fs
 {
@@ -61,29 +58,10 @@ namespace fs
 
     Result FatRemove::Check() const
     {
-        const auto& entry = target.entry;
-
-        if ((entry.attributes & FatAttributes::readOnly) != 0)
+        if ((target.entry.attributes & FatAttributes::readOnly) != 0)
             return Result::readOnly;
 
-        if ((entry.firstCluster != 0 || IsDirectory(target)) && !volume.Geometry().IsCluster(entry.firstCluster))
-            return Result::corrupted;
-
-        return InUse() ? Result::busy : Result::success;
-    }
-
-    bool FatRemove::InUse() const
-    {
-        if (IsDirectory(target))
-            return std::ranges::any_of(volume.OpenDirectories(), [this](const FatDirectory& directory)
-                {
-                    return directory.FirstCluster() == target.entry.firstCluster;
-                });
-
-        return std::ranges::any_of(volume.OpenFiles(), [this](const FatFile& file)
-            {
-                return file.State().entry == target.shortEntry;
-            });
+        return volume.Changeable(target);
     }
 
     void FatRemove::CheckEmpty()

@@ -51,6 +51,11 @@ namespace fs
         return state;
     }
 
+    FatExtentCache& FatFile::Extents() const
+    {
+        return extents;
+    }
+
     void FatFile::Detach()
     {
         volume.OpenFiles().erase(*this);
@@ -100,7 +105,14 @@ namespace fs
 
     void FatFile::Truncate(const infra::Function<void(Result result)>& onDone)
     {
-        volume.Defer(onDone, Pending() || !state.Writable() ? Unwritable() : Result::unsupported);
+        if (Pending() || !state.Writable())
+        {
+            volume.Defer(onDone, Unwritable());
+            return;
+        }
+
+        this->onDone = onDone;
+        Claim(Call::truncate);
     }
 
     void FatFile::ExpectSize(uint32_t size, const infra::Function<void(Result result)>& onDone)
@@ -190,6 +202,8 @@ namespace fs
             StartRead();
         else if (call == Call::write)
             StartWrite();
+        else if (call == Call::truncate)
+            StartTruncate();
         else if (call == Call::expectSize)
             StartExpectSize();
         else
@@ -214,6 +228,15 @@ namespace fs
                                   Done(result);
                               })
             .Start();
+    }
+
+    void FatFile::StartTruncate()
+    {
+        volume.Operation().emplace<FatTruncation>(volume).Truncate(state, extents, [this](Result result)
+            {
+                volume.Report(result);
+                Done(result);
+            });
     }
 
     void FatFile::StartExpectSize()

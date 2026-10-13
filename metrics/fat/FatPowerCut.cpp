@@ -1,3 +1,4 @@
+#include "fs/fat/FatDirectoryEntry.hpp"
 #include "fs/fat/FatTable.hpp"
 #include "fs/fat/test_doubles/FatImageBuilder.hpp"
 #include "metrics/fat/FatChecker.hpp"
@@ -34,6 +35,8 @@ namespace
         bool closeAtEnd;
         bool atFatSectorEdge;
         uint32_t expectedSize{ 0 };
+        std::optional<uint32_t> keptClusters{};
+        bool reverseChain{ false };
     };
 
     struct SweepMode
@@ -67,8 +70,18 @@ namespace
         return static_cast<uint32_t>(static_cast<int32_t>(sweepCase.originalSectors * base) + sweepCase.originalExtraBytes);
     }
 
+    uint32_t TruncatePosition(const SweepCase& sweepCase, uint32_t clusterBytes)
+    {
+        return *sweepCase.keptClusters == 0 ? 0 : (*sweepCase.keptClusters - 1) * clusterBytes + clusterBytes / 2;
+    }
+
     std::vector<uint8_t> Expected(const SweepCase& sweepCase, std::vector<uint8_t> contents, uint32_t clusterBytes)
     {
+        if (sweepCase.mode == fs::OpenMode::write)
+            contents.clear();
+        else if (sweepCase.keptClusters.has_value())
+            contents.resize(TruncatePosition(sweepCase, clusterBytes));
+
         uint8_t seed = 100;
 
         for (const auto& write : sweepCase.writes)
@@ -183,6 +196,12 @@ public:
         metrics::SweepImage image{ context };
         fs::FatImageBuilder builder{ image };
 
+        if (sweepCase.reverseChain)
+        {
+            AddReverseChainFile(builder, image);
+            return;
+        }
+
         if (sweepCase.atFatSectorEdge)
         {
             auto edge = EdgeCluster(builder.Geometry());
@@ -198,6 +217,34 @@ public:
         builder.AddFile(0, "", "FILE    BIN", infra::MakeRange(before));
     }
 
+    void AddReverseChainFile(fs::FatImageBuilder& builder, metrics::SweepImage& image) const
+    {
+        const auto& geometry = builder.Geometry();
+        auto edge = EdgeCluster(geometry);
+        std::vector<uint32_t> chain{ edge + 1, edge + 2, 3, 4 };
+
+        for (std::size_t index = 0; index != chain.size(); ++index)
+        {
+            builder.SetFatEntry(chain[index], index + 1 != chain.size() ? chain[index + 1] : fs::EndOfChain(geometry.type));
+
+            for (uint32_t sector = 0; sector != geometry.sectorsPerCluster; ++sector)
+            {
+                std::vector<uint8_t> block(model.blockSize, 0);
+                auto offset = (index * geometry.sectorsPerCluster + sector) * model.blockSize;
+                if (offset < before.size())
+                    std::copy_n(before.begin() + offset, std::min<std::size_t>(model.blockSize, before.size() - offset), block.begin());
+                image.WriteBlock(geometry.SectorOfCluster(chain[index]) + sector, infra::MakeRange(block));
+            }
+        }
+
+        fs::ShortEntry entry;
+        entry.name.bytes = { 'F', 'I', 'L', 'E', ' ', ' ', ' ', ' ', 'B', 'I', 'N' };
+        entry.attributes = fs::FatAttributes::archive;
+        entry.firstCluster = chain.front();
+        entry.size = static_cast<uint32_t>(before.size());
+        builder.AddEntries(0, "", entry);
+    }
+
     void Operate(metrics::SweepContext<hal::BlockDevice>& context)
     {
         metrics::SweepVolume volume{ context };
@@ -208,6 +255,12 @@ public:
 
         if (sweepCase.expectedSize != 0)
             volume.ExpectSize(*file, sweepCase.expectedSize);
+
+        if (sweepCase.keptClusters.has_value())
+        {
+            file->Seek(TruncatePosition(sweepCase, clusterBytes));
+            volume.Truncate(*file);
+        }
 
         uint8_t seed = 100;
         for (const auto& write : sweepCase.writes)
@@ -265,7 +318,7 @@ public:
 
 TEST_P(FatPowerCut, every_cut_leaves_a_consistent_volume_with_previous_or_new_contents)
 {
-    if (sweepCase.atFatSectorEdge && model.numberOfBlocks / ClusterBytesOf(model) * model.blockSize * 3 / 2 < model.blockSize * 2)
+    if ((sweepCase.atFatSectorEdge || sweepCase.reverseChain) && model.numberOfBlocks / ClusterBytesOf(model) * model.blockSize * 3 / 2 < model.blockSize * 2)
         GTEST_SKIP() << "the FAT of " << model.name << " has no second sector";
 
     SweepEveryMode(model, sweepCase.name, [this](const SweepMode& mode)
@@ -281,7 +334,11 @@ INSTANTIATE_TEST_SUITE_P(Fat, FatPowerCut,
             SweepCase{ "append_across_fat_sector", 1, -100, true, fs::OpenMode::append, { { std::nullopt, 200 } }, false, true },
             SweepCase{ "overwrite_three_sectors", 1, 4 * 512, true, fs::OpenMode::readWrite, { { 512, 3 * 512 } }, false, false },
             SweepCase{ "close_after_writes", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 300 }, { std::nullopt, 300 }, { std::nullopt, 300 } }, true, false },
-            SweepCase{ "expect_size_write_close", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 2000 }, { std::nullopt, 2000 } }, true, false, 8000 })),
+            SweepCase{ "expect_size_write_close", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 2000 }, { std::nullopt, 2000 } }, true, false, 8000 },
+            SweepCase{ "truncate_middle", 4, -100, true, fs::OpenMode::readWrite, {}, false, false, 0, 2 },
+            SweepCase{ "truncate_reverse_chain_across_fat_sectors", 4, -100, true, fs::OpenMode::readWrite, {}, false, false, 0, 2, true },
+            SweepCase{ "truncate_zero", 3, -100, true, fs::OpenMode::readWrite, {}, true, false, 0, 0 },
+            SweepCase{ "open_write_existing", 3, -100, true, fs::OpenMode::write, {}, true, false })),
     ParameterName);
 
 namespace
@@ -290,7 +347,8 @@ namespace
     {
         create,
         remove,
-        makeDirectory
+        makeDirectory,
+        rename
     };
 
     struct EntryCase
@@ -343,6 +401,7 @@ public:
     std::string parent{ entryCase.inDirectory ? "/Directory" : "" };
     std::string path{ parent + (entryCase.operation == EntryOperation::makeDirectory ? "/New Directory" : "/Created Long Name.txt") };
     std::string inside{ path + "/Inside.txt" };
+    std::string renamed{ entryCase.inDirectory ? "/Moved Long Name" : "/Renamed Long Name.txt" };
     std::vector<uint8_t> data{ Pattern(entryCase.bytes, 7) };
     std::size_t originalEntries{ 0 };
 
@@ -364,9 +423,15 @@ public:
         auto reserved = entryCase.inDirectory ? 2 : 1;
         AddFillers(builder, directory, static_cast<uint32_t>(entryCase.fillersBeforeClusterEnd < 0 ? static_cast<int32_t>(entriesPerCluster) - reserved + entryCase.fillersBeforeClusterEnd : entryCase.fillersBeforeClusterEnd));
 
-        if (entryCase.operation == EntryOperation::remove && entryCase.directory)
-            builder.AddDirectory(directory, "Created Long Name.txt", "CREATE~1TXT");
-        else if (entryCase.operation == EntryOperation::remove)
+        auto existing = entryCase.operation == EntryOperation::remove || entryCase.operation == EntryOperation::rename;
+
+        if (existing && entryCase.directory)
+        {
+            auto created = builder.AddDirectory(directory, "Created Long Name.txt", "CREATE~1TXT");
+            if (entryCase.operation == EntryOperation::rename)
+                builder.AddFile(created, "Inside.txt", "INSIDE  TXT", infra::MakeRange(data));
+        }
+        else if (existing)
             builder.AddFile(directory, "Created Long Name.txt", "CREATE~1TXT", infra::MakeRange(data), entryCase.fragmented);
         else if (entryCase.operation == EntryOperation::makeDirectory)
             FillWithStaleData(builder, image, builder.Geometry().type == fs::FatType::fat32 ? builder.RootCluster() + 1 : 2, model.blockSize);
@@ -381,6 +446,8 @@ public:
 
         if (entryCase.operation == EntryOperation::remove)
             volume.Remove(path);
+        else if (entryCase.operation == EntryOperation::rename)
+            volume.Rename(path, renamed);
         else if (entryCase.operation == EntryOperation::makeDirectory)
         {
             if (volume.MakeDirectory(path) == fs::Result::success)
@@ -412,7 +479,7 @@ public:
         if (check.problem)
             return check.problem;
 
-        auto problem = entryCase.operation == EntryOperation::remove ? VerifyRemoval(reader, check, mode) : VerifyCreation(reader, check, mode);
+        auto problem = VerifyOperation(reader, check, mode);
         if (problem)
             return problem;
 
@@ -421,6 +488,17 @@ public:
             return "the volume does not mount";
 
         return std::nullopt;
+    }
+
+    std::optional<std::string> VerifyOperation(const metrics::SectorReader& reader, const metrics::FatCheck& check, metrics::FatCheckMode mode) const
+    {
+        if (entryCase.operation == EntryOperation::remove)
+            return VerifyRemoval(reader, check, mode);
+
+        if (entryCase.operation == EntryOperation::rename)
+            return VerifyRename(reader, check, mode);
+
+        return VerifyCreation(reader, check, mode);
     }
 
     std::optional<std::string> VerifyCreation(const metrics::SectorReader& reader, const metrics::FatCheck& check, metrics::FatCheckMode mode) const
@@ -456,6 +534,50 @@ public:
             return "the file that was being removed lost its contents";
 
         return std::nullopt;
+    }
+
+    std::optional<std::string> VerifyRename(const metrics::SectorReader& reader, const metrics::FatCheck& check, metrics::FatCheckMode mode) const
+    {
+        const auto* old = check.Find(path);
+        const auto* moved = check.Find(renamed);
+        auto both = old != nullptr && moved != nullptr;
+        auto expectedEntries = originalEntries + (both ? (entryCase.directory ? 2 : 1) : 0);
+
+        if (old == nullptr && moved == nullptr)
+            return "the entry is under neither name";
+
+        if (mode == metrics::FatCheckMode::strict && old != nullptr)
+            return "the old name is still there";
+
+        if (check.entries.size() != expectedEntries)
+            return std::to_string(check.entries.size()) + " entries instead of " + std::to_string(expectedEntries);
+
+        for (const auto* entry : { old, moved })
+            if (auto problem = VerifyRenamed(reader, check, entry, mode))
+                return problem;
+
+        return std::nullopt;
+    }
+
+    std::optional<std::string> VerifyRenamed(const metrics::SectorReader& reader, const metrics::FatCheck& check, const metrics::FatImageEntry* entry, metrics::FatCheckMode mode) const
+    {
+        if (entry == nullptr)
+            return std::nullopt;
+
+        const auto* file = entryCase.directory ? check.Find(entry->path + "/Inside.txt") : entry;
+        if (file == nullptr || metrics::ReadContents(reader, check, *file) != data)
+            return entry->path + " lost its contents";
+
+        if (entryCase.directory && mode == metrics::FatCheckMode::strict && ParentOf(reader, check, *entry) != 0)
+            return entry->path + ": the .. entry does not point at the new parent";
+
+        return std::nullopt;
+    }
+
+    static uint32_t ParentOf(const metrics::SectorReader& reader, const metrics::FatCheck& check, const metrics::FatImageEntry& directory)
+    {
+        auto sector = reader(check.layout.SectorOfCluster(directory.firstCluster));
+        return fs::DecodeShortEntry(infra::Head(infra::DiscardHead(infra::MakeRange(sector), fs::directoryEntryBytes), fs::directoryEntryBytes)).firstCluster;
     }
 
     metrics::SweepResult Sweep(const SweepMode& mode)
@@ -494,5 +616,7 @@ INSTANTIATE_TEST_SUITE_P(Fat, FatEntryPowerCut,
             EntryCase{ "remove_fragmented_file", EntryOperation::remove, false, 0, 3000, false, true },
             EntryCase{ "remove_spanning_sectors", EntryOperation::remove, false, 13, 600, false },
             EntryCase{ "remove_directory", EntryOperation::remove, true, 0, 0, false, false, true },
-            EntryCase{ "make_directory_then_create_and_sync", EntryOperation::makeDirectory, false, 0, 600, false })),
+            EntryCase{ "make_directory_then_create_and_sync", EntryOperation::makeDirectory, false, 0, 600, false },
+            EntryCase{ "rename_file", EntryOperation::rename, false, 0, 3000, false },
+            EntryCase{ "rename_directory_across_parents", EntryOperation::rename, true, 0, 600, false, false, true })),
     EntryParameterName);

@@ -23,7 +23,7 @@ namespace fs
         , public infra::IntrusiveList<FatFile>::NodeType
     {
     public:
-        template<std::size_t Extents>
+        template<std::size_t ExtentCount>
         class WithExtents;
 
         FatFile(FatVolume& volume, FatExtentCache& extents);
@@ -34,6 +34,7 @@ namespace fs
         void Open(const FatScannedEntry& scanned, OpenMode mode);
         FatOpenFile& State();
         const FatOpenFile& State() const;
+        FatExtentCache& Extents() const;
         void Detach();
 
         uint32_t Size() const override;
@@ -52,6 +53,7 @@ namespace fs
             none,
             read,
             write,
+            truncate,
             expectSize,
             sync,
             close,
@@ -64,6 +66,7 @@ namespace fs
         void Granted();
         void StartRead();
         void StartWrite();
+        void StartTruncate();
         void StartExpectSize();
         void StartSync();
         void ReadDone(Result result, std::size_t bytesRead);
@@ -96,9 +99,9 @@ namespace fs
         };
     }
 
-    template<std::size_t Extents>
+    template<std::size_t ExtentCount>
     class FatFile::WithExtents
-        : private detail::FatFileExtents<Extents>
+        : private detail::FatFileExtents<ExtentCount>
         , public FatFile
     {
     public:

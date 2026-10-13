@@ -90,6 +90,8 @@ target_sources(fs.fat PRIVATE
     FatRead.hpp
     FatRemove.cpp
     FatRemove.hpp
+    FatRename.cpp
+    FatRename.hpp
     FatReservation.cpp
     FatReservation.hpp
     FatRunLocator.cpp
@@ -112,6 +114,8 @@ target_sources(fs.fat PRIVATE
     FatTableWriter.hpp
     FatTimestamp.cpp
     FatTimestamp.hpp
+    FatTruncation.cpp
+    FatTruncation.hpp
     FatUnmount.cpp
     FatUnmount.hpp
     FatUsage.cpp

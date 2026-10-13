@@ -17,12 +17,13 @@ namespace fs
 
     FatNameScan::~FatNameScan() = default;
 
-    void FatNameScan::Scan(uint32_t directory, infra::BoundedConstString name, uint8_t slots, const std::optional<ShortNameBytes>& basis, const infra::Function<void(Result result)>& onDone)
+    void FatNameScan::Scan(uint32_t directory, infra::BoundedConstString name, uint8_t slots, const std::optional<ShortNameBytes>& basis, const std::optional<FatEntryPosition>& except, const infra::Function<void(Result result)>& onDone)
     {
         this->directory = directory;
         this->name = name;
         this->slots = slots;
         this->basis = basis;
+        this->except = except;
         this->onDone = onDone;
         alias = std::nullopt;
         found = std::nullopt;
@@ -75,7 +76,7 @@ namespace fs
             return !aliasInUse;
         }
 
-        if (NameMatches(entry, name))
+        if (NameMatches(entry, name) && except != entry.shortEntry)
         {
             found = entry;
             return false;

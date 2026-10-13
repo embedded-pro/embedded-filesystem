@@ -103,6 +103,11 @@ namespace fs
         return chainFree;
     }
 
+    FatTableWriter& FatVolume::TableWriter()
+    {
+        return tableWriter;
+    }
+
     FatClosedFiles& FatVolume::ClosedFiles()
     {
         return closedFiles;
@@ -193,6 +198,28 @@ namespace fs
         return std::ranges::any_of(openFiles, [cluster](const FatFile& file)
             {
                 return file.State().reservation.Contains(cluster);
+            });
+    }
+
+    Result FatVolume::Changeable(const FatScannedEntry& entry) const
+    {
+        if ((entry.entry.firstCluster != 0 || IsDirectory(entry)) && !Geometry().IsCluster(entry.entry.firstCluster))
+            return Result::corrupted;
+
+        return IsOpen(entry) ? Result::busy : Result::success;
+    }
+
+    bool FatVolume::IsOpen(const FatScannedEntry& entry) const
+    {
+        if (IsDirectory(entry))
+            return std::ranges::any_of(openDirectories, [&entry](const FatDirectory& directory)
+                {
+                    return directory.FirstCluster() == entry.entry.firstCluster;
+                });
+
+        return std::ranges::any_of(openFiles, [&entry](const FatFile& file)
+            {
+                return file.State().entry == entry.shortEntry;
             });
     }
 

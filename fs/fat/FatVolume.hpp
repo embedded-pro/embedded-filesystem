@@ -25,11 +25,13 @@
 #include "fs/fat/FatPathWalk.hpp"
 #include "fs/fat/FatRead.hpp"
 #include "fs/fat/FatRemove.hpp"
+#include "fs/fat/FatRename.hpp"
 #include "fs/fat/FatRunLocator.hpp"
 #include "fs/fat/FatStat.hpp"
 #include "fs/fat/FatSync.hpp"
 #include "fs/fat/FatTableWriter.hpp"
 #include "fs/fat/FatTimestamp.hpp"
+#include "fs/fat/FatTruncation.hpp"
 #include "fs/fat/FatUnmount.hpp"
 #include "fs/fat/FatUsage.hpp"
 #include "fs/fat/FatVolumeState.hpp"
@@ -88,7 +90,7 @@ namespace fs
     class FatDirectory;
     class FatFile;
 
-    using FatOperation = std::variant<std::monostate, FatMount, FatUnmount, FatStat, FatOpenDirectory, FatOpen, FatMakeDirectory, FatRemove, FatRead, FatWrite, FatSync, FatExpectSize, FatUsage>;
+    using FatOperation = std::variant<std::monostate, FatMount, FatUnmount, FatStat, FatOpenDirectory, FatOpen, FatMakeDirectory, FatRemove, FatRename, FatRead, FatWrite, FatSync, FatExpectSize, FatTruncation, FatUsage>;
 
     struct FatVolumeParts
     {
@@ -123,6 +125,7 @@ namespace fs
         FatAllocator& Allocator();
         FatEntryUpdate& EntryUpdate();
         FatChainFree& ChainFree();
+        FatTableWriter& TableWriter();
         FatClosedFiles& ClosedFiles();
         FatFreeSpaceScan& FreeSpace();
         infra::IntrusiveList<FatFile>& OpenFiles();
@@ -131,6 +134,8 @@ namespace fs
         FatOperation& Operation();
         const FatReservations& Reservations() const;
         FatDateTime Timestamp() const;
+        Result Changeable(const FatScannedEntry& entry) const;
+        bool IsOpen(const FatScannedEntry& entry) const;
 
         uint32_t Generation() const;
         bool Available() const;

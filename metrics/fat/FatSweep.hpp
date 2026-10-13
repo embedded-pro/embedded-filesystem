@@ -46,10 +46,12 @@ namespace metrics
         infra::SharedPtr<fs::File> Open(const std::string& path, fs::OpenMode mode);
         fs::Result Write(fs::File& file, infra::ConstByteRange data);
         fs::Result ExpectSize(fs::File& file, uint32_t size);
+        fs::Result Truncate(fs::File& file);
         fs::Result Sync(fs::File& file);
         fs::Result Close(fs::File& file);
         fs::Result Remove(const std::string& path);
         fs::Result MakeDirectory(const std::string& path);
+        fs::Result Rename(const std::string& from, const std::string& to);
 
     private:
         template<class Start>

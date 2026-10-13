@@ -69,9 +69,12 @@ namespace fs
         StartPathCall(path, FatRemoveCall{ path, onDone });
     }
 
-    void FatFileSystem::Rename(infra::BoundedConstString, infra::BoundedConstString, const infra::Function<void(Result result)>& onDone)
+    void FatFileSystem::Rename(infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone)
     {
-        volume.Defer(onDone, IsMounted() ? Result::unsupported : Unavailable());
+        if (auto validation = ValidatePath(to, volume.Limits()); IsMounted() && validation != Result::success)
+            volume.Defer(onDone, validation);
+        else
+            StartPathCall(from, FatRenameCall{ from, to, onDone });
     }
 
     void FatFileSystem::MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
@@ -249,6 +252,8 @@ namespace fs
             volume.Operation().emplace<FatMakeDirectory>(volume, std::move(*makeDirectory), finished).Start();
         else if (auto* remove = std::get_if<FatRemoveCall>(&call))
             volume.Operation().emplace<FatRemove>(volume, std::move(*remove), finished).Start();
+        else if (auto* rename = std::get_if<FatRenameCall>(&call))
+            volume.Operation().emplace<FatRename>(volume, std::move(*rename), finished).Start();
         else
             volume.Operation().emplace<FatUsage>(volume, std::move(std::get<FatUsageCall>(call)), finished).Start();
     }
