@@ -139,7 +139,7 @@ namespace fs
 
     void FatNameScan::MarkTail(const ShortNameBytes& name)
     {
-        if (auto tail = NumericTailOf(name, *basis); tail && *tail <= tails)
+        if (auto tail = NumericTailOf(name, *basis); tail.has_value() && *tail <= tails)
             usedTails |= 1u << (*tail - 1);
     }
 

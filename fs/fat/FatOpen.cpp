@@ -130,7 +130,7 @@ namespace fs
             Finish(Result::tooManyOpenFiles);
         else if (exact)
             CreateWith(*exact);
-        else if (auto tail = scan.FreeTail())
+        else if (auto tail = scan.FreeTail(); tail.has_value())
             CreateWith(ShortName{ WithNumericTail(alias, *tail) });
         else
         {
