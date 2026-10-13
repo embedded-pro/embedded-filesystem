@@ -34,6 +34,7 @@ namespace fs
         void Take(uint32_t cluster);
         void Taken(Result result, uint32_t cluster);
         void Link(Result result);
+        void LinkAllocated(Result result);
         void LinkLast(Result result);
         void Done(Result result);
         uint32_t Preferred() const;

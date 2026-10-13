@@ -40,7 +40,7 @@ namespace fs
     {
         const auto& state = volume.State();
 
-        if (!state.geometry.fsInfoSector || !state.tableChanged)
+        if (!state.geometry.fsInfoSector.has_value() || !state.tableChanged)
         {
             Flush(Result::success);
             return;
