@@ -50,6 +50,7 @@ namespace metrics
         std::size_t ramBytes;
         Better better;
         std::optional<bool> pass;
+        bool diagnostic{ false };
     };
 
     class Report

@@ -156,6 +156,13 @@ class RegressionTest(unittest.TestCase):
         self.assertFalse(compared["pass"])
         self.assertEqual(100.0, compared["baselineValue"])
 
+    def test_a_diagnostic_worse_by_more_than_5_percent_is_not_a_regression(self):
+        compared = self.compared(result(value=80.0, diagnostic=True), result(value=100.0))
+
+        self.assertNotIn("regression", compared)
+        self.assertNotIn("pass", compared)
+        self.assertEqual(100.0, compared["baselineValue"])
+
     def test_a_reported_metric_worse_by_less_than_5_percent_passes(self):
         compared = self.compared(result(value=96.0), result(value=100.0))
 

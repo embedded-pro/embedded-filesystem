@@ -16,6 +16,7 @@ Baselines run under the same conditions: the same device model, the same workloa
 FatFs has no such cache: it works with one sector buffer per volume and one per file, so it uses less RAM than `embedded-filesystem/fat`, and both numbers are reported.
 FatFs and littlefs are each measured twice: with their default configuration, and with the options that help the workload enabled, such as fast seek and `f_expand` for FatFs, so that the comparison is not made against an untuned baseline.
 A metric with a numeric target fails the build when the target is missed; a metric marked as reported is tracked, and fails the build when it becomes worse than on `main` by more than 5 %.
+Diagnostics are only shown: P-1 with torn sector writes measures a fault that FAT does not protect against, and its share moves with the number of cut points rather than with the safety of the volume.
 
 ## Measurement setup
 
@@ -240,7 +241,7 @@ Every metric executable writes a fragment with the device models it used and one
 
 A target is either a bound, such as `<= 1.1`, which the metric executable decides, or a comparison with other subjects, such as `>= baselines` (the best of FatFs and littlefs) or `<= fatfs` (the best FatFs configuration), which is decided when the fragments are merged.
 `metrics/report/merge_report.py` merges the fragments into `metrics.json`, with the same shape, and writes a Markdown summary of it, `metrics.md`.
-Given the `metrics.json` of `main` with `--baseline`, it marks a reported metric of embedded-filesystem as failed when it is worse than on `main` by more than 5 %, in the direction given by `better`; results on a device model whose parameters changed are not compared.
+Given the `metrics.json` of `main` with `--baseline`, it marks a reported metric of embedded-filesystem as failed when it is worse than on `main` by more than 5 %, in the direction given by `better`; results on a device model whose parameters changed, and results that the metric executables mark as `diagnostic`, are not compared.
 The metrics workflow posts the summary as a comment on the pull request, updating the same comment on every push.
 The `metrics.json` of `main` is kept as a workflow artifact and used to detect regressions.
 

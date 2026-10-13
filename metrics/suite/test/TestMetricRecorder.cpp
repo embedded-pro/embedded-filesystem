@@ -31,6 +31,20 @@ TEST_F(MetricRecorderTest, record_adds_a_reported_result_for_the_subject_and_dev
     EXPECT_EQ(std::nullopt, result.pass);
     EXPECT_EQ(1234, result.ramBytes);
     EXPECT_EQ(metrics::Better::lower, result.better);
+    EXPECT_FALSE(result.diagnostic);
+}
+
+TEST_F(MetricRecorderTest, record_diagnostic_adds_a_result_that_is_not_compared_with_main)
+{
+    recorder.RecordDiagnostic("P-1", "append torn", "ratio", metrics::Better::higher, 0.5);
+
+    ASSERT_EQ(1, report.Results().size());
+    const auto& result = report.Results()[0];
+    EXPECT_EQ("P-1", result.metric);
+    EXPECT_EQ("append torn", result.workload);
+    EXPECT_DOUBLE_EQ(0.5, result.value);
+    EXPECT_EQ(std::nullopt, result.fill);
+    EXPECT_TRUE(result.diagnostic);
 }
 
 TEST_F(MetricRecorderTest, a_clean_run_has_no_unexpected_result)

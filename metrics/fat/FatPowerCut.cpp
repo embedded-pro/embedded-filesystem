@@ -184,7 +184,10 @@ namespace
         for (const auto& mode : modes)
         {
             auto result = sweep(mode);
-            recorder.Record("P-1", caseName + " " + mode.name, "ratio", metrics::Better::higher, result.ConsistentShare());
+            if (mode.mustHold)
+                recorder.Record("P-1", caseName + " " + mode.name, "ratio", metrics::Better::higher, result.ConsistentShare());
+            else
+                recorder.RecordDiagnostic("P-1", caseName + " " + mode.name, "ratio", metrics::Better::higher, result.ConsistentShare());
 
             if (mode.mustHold)
             {
