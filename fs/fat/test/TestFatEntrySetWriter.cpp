@@ -363,7 +363,7 @@ TEST_F(FatEntrySetWriterTest, failed_write_while_zeroing_a_new_cluster_is_report
     auto directory = FullDirectory();
     for (uint32_t sector = 0; sector != 4; ++sector)
     {
-        cache.Modify(geometry.firstDataSector + 100 + sector, 2, [](fs::Result, infra::ByteRange) {});
+        cache.Modify(geometry.firstDataSector + 100 + 2 * sector, 2, [](fs::Result, infra::ByteRange) {});
         ExecuteAllActions();
     }
     device.FailNextOperationWith(hal::BlockDevice::Result::timeout, 2);

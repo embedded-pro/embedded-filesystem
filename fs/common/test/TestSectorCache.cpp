@@ -130,6 +130,19 @@ namespace
                 });
         }
 
+        template<std::size_t Count>
+        void ExpectWriteRun(uint32_t sector, const std::array<Sector, Count>& run)
+        {
+            std::array<uint8_t, Count * Sector{}.size()> expected{};
+            for (std::size_t index = 0; index != Count; ++index)
+                std::copy(run[index].begin(), run[index].end(), expected.begin() + index * Sector{}.size());
+
+            EXPECT_CALL(device, WriteBlocks(infra::ContentsEqual(expected), sector, testing::_)).WillOnce([this](infra::ConstByteRange, uint32_t, const infra::Function<void(hal::BlockDevice::Result)>& onDone)
+                {
+                    deviceDone = onDone;
+                });
+        }
+
         void ExpectFlush()
         {
             EXPECT_CALL(device, Flush(testing::_)).WillOnce([this](const infra::Function<void(hal::BlockDevice::Result)>& onDone)
@@ -323,13 +336,149 @@ TEST_F(SectorCacheTest, write_back_issues_one_device_request_at_a_time)
 TEST_F(SectorCacheTest, write_back_stops_at_first_failure_and_keeps_sectors_modified)
 {
     Overwrite(5, 0, a);
-    Overwrite(6, 0, b);
+    Overwrite(9, 0, b);
     ExpectWrite(5, a);
     WriteBack();
     CompleteDevice(hal::BlockDevice::Result::failed);
     ExpectWriteBackDone(fs::Result::deviceError);
 
-    ExpectWritesCompleted({ { 5, a }, { 6, b } });
+    ExpectWritesCompleted({ { 5, a }, { 9, b } });
+}
+
+TEST_F(SectorCacheTest, write_back_writes_consecutive_sectors_of_one_rank_in_one_request)
+{
+    Overwrite(5, 0, a);
+    Overwrite(6, 0, b);
+    Overwrite(7, 0, c);
+
+    ExpectWriteRun(5, std::array<Sector, 3>{ a, b, c });
+    WriteBack();
+    CompleteDevice();
+    ExpectWriteBackDone();
+
+    WriteBack();
+    ExpectWriteBackDone();
+}
+
+TEST_F(SectorCacheTest, write_back_splits_a_run_where_the_rank_changes)
+{
+    Overwrite(5, 0, a);
+    Overwrite(6, 1, b);
+
+    ExpectWritesCompleted({ { 5, a }, flushed, { 6, b } });
+}
+
+TEST_F(SectorCacheTest, consecutive_sectors_in_slots_out_of_order_are_written_separately)
+{
+    Overwrite(6, 0, a);
+    Overwrite(5, 0, b);
+
+    ExpectWritesCompleted({ { 5, b }, { 6, a } });
+}
+
+TEST_F(SectorCacheTest, failed_run_keeps_all_its_sectors_modified)
+{
+    Overwrite(5, 0, a);
+    Overwrite(6, 0, b);
+    ExpectWriteRun(5, std::array<Sector, 2>{ a, b });
+    WriteBack();
+    CompleteDevice(hal::BlockDevice::Result::failed);
+    ExpectWriteBackDone(fs::Result::deviceError);
+
+    ExpectWriteRun(5, std::array<Sector, 2>{ a, b });
+    WriteBack();
+    CompleteDevice();
+    ExpectWriteBackDone();
+}
+
+TEST_F(SectorCacheTest, write_takes_the_slot_after_the_previous_sector)
+{
+    Overwrite(5, 0, a);
+    Load(30, c);
+    Overwrite(6, 0, b);
+
+    ExpectWriteRun(5, std::array<Sector, 2>{ a, b });
+    WriteBack();
+    CompleteDevice();
+    ExpectWriteBackDone();
+
+    ExpectRead(30, c);
+    Read(30);
+    CompleteDevice();
+    EXPECT_CALL(readDone, callback(fs::Result::success, testing::Optional(c)));
+    ExecuteAllActions();
+}
+
+TEST_F(SectorCacheTest, write_moves_a_modified_sector_out_of_the_slot_after_the_previous_sector)
+{
+    Overwrite(5, 0, a);
+    Overwrite(40, 1, c);
+    Overwrite(6, 0, b);
+
+    testing::InSequence sequence;
+    ExpectWriteRun(5, std::array<Sector, 2>{ a, b });
+    ExpectFlush();
+    ExpectWrite(40, c);
+    WriteBack();
+    for (int request = 0; request != 3; ++request)
+        CompleteDevice();
+    ExpectWriteBackDone();
+}
+
+TEST_F(SectorCacheTest, write_does_not_move_a_modified_sector_to_a_lower_slot)
+{
+    Overwrite(5, 0, a);
+    Overwrite(40, 1, c);
+    Overwrite(41, 1, d);
+    ExpectWrite(5, a);
+    Cache().Overwrite(6, 0, [this](fs::Result result, infra::ByteRange buffer)
+        {
+            infra::Copy(infra::MakeRange(b), buffer);
+            modifyDone.callback(result);
+        });
+    CompleteDevice();
+    EXPECT_CALL(modifyDone, callback(fs::Result::success));
+    ExecuteAllActions();
+
+    testing::InSequence sequence;
+    ExpectWrite(6, b);
+    ExpectFlush();
+    ExpectWriteRun(40, std::array<Sector, 2>{ c, d });
+    WriteBack();
+    for (int request = 0; request != 3; ++request)
+        CompleteDevice();
+    ExpectWriteBackDone();
+}
+
+TEST_F(SectorCacheTest, write_takes_a_free_slot_before_a_clean_one)
+{
+    Load(30, c);
+    Overwrite(9, 0, a);
+
+    ExpectWritesCompleted({ { 9, a } });
+    ExpectReadHit(30, c);
+}
+
+TEST_F(SectorCacheTest, eviction_writes_the_whole_run_around_its_victim)
+{
+    Overwrite(5, 0, a);
+    Overwrite(6, 0, b);
+    Overwrite(7, 0, c);
+    Modify(5, 0, a);
+    EXPECT_CALL(modifyDone, callback(fs::Result::success));
+    ExecuteAllActions();
+
+    testing::InSequence sequence;
+    ExpectWriteRun(5, std::array<Sector, 3>{ a, b, c });
+    ExpectRead(50, d);
+    Read(50);
+    CompleteDevice();
+    CompleteDevice();
+    EXPECT_CALL(readDone, callback(fs::Result::success, testing::Optional(d)));
+    ExecuteAllActions();
+
+    WriteBack();
+    ExpectWriteBackDone();
 }
 
 TEST_F(SectorCacheTest, eviction_prefers_clean_sector_over_modified_one)
@@ -452,6 +601,40 @@ TEST_F(SectorCacheTest, mirrored_victim_is_written_to_every_copy_in_turn)
 
     EXPECT_CALL(readDone, callback(fs::Result::success, testing::Optional(d)));
     ExecuteAllActions();
+}
+
+TEST_F(SectorCacheTest, discarded_sectors_are_not_part_of_a_run)
+{
+    Overwrite(5, 0, a);
+    Overwrite(6, 0, b);
+    Overwrite(7, 0, c);
+    cache.Discard(5, 7);
+
+    ExpectWritesCompleted({ { 7, c } });
+}
+
+TEST_F(SectorCacheTest, mirrored_run_is_written_once_to_every_copy)
+{
+    cache.SetMirroredRegion(fs::SectorCache::MirroredRegion{ 32, 100, 2 });
+    Overwrite(40, 1, a);
+    Overwrite(41, 1, b);
+
+    testing::InSequence sequence;
+    ExpectWriteRun(40, std::array<Sector, 2>{ a, b });
+    ExpectWriteRun(140, std::array<Sector, 2>{ a, b });
+    WriteBack();
+    CompleteDevice();
+    CompleteDevice();
+    ExpectWriteBackDone();
+}
+
+TEST_F(SectorCacheTest, run_ends_at_the_end_of_the_mirrored_region)
+{
+    cache.SetMirroredRegion(fs::SectorCache::MirroredRegion{ 32, 100, 2 });
+    Overwrite(131, 1, a);
+    Overwrite(132, 1, b);
+
+    ExpectWritesCompleted({ { 131, a }, { 231, a }, { 132, b } });
 }
 
 TEST_F(SectorCacheTest, sector_outside_mirrored_region_is_written_once)

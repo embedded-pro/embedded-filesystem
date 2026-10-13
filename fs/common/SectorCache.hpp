@@ -80,12 +80,17 @@ namespace fs
         void WriteBackAll();
         void WriteNextModified();
         void AllWritten();
-        void WriteEntry(Entry& entry);
+        void WriteRunOf(Entry& entry);
         void WriteCopy();
         void OnWritten(hal::BlockDevice::Result deviceResult);
         void Complete(Result completionResult);
         void Deliver();
 
+        Entry& SlotFor(uint32_t sector);
+        Entry* AfterPrevious(uint32_t sector) const;
+        Entry* FirstAvailable(Entry* from) const;
+        void Relocate();
+        std::size_t IndexOf(const Entry& entry) const;
         void Touch(Entry& entry);
         void MakeLeastRecent(Entry& entry);
         infra::ByteRange BufferOf(const Entry& entry) const;
@@ -102,7 +107,8 @@ namespace fs
         uint32_t requestedSector{ 0 };
         uint8_t requestedRank{ 0 };
         Entry* target{ nullptr };
-        Entry* writing{ nullptr };
+        Entry* relocation{ nullptr };
+        infra::MemoryRange<Entry> writing;
         uint8_t copy{ 0 };
         bool writingVictim{ false };
         Result result{ Result::success };
