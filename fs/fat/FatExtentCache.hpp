@@ -43,6 +43,8 @@ namespace fs
         bool Merge(const FatExtent& extent);
         void Replace(const FatExtent& extent);
         void Touch(std::size_t position);
+        infra::MemoryRange<FatExtent> InUse();
+        infra::MemoryRange<const FatExtent> InUse() const;
 
     private:
         infra::MemoryRange<FatExtent> storage;
