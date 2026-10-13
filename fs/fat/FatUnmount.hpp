@@ -16,7 +16,7 @@ namespace fs
         FatUnmount& operator=(const FatUnmount& other) = delete;
         ~FatUnmount();
 
-        void Start();
+        void Start() const;
 
     private:
         void CommitNextFile() const;

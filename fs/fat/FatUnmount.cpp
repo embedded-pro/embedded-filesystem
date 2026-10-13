@@ -13,7 +13,7 @@ namespace fs
 
     FatUnmount::~FatUnmount() = default;
 
-    void FatUnmount::Start()
+    void FatUnmount::Start() const
     {
         CommitNextFile();
     }
