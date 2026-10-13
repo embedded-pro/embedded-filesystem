@@ -14,6 +14,7 @@ namespace fs
 
         bool IsBoundary(uint32_t cluster) const;
         uint32_t NextBoundaryAfter(uint32_t cluster) const;
+        uint32_t StartOf(uint32_t cluster) const;
         bool operator==(const FatAllocationUnits& other) const;
     };
 

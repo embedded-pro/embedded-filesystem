@@ -152,7 +152,7 @@ Clusters are allocated in this order:
 
 1. A file with a reservation takes its clusters from the reservation.
 2. A file that grows takes the cluster after its last cluster when it is free.
-3. Otherwise a file takes the first free cluster at or after the cursor within the allocation unit of the cursor, else the next free cluster after it, wrapping around at the end of the volume.
+3. Otherwise the first cluster of a new chain is the first free cluster of the allocation unit of the cursor, so that new files take the clusters that removed files freed in the unit the card is already writing; any other cluster is the first free cluster at or after the cursor. Either search continues past the unit, wrapping around at the end of the volume. A search from the start of the unit reads the FAT sectors that cover it, one or two on a card formatted to the SD specification.
 4. A reservation that would cross an allocation unit boundary starts at the next boundary instead, when a free run of its length starts there.
 5. A file opened in `append` mode that has no clusters yet starts at the first allocation unit boundary at or after the cursor, wrapping around, whose whole allocation unit the cache of free runs holds, so that a log fills allocation units one after the other; when the cache holds no such allocation unit, rule 3 applies.
 6. When the allocation unit of the card is not known, the rules about allocation units do not apply.

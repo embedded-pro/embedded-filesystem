@@ -105,6 +105,13 @@ namespace
             allocator.Reset();
         }
 
+        void UseEveryClusterBefore(uint32_t end, uint32_t except)
+        {
+            for (uint32_t cluster = 2; cluster != end; ++cluster)
+                if (cluster != except)
+                    builder->SetFatEntry(cluster, EndOfChain());
+        }
+
         fs::FatVolumeState state;
         fs::FatTableWriter writer{ cache, state.geometry };
         RangeReservations reservations;
@@ -200,6 +207,67 @@ TEST_F(FatAllocatorTest, chain_grown_at_a_cluster_in_use_starts_at_the_cursor)
     builder->SetFatEntry(40, EndOfChain());
 
     ExpectGrowAt(40, 1, fs::Result::success, 2, 1);
+}
+
+TEST_F(FatAllocatorTest, new_chain_starts_at_the_first_free_cluster_of_the_allocation_unit_of_the_cursor)
+{
+    state.allocationUnits = fs::FatAllocationUnits{ 64, 2 };
+    UseEveryClusterBefore(200, 196);
+    StartAt(200);
+
+    ExpectGrow(std::nullopt, 2, fs::Result::success, 196, 2);
+    Flush();
+
+    EXPECT_EQ(200u, builder->FatEntry(196));
+    EXPECT_EQ(201u, allocator.Cursor());
+}
+
+TEST_F(FatAllocatorTest, new_chain_takes_no_free_cluster_before_the_allocation_unit_of_the_cursor)
+{
+    state.allocationUnits = fs::FatAllocationUnits{ 64, 2 };
+    UseEveryClusterBefore(200, 150);
+    StartAt(200);
+
+    ExpectGrow(std::nullopt, 1, fs::Result::success, 200, 1);
+}
+
+TEST_F(FatAllocatorTest, new_chain_starts_at_the_cursor_when_the_allocation_unit_is_unknown)
+{
+    UseEveryClusterBefore(200, 196);
+    StartAt(200);
+
+    ExpectGrow(std::nullopt, 1, fs::Result::success, 200, 1);
+}
+
+TEST_F(FatAllocatorTest, file_whose_next_cluster_is_in_use_takes_the_cursor_rather_than_an_earlier_free_cluster)
+{
+    state.allocationUnits = fs::FatAllocationUnits{ 64, 2 };
+    UseEveryClusterBefore(200, 196);
+    StartAt(200);
+
+    ExpectGrow(198, 1, fs::Result::success, 200, 1);
+}
+
+TEST_F(FatAllocatorTest, chain_grown_at_a_cluster_in_use_starts_at_the_first_free_cluster_of_the_allocation_unit_of_the_cursor)
+{
+    state.allocationUnits = fs::FatAllocationUnits{ 64, 2 };
+    UseEveryClusterBefore(200, 196);
+    StartAt(200);
+    builder->SetFatEntry(300, EndOfChain());
+
+    ExpectGrowAt(300, 1, fs::Result::success, 196, 1);
+}
+
+TEST_F(FatAllocatorTest, later_clusters_of_a_new_chain_continue_at_the_cursor)
+{
+    state.allocationUnits = fs::FatAllocationUnits{ 64, 2 };
+    UseEveryClusterBefore(200, 196);
+    builder->SetFatEntry(211, EndOfChain());
+
+    ExpectGrowAt(210, 2, fs::Result::success, 210, 2);
+    Flush();
+
+    EXPECT_EQ(212u, builder->FatEntry(210));
 }
 
 TEST_F(FatAllocatorTest, cursor_moves_past_each_allocation)

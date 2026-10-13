@@ -52,6 +52,7 @@ namespace fs
         void LinkLast();
         void Done(Result result);
         uint32_t Preferred() const;
+        uint32_t SearchStart() const;
         bool IsCluster(uint32_t cluster) const;
         bool Available(uint32_t cluster) const;
         uint32_t After(uint32_t cluster) const;

@@ -20,6 +20,14 @@ namespace fs
         return firstBoundary + ((cluster - firstBoundary) / clustersPerUnit + 1) * clustersPerUnit;
     }
 
+    uint32_t FatAllocationUnits::StartOf(uint32_t cluster) const
+    {
+        if (cluster < firstBoundary)
+            return firstCluster;
+
+        return firstBoundary + (cluster - firstBoundary) / clustersPerUnit * clustersPerUnit;
+    }
+
     bool FatAllocationUnits::operator==(const FatAllocationUnits& other) const = default;
 
     std::optional<FatAllocationUnits> AllocationUnitsOf(const FatGeometry& geometry, uint32_t blocksPerUnit)

@@ -88,7 +88,7 @@ namespace fs
 
         auto preferred = Preferred();
         preferredOnly = preferred != 0;
-        candidate = preferredOnly ? preferred : cursor;
+        candidate = preferredOnly ? preferred : SearchStart();
         examined = 0;
         ReadCandidateSector();
     }
@@ -117,7 +117,7 @@ namespace fs
                 *own = FatReservation{};
 
             preferredOnly = false;
-            candidate = cursor;
+            candidate = SearchStart();
             examined = 0;
             ReadCandidateSector();
         }
@@ -257,6 +257,14 @@ namespace fs
             return After(*last);
 
         return start;
+    }
+
+    uint32_t FatAllocator::SearchStart() const
+    {
+        if (allocated != 0 || last.has_value() || !volume.allocationUnits.has_value())
+            return cursor;
+
+        return volume.allocationUnits->StartOf(cursor);
     }
 
     bool FatAllocator::IsCluster(uint32_t cluster) const
