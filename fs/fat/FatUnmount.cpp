@@ -18,7 +18,7 @@ namespace fs
         CommitNextFile();
     }
 
-    void FatUnmount::CommitNextFile()
+    void FatUnmount::CommitNextFile() const
     {
         for (auto& file : volume.OpenFiles())
             if (file.State().Uncommitted())
@@ -36,7 +36,7 @@ namespace fs
         WriteFsInfo();
     }
 
-    void FatUnmount::WriteFsInfo()
+    void FatUnmount::WriteFsInfo() const
     {
         const auto& state = volume.State();
 
@@ -55,7 +55,7 @@ namespace fs
             });
     }
 
-    void FatUnmount::Flush(Result previous)
+    void FatUnmount::Flush(Result previous) const
     {
         volume.Cache().Flush([this, previous](Result result)
             {
