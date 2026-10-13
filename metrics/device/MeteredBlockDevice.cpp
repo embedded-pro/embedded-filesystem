@@ -155,8 +155,8 @@ namespace metrics
 
     infra::Duration MeteredBlockDevice::AccountWrite()
     {
-        if (request.firstBlock % model.blocksPerAllocationUnit == 0 || nextSequentialBlock == request.firstBlock)
-            ++counters.alignedWrites;
+        auto continues = request.firstBlock % model.blocksPerAllocationUnit == 0 || nextSequentialBlock == request.firstBlock;
+        counters.alignedBlocks += continues || request.blocks == 0 ? request.blocks : request.blocks - 1;
 
         nextSequentialBlock = request.firstBlock + request.blocks;
         counters.blocksWritten += request.blocks;

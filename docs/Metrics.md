@@ -187,7 +187,7 @@ For SD cards and eMMC, wear leveling is done by the card, and the device metrics
 | Id  | Metric                   | Definition                                                                                                              | Workloads  | Target                                      |
 |-----|--------------------------|-------------------------------------------------------------------------------------------------------------------------|------------|---------------------------------------------|
 | M-1 | Blocks per write request | Mean number of blocks per write request                                                                                 | L1, L2, L4 | At least FatFs                              |
-| M-2 | Aligned writes           | Share of the written blocks whose write request starts on an allocation unit boundary or continues the previous request | L1, L2, L4 | At least FatFs on L1; reported on L2 and L4 |
+| M-2 | Aligned writes           | Share of the written blocks that start an allocation unit or follow the block written just before them                  | L1, L2, L4 | At least FatFs on L1; reported on L2 and L4 |
 | M-3 | Allocation units touched | Distinct allocation units written per MiB of user data                                                                  | L1, L2, L4 | At most FatFs                               |
 
 ## Robustness metrics
@@ -198,7 +198,8 @@ For SD cards and eMMC, wear leveling is done by the card, and the device metrics
 
 The sweep is described in [Testing.md](Testing.md).
 
-M-2 counts blocks rather than requests, because a filesystem that coalesces small writes into fewer, larger requests would otherwise lower its share by sending fewer data requests next to the same number of metadata requests.
+M-2 counts blocks rather than requests, and every block of a request after its first follows the block before it, so writing the same blocks in fewer, larger requests leaves the share unchanged; only a block that neither starts an allocation unit nor follows the previous one counts against it.
+Counted by requests, a filesystem that coalesces small writes would lower its share by sending fewer data requests next to the same number of metadata requests.
 On L2, where every `Sync` writes one data block, one block per FAT copy and one directory block, almost no write is aligned for any subject, and on L4 the alignment of small files says little, so M-2 is only reported there.
 
 ## On-target metrics

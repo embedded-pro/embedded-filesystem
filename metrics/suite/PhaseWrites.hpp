@@ -16,7 +16,7 @@ namespace metrics
     {
         uint64_t writeRequests{};
         uint64_t blocksWritten{};
-        uint64_t alignedWrites{};
+        uint64_t alignedBlocks{};
         std::set<uint32_t> allocationUnits;
 
         double MeanBlocksPerWrite() const;

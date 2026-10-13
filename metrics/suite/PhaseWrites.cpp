@@ -17,7 +17,7 @@ namespace metrics
 
     double WritesOfPhase::AlignedShare() const
     {
-        return Quotient(static_cast<double>(alignedWrites), static_cast<double>(writeRequests));
+        return Quotient(static_cast<double>(alignedBlocks), static_cast<double>(blocksWritten));
     }
 
     double WritesOfPhase::AllocationUnitsPerMebibyte(uint64_t userBytes) const
@@ -37,7 +37,7 @@ namespace metrics
         auto& writes = phases[phase];
         writes.writeRequests += delta.writeRequests;
         writes.blocksWritten += delta.blocksWritten;
-        writes.alignedWrites += delta.alignedWrites;
+        writes.alignedBlocks += delta.alignedBlocks;
 
         const auto& current = device.WritesPerAllocationUnit();
         for (uint32_t unit = 0; unit != current.size(); ++unit)
