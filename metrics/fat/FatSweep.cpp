@@ -104,6 +104,14 @@ namespace metrics
             });
     }
 
+    fs::Result SweepVolume::Unmount()
+    {
+        return Run([this](const infra::Function<void(fs::Result)>& onDone)
+            {
+                fileSystem.Unmount(onDone);
+            });
+    }
+
     infra::SharedPtr<fs::File> SweepVolume::Open(const std::string& path, fs::OpenMode mode)
     {
         infra::SharedPtr<fs::File> opened;

@@ -16,6 +16,7 @@ namespace metrics
         MetricRecorder(Report& report, std::string_view subject, std::string_view device, std::size_t ramBytes);
 
         void Record(std::string_view metric, std::string_view workload, std::string_view unit, Better better, double value, std::optional<uint8_t> fill = std::nullopt);
+        void RecordDiagnostic(std::string_view metric, std::string_view workload, std::string_view unit, Better better, double value, std::optional<uint8_t> fill = std::nullopt);
 
     private:
         Report& report;

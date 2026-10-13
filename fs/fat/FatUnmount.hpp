@@ -21,6 +21,7 @@ namespace fs
     private:
         void CommitNextFile() const;
         void WriteFsInfo() const;
+        void MarkClean(Result previous) const;
         void Flush(Result previous) const;
         void Done(Result result) const;
 

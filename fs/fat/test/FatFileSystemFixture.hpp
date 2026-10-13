@@ -3,6 +3,7 @@
 
 #include "fs/fat/FatFileSystem.hpp"
 #include "fs/fat/FatFormatter.hpp"
+#include "fs/fat/FatTable.hpp"
 #include "fs/fat/test_doubles/FatImageBuilder.hpp"
 #include "fs/fat/test_doubles/SparseBlockDevice.hpp"
 #include "infra/timer/test_helper/ClockFixture.hpp"
@@ -44,6 +45,14 @@ public:
         fs::FatFormatConfig config;
         config.sectorsPerCluster = sectors;
         return config;
+    }
+
+    void MarkVolumeDirty()
+    {
+        const auto& geometry = builder->Geometry();
+
+        if (geometry.type != fs::FatType::fat12)
+            builder->SetFatEntry(1, fs::WithCleanShutdown(geometry.type, builder->FatEntry(1), false));
     }
 
     void ExpectMount(fs::Result result = fs::Result::success)

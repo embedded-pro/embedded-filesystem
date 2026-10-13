@@ -18,11 +18,18 @@ namespace metrics
         torn
     };
 
+    enum class UnflushedWrites : uint8_t
+    {
+        kept,
+        lost,
+        reordered
+    };
+
     struct BlockCut
     {
         uint64_t step;
         InterruptedBlock mode;
-        bool loseUnflushedWrites{ false };
+        UnflushedWrites unflushed{ UnflushedWrites::kept };
         std::optional<uint32_t> tornBytes;
     };
 
@@ -51,7 +58,8 @@ namespace metrics
         void CutWrite(infra::ConstByteRange buffer, uint32_t firstBlock);
         void Tear(infra::ConstByteRange source, uint32_t block);
         void CutDiscard(uint32_t beginBlock, uint32_t endBlock);
-        void PowerDown();
+        void PowerDown(uint32_t keptBegin, uint32_t keptEnd);
+        bool Lost(uint32_t block, uint32_t keptBegin, uint32_t keptEnd) const;
         void RememberContentAtFlush(uint32_t firstBlock, uint32_t blocks);
         infra::ByteRange Block(uint32_t block) const;
 

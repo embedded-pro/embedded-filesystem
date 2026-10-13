@@ -61,6 +61,17 @@ namespace fs
 
     void FatTruncation::Commit()
     {
+        volume.DirtyFlag().MarkDirty([this](Result result)
+            {
+                if (result != Result::success)
+                    onDone(result);
+                else
+                    CommitEntry();
+            });
+    }
+
+    void FatTruncation::CommitEntry()
+    {
         file->size = file->position;
         file->clusters = kept;
         file->written = true;

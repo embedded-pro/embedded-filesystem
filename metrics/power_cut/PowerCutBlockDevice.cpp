@@ -103,9 +103,11 @@ namespace metrics
     {
         auto completedBlocks = static_cast<uint32_t>(cut->step - writeSteps);
         auto cutBlock = firstBlock + completedBlocks;
+        uint32_t keptEnd = firstBlock;
 
         if (cutBlock < NumberOfBlocks())
         {
+            keptEnd = cutBlock + (cut->mode != InterruptedBlock::unwritten ? 1 : 0);
             RememberContentAtFlush(firstBlock, completedBlocks + 1);
             std::copy(buffer.begin(), buffer.begin() + completedBlocks * BlockSize(), Block(firstBlock).begin());
 
@@ -116,7 +118,7 @@ namespace metrics
                 Tear(source, cutBlock);
         }
 
-        PowerDown();
+        PowerDown(firstBlock, keptEnd);
     }
 
     void PowerCutBlockDevice::Tear(infra::ConstByteRange source, uint32_t block)
@@ -134,19 +136,28 @@ namespace metrics
         {
             RememberContentAtFlush(beginBlock, endBlock - beginBlock);
             std::fill(Block(beginBlock).begin(), Block(beginBlock).begin() + (endBlock - beginBlock) * BlockSize(), 0x00);
+            PowerDown(beginBlock, endBlock);
         }
-
-        PowerDown();
+        else
+            PowerDown(beginBlock, beginBlock);
     }
 
-    void PowerCutBlockDevice::PowerDown()
+    void PowerCutBlockDevice::PowerDown(uint32_t keptBegin, uint32_t keptEnd)
     {
-        if (cut->loseUnflushedWrites)
-            for (const auto& [block, content] : contentAtFlush)
+        for (const auto& [block, content] : contentAtFlush)
+            if (Lost(block, keptBegin, keptEnd))
                 std::copy(content.begin(), content.end(), Block(block).begin());
 
         writeSteps = cut->step + 1;
         poweredDown = true;
+    }
+
+    bool PowerCutBlockDevice::Lost(uint32_t block, uint32_t keptBegin, uint32_t keptEnd) const
+    {
+        if (cut->unflushed == UnflushedWrites::reordered)
+            return block < keptBegin || block >= keptEnd;
+
+        return cut->unflushed == UnflushedWrites::lost;
     }
 
     void PowerCutBlockDevice::RememberContentAtFlush(uint32_t firstBlock, uint32_t blocks)

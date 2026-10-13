@@ -1,6 +1,7 @@
 #include "metrics/suite/MetricRecorder.hpp"
 #include "infra/stream/StringOutputStream.hpp"
 #include <algorithm>
+#include <utility>
 
 namespace metrics
 {
@@ -29,6 +30,13 @@ namespace metrics
     void MetricRecorder::Record(std::string_view metric, std::string_view workload, std::string_view unit, Better better, double value, std::optional<uint8_t> fill)
     {
         report.Add({ std::string{ metric }, std::string{ workload }, subject, device, std::string{ unit }, fill, value, std::nullopt, ramBytes, better });
+    }
+
+    void MetricRecorder::RecordDiagnostic(std::string_view metric, std::string_view workload, std::string_view unit, Better better, double value, std::optional<uint8_t> fill)
+    {
+        MetricResult result{ std::string{ metric }, std::string{ workload }, subject, device, std::string{ unit }, fill, value, std::nullopt, ramBytes, better };
+        result.diagnostic = true;
+        report.Add(std::move(result));
     }
 
     std::optional<std::string> UnexpectedResult(const Runner& runner)

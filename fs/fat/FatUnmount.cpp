@@ -42,7 +42,7 @@ namespace fs
 
         if (!state.geometry.fsInfoSector.has_value() || !state.tableChanged)
         {
-            Flush(Result::success);
+            MarkClean(Result::success);
             return;
         }
 
@@ -51,6 +51,20 @@ namespace fs
                 if (result == Result::success)
                     SerializeFsInfo(FsInfo{ volume.State().freeClusters, volume.Allocator().Cursor() }, contents);
 
+                MarkClean(result);
+            });
+    }
+
+    void FatUnmount::MarkClean(Result previous) const
+    {
+        if (previous != Result::success)
+        {
+            Flush(previous);
+            return;
+        }
+
+        volume.DirtyFlag().MarkClean([this](Result result)
+            {
                 Flush(result);
             });
     }

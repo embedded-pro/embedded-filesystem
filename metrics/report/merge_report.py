@@ -121,7 +121,7 @@ def compare_with_baseline(results, devices, baseline):
         if devices.get(result["device"]) != earlier_devices.get(result["device"]):
             result["note"] = "device model changed since the baseline"
             continue
-        if "target" not in result and is_own(result["subject"]) and worsening(result, earlier["value"]) > REGRESSION_TOLERANCE:
+        if "target" not in result and not result.get("diagnostic") and is_own(result["subject"]) and worsening(result, earlier["value"]) > REGRESSION_TOLERANCE:
             result["regression"] = True
             result["pass"] = False
 

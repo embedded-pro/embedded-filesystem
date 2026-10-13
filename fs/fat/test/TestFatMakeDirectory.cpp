@@ -18,6 +18,7 @@ namespace
         void SetUp() override
         {
             builder->AddFile(0, "notes.txt", "NOTES   TXT", infra::ConstByteRange());
+            MarkVolumeDirty();
             ExpectMount();
         }
 
@@ -237,6 +238,7 @@ namespace
     public:
         void SetUp() override
         {
+            MarkVolumeDirty();
             exposed.Mount([this](fs::Result result)
                 {
                     done.callback(result);

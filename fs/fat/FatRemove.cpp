@@ -85,6 +85,17 @@ namespace fs
 
     void FatRemove::ClearEntry()
     {
+        volume.DirtyFlag().MarkDirty([this](Result result)
+            {
+                if (result != Result::success)
+                    Finish(result);
+                else
+                    ClearMarkedEntry();
+            });
+    }
+
+    void FatRemove::ClearMarkedEntry()
+    {
         volume.ClosedFiles().Forget(target.shortEntry);
         clear.Clear(target, [this](Result result)
             {

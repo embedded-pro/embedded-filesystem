@@ -103,6 +103,7 @@ Every modified sector carries a rank, which orders the writes:
 | 1    | The FAT and FSINFO                                                                                    |
 | 2    | Existing directory entries, and new entry sets                                                        |
 | 3    | The short entry of a new entry set that spans two sectors, and the long name entries of a removed set |
+| 4    | The FAT sector with the clean-shutdown bit, when `Unmount` sets it                                    |
 
 Writing back writes the sectors of the lowest rank first, and within a rank in ascending sector order.
 When the cache is full, it replaces a free slot, else the least recently used sector that is not modified, else the least recently used sector of the lowest modified rank, written together with the consecutive sectors of its rank in the adjacent slots; so making room writes at most one device request per copy, and never a sector of a higher rank before one of a lower rank.
@@ -194,6 +195,7 @@ An operation that needs another order flushes the cache between its steps:
 | `Remove`        | The short entry marked free, then the rest of its set at rank 3, flush, the FAT entries of the chain freed, then the discard of each freed run             |
 | `Truncate`      | The directory entry with the new size, flush, the end of chain at the new last cluster, flush, the FAT entries of the cut clusters freed, then the discard |
 | `Rename`        | The new entry set, flush, the old entry set marked free, then the `..` entry of a moved directory                                                          |
+| `Unmount`       | The directory entries of the open files, FSINFO when the FAT changed, flush, the clean-shutdown bit, flush                                                 |
 
 ## Discard
 
@@ -204,10 +206,13 @@ Discard can be disabled with `FatConfig::discard` for devices that implement it 
 ## Durability
 
 The clean-shutdown bit of the second FAT entry is cleared before the first change to the metadata of a mount is written, and set again by a clean `Unmount`, so that a PC checks the volume after a power loss.
+The first operation of a mount that changes the volume clears the bit in every FAT copy and flushes before it writes anything else, which costs one write per copy and one flush per mount.
+These operations are a write, an `Open` that creates or truncates, `MakeDirectory`, `Remove`, `Rename` and `Truncate`; a `Sync` or `Close` only commits what one of them changed.
+`Unmount` sets the bit at rank 4, so it is written only after everything else has been flushed.
 FAT12 has no such bit.
 A volume that was not clean at mount stays marked as not clean, and its FSINFO is not trusted.
 FSINFO is written only by `Unmount`, when the FAT changed during the mount, with the free count when it is known and as unknown otherwise; writing it on every `Sync` would add a write to every `Sync`, and an outdated FSINFO is harmless because it is only a hint.
-A write-protected card mounts and can be read; operations that write complete with `readOnly`.
+A write-protected card mounts and can be read; operations that write complete with `readOnly`, because clearing the clean-shutdown bit fails before they change anything, and the cache drops the sector it could not write.
 `Remove`, `MakeDirectory`, `Rename` and `Truncate` flush the cache before they complete, so they are durable then, and a power loss afterwards leaves no clusters allocated but unused; a file that `Open` creates is written with its first `Sync` or `Close`, or at `Unmount`.
 `Open` in `write` mode truncates an existing file to zero in the same way as `Truncate`, before it completes.
 A `Truncate` at the end of the file writes nothing, and one within the last cluster writes only the directory entry.

@@ -33,6 +33,7 @@ namespace fs
         void CheckEmpty();
         void OnChecked(Result result);
         void ClearEntry();
+        void ClearMarkedEntry();
         void OnCleared(Result result);
         void OnFlushed(Result result);
         void OnFreed(Result result);

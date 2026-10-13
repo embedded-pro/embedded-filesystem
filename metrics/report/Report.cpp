@@ -64,7 +64,12 @@ namespace metrics
             if (result.pass)
                 json += ", " + Member("pass", *result.pass ? "true" : "false");
 
-            return json + ", " + Member("ramBytes", std::to_string(result.ramBytes)) + ", " + Member("better", Quoted(BetterText(result.better))) + " }";
+            json += ", " + Member("ramBytes", std::to_string(result.ramBytes)) + ", " + Member("better", Quoted(BetterText(result.better)));
+
+            if (result.diagnostic)
+                json += ", " + Member("diagnostic", "true");
+
+            return json + " }";
         }
 
         std::string Indent(std::size_t depth)

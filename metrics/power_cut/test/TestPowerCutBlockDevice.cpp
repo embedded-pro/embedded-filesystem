@@ -123,7 +123,7 @@ TEST_F(PowerCutBlockDeviceTest, interrupted_block_is_torn_in_half_by_default)
 
 TEST_F(PowerCutBlockDeviceTest, interrupted_block_is_torn_after_the_given_number_of_bytes)
 {
-    cut.Arm({ 0, metrics::InterruptedBlock::torn, false, 4 });
+    cut.Arm({ 0, metrics::InterruptedBlock::torn, metrics::UnflushedWrites::kept, 4 });
 
     Write(0, 1, 0x11);
 
@@ -189,7 +189,7 @@ TEST_F(PowerCutBlockDeviceTest, unflushed_writes_are_kept_when_loss_is_disabled)
 TEST_F(PowerCutBlockDeviceTest, unflushed_writes_are_reverted_on_the_cut_when_loss_is_enabled)
 {
     Write(0, 1, 0x11);
-    cut.Arm({ 1, metrics::InterruptedBlock::written, true });
+    cut.Arm({ 1, metrics::InterruptedBlock::written, metrics::UnflushedWrites::lost });
 
     Write(1, 1, 0x22);
 
@@ -201,7 +201,7 @@ TEST_F(PowerCutBlockDeviceTest, flushed_writes_survive_the_cut_when_loss_is_enab
 {
     Write(0, 1, 0x11);
     Flush();
-    cut.Arm({ 1, metrics::InterruptedBlock::unwritten, true });
+    cut.Arm({ 1, metrics::InterruptedBlock::unwritten, metrics::UnflushedWrites::lost });
 
     Write(1, 1, 0x22);
 
@@ -214,11 +214,60 @@ TEST_F(PowerCutBlockDeviceTest, a_block_written_twice_since_the_flush_reverts_to
     Flush();
     Write(0, 1, 0x22);
     Write(0, 1, 0x33);
-    cut.Arm({ 3, metrics::InterruptedBlock::unwritten, true });
+    cut.Arm({ 3, metrics::InterruptedBlock::unwritten, metrics::UnflushedWrites::lost });
 
     Write(1, 1, 0x44);
 
     EXPECT_EQ(std::vector<uint8_t>(16, 0x11), BlockContent(0));
+}
+
+TEST_F(PowerCutBlockDeviceTest, reordered_cut_keeps_the_interrupted_write_and_loses_earlier_unflushed_writes)
+{
+    Write(0, 1, 0x11);
+    cut.Arm({ 1, metrics::InterruptedBlock::written, metrics::UnflushedWrites::reordered });
+
+    Write(1, 1, 0x22);
+
+    EXPECT_EQ(std::vector<uint8_t>(16, 0), BlockContent(0));
+    EXPECT_EQ(std::vector<uint8_t>(16, 0x22), BlockContent(1));
+}
+
+TEST_F(PowerCutBlockDeviceTest, reordered_cut_keeps_the_completed_blocks_of_the_interrupted_write)
+{
+    Write(4, 1, 0x11);
+    cut.Arm({ 2, metrics::InterruptedBlock::unwritten, metrics::UnflushedWrites::reordered });
+
+    Write(0, 3, 0x22);
+
+    EXPECT_EQ(std::vector<uint8_t>(16, 0x22), BlockContent(0));
+    EXPECT_EQ(std::vector<uint8_t>(16, 0), BlockContent(1));
+    EXPECT_EQ(std::vector<uint8_t>(16, 0), BlockContent(4));
+}
+
+TEST_F(PowerCutBlockDeviceTest, reordered_cut_reverts_an_earlier_write_of_the_unwritten_interrupted_block)
+{
+    Write(1, 1, 0x11);
+    cut.Arm({ 1, metrics::InterruptedBlock::unwritten, metrics::UnflushedWrites::reordered });
+
+    Write(1, 1, 0x22);
+
+    EXPECT_EQ(std::vector<uint8_t>(16, 0), BlockContent(1));
+}
+
+TEST_F(PowerCutBlockDeviceTest, reordered_cut_keeps_the_interrupted_discard)
+{
+    Write(0, 1, 0x11);
+    Write(4, 1, 0x33);
+    Flush();
+    Write(1, 1, 0x22);
+    cut.Arm({ 3, metrics::InterruptedBlock::written, metrics::UnflushedWrites::reordered });
+
+    cut.EraseBlocks(4, 5, [](hal::BlockDevice::Result) {});
+    ExecuteAllActions();
+
+    EXPECT_EQ(std::vector<uint8_t>(16, 0x11), BlockContent(0));
+    EXPECT_EQ(std::vector<uint8_t>(16, 0), BlockContent(1));
+    EXPECT_EQ(std::vector<uint8_t>(16, 0), BlockContent(4));
 }
 
 TEST_F(PowerCutBlockDeviceTest, reads_see_unflushed_writes_before_the_cut)

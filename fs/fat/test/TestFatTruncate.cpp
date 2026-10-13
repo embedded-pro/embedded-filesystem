@@ -25,6 +25,7 @@ namespace
         void SetUp() override
         {
             first = builder->AddFile(0, "notes.txt", "NOTES   TXT", infra::MakeRange(original));
+            MarkVolumeDirty();
             ExpectMount();
         }
 

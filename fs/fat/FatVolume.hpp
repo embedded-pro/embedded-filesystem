@@ -14,6 +14,7 @@
 #include "fs/fat/FatClosedFiles.hpp"
 #include "fs/fat/FatConfig.hpp"
 #include "fs/fat/FatDirectoryReader.hpp"
+#include "fs/fat/FatDirtyFlag.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatEntryUpdate.hpp"
 #include "fs/fat/FatExpectSize.hpp"
@@ -126,6 +127,7 @@ namespace fs
         FatAllocator& Allocator();
         FatEntryUpdate& EntryUpdate();
         FatChainFree& ChainFree();
+        FatDirtyFlag& DirtyFlag();
         FatTableWriter& TableWriter();
         FatClosedFiles& ClosedFiles();
         FatFreeSpaceScan& FreeSpace();
@@ -173,6 +175,7 @@ namespace fs
         FatAllocator allocator;
         FatEntryUpdate entryUpdate;
         FatChainFree chainFree;
+        FatDirtyFlag dirtyFlag;
         FatClosedFiles closedFiles;
         infra::IntrusiveList<FatFile> openFiles;
         infra::IntrusiveList<FatDirectory> openDirectories;

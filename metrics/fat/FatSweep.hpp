@@ -43,6 +43,7 @@ namespace metrics
         explicit SweepVolume(SweepContext<hal::BlockDevice>& context);
 
         fs::Result Mount();
+        fs::Result Unmount();
         infra::SharedPtr<fs::File> Open(const std::string& path, fs::OpenMode mode);
         fs::Result Write(fs::File& file, infra::ConstByteRange data);
         fs::Result ExpectSize(fs::File& file, uint32_t size);

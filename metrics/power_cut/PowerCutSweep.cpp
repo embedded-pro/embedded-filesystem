@@ -25,7 +25,10 @@ namespace metrics
         {
             std::string name = cut.mode == InterruptedBlock::unwritten ? "unwritten" : cut.mode == InterruptedBlock::written ? "written"
                                                                                                                              : "torn";
-            return cut.loseUnflushedWrites ? name + "+lossOfUnflushedWrites" : name;
+            if (cut.unflushed == UnflushedWrites::lost)
+                return name + "+lossOfUnflushedWrites";
+
+            return cut.unflushed == UnflushedWrites::reordered ? name + "+reorderedUnflushedWrites" : name;
         }
 
         void Record(SweepResult& result, std::optional<uint64_t> step, std::string mode, std::optional<std::string> reason)

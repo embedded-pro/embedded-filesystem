@@ -98,6 +98,17 @@ TEST(ReportTest, json_leaves_out_missing_fill_target_and_pass)
     EXPECT_THAT(report.Json(), testing::HasSubstr("\"unit\": \"ratio\", \"value\": 2.5, \"ramBytes\": 7680, \"better\": \"higher\" }"));
 }
 
+TEST(ReportTest, json_marks_a_diagnostic)
+{
+    metrics::Report report;
+    auto result = Result(2.5);
+    result.better = metrics::Better::higher;
+    result.diagnostic = true;
+    report.Add(result);
+
+    EXPECT_THAT(report.Json(), testing::HasSubstr("\"better\": \"higher\", \"diagnostic\": true }"));
+}
+
 TEST(ReportTest, json_separates_results)
 {
     metrics::Report report;

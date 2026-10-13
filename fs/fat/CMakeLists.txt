@@ -35,6 +35,8 @@ target_sources(fs.fat PRIVATE
     FatDirectoryEntry.cpp
     FatDirectoryEntry.hpp
     FatDirectoryReader.cpp
+    FatDirtyFlag.cpp
+    FatDirtyFlag.hpp
     FatDirectoryReader.hpp
     FatEntryAssembler.cpp
     FatEntryAssembler.hpp

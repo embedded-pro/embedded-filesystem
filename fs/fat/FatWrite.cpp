@@ -29,7 +29,16 @@ namespace fs
             endResult = Result::noSpace;
         }
 
-        Step();
+        if (data.empty())
+            Step();
+        else
+            volume.DirtyFlag().MarkDirty([this](Result result)
+                {
+                    if (result != Result::success)
+                        onDone(result);
+                    else
+                        Step();
+                });
     }
 
     void FatWrite::Step()

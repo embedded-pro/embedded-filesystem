@@ -22,11 +22,13 @@ target_sources(fs.fat_test PRIVATE
     TestFatBootSector.cpp
     TestFatChainFree.cpp
     TestFatChainWalk.cpp
+    TestFatCleanShutdown.cpp
     TestFatClosedFiles.cpp
     TestFatCreate.cpp
     TestFatDirectory.cpp
     TestFatDirectoryEntry.cpp
     TestFatDirectoryReader.cpp
+    TestFatDirtyFlag.cpp
     TestFatEntryAssembler.cpp
     TestFatEntrySetClear.cpp
     TestFatEntrySetWriter.cpp
