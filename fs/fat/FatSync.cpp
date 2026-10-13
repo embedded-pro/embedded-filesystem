@@ -11,7 +11,7 @@ namespace fs
 
     FatSync::~FatSync() = default;
 
-    void FatSync::Start()
+    void FatSync::Start() const
     {
         if (file.Uncommitted())
             volume.EntryUpdate().Commit(file, [this](Result result)

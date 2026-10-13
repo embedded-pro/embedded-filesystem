@@ -16,12 +16,12 @@ namespace fs
         FatUnmount& operator=(const FatUnmount& other) = delete;
         ~FatUnmount();
 
-        void Start();
+        void Start() const;
 
     private:
-        void CommitNextFile();
-        void WriteFsInfo();
-        void Flush(Result previous);
+        void CommitNextFile() const;
+        void WriteFsInfo() const;
+        void Flush(Result previous) const;
         void Done(Result result) const;
 
     private:
