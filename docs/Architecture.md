@@ -277,7 +277,7 @@ FAT volumes compare names case-insensitively for ASCII letters and reject the ch
 A file may be open in `read` mode any number of times.
 A file that is open in another mode cannot be opened again, and a file that is open cannot be opened in another mode; such an `Open` completes with `busy`.
 `Remove` and `Rename` of an open file or directory complete with `busy`.
-`Rename` onto an existing name completes with `alreadyExists`.
+`Rename` onto an existing name completes with `alreadyExists`, and so does `MakeDirectory` of an existing name or of `/`.
 `Remove` of a directory that is not empty completes with `notEmpty`, and `Remove("/")` with `invalidPath`.
 
 ### Handles

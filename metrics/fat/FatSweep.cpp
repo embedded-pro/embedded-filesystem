@@ -152,6 +152,22 @@ namespace metrics
             });
     }
 
+    fs::Result SweepVolume::Remove(const std::string& path)
+    {
+        return Run([this, &path](const infra::Function<void(fs::Result)>& onDone)
+            {
+                fileSystem.Remove(infra::BoundedConstString(path.data(), path.size()), onDone);
+            });
+    }
+
+    fs::Result SweepVolume::MakeDirectory(const std::string& path)
+    {
+        return Run([this, &path](const infra::Function<void(fs::Result)>& onDone)
+            {
+                fileSystem.MakeDirectory(infra::BoundedConstString(path.data(), path.size()), onDone);
+            });
+    }
+
     template<class Start>
     fs::Result SweepVolume::Run(const Start& start)
     {

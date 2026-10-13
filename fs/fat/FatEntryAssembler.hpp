@@ -57,7 +57,8 @@ namespace fs
         void Prepend(const LongEntry& entry);
         void PrependCodePoint(char32_t codePoint);
         void FeedShortEntry(infra::ConstByteRange entry, FatEntryPosition position);
-        bool LongNameCompletes(const ShortEntry& entry) const;
+        bool SetCompletes(const ShortEntry& entry) const;
+        bool NameIsValid() const;
 
     private:
         infra::ByteRange nameBuffer;

@@ -34,6 +34,21 @@ namespace fs
         storage.front() = file;
     }
 
+    void FatClosedFiles::Forget(FatEntryPosition entry)
+    {
+        auto end = storage.begin() + count;
+        auto found = std::find_if(storage.begin(), end, [&entry](const FatClosedFile& remembered)
+            {
+                return remembered.entry == entry;
+            });
+
+        if (found != end)
+        {
+            std::move(found + 1, end, found);
+            --count;
+        }
+    }
+
     std::optional<FatExtent> FatClosedFiles::Recall(FatEntryPosition entry, uint32_t firstCluster, uint32_t size) const
     {
         for (std::size_t index = 0; index != count; ++index)

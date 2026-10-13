@@ -116,6 +116,19 @@ TEST_F(FatDirectoryReaderTest, follows_the_cluster_chain_of_a_directory)
     EXPECT_NE(directory, visitor.positions[19].cluster);
 }
 
+TEST_F(FatDirectoryReaderTest, set_at_the_end_of_a_cluster_continues_in_the_next)
+{
+    auto directory = builder->AddDirectory(0, "", "SUBDIR     ");
+    AddNumberedFiles(directory, 13);
+
+    auto position = builder->AddEntries(directory, "Long File Name.txt", fs::ShortEntry{ fs::ShortName{ { 'L', 'O', 'N', 'G', 'F', 'I', '~', '1', 'T', 'X', 'T' } } });
+
+    ReadAll(directory);
+    ASSERT_EQ(14, visitor.names.size());
+    EXPECT_EQ("Long File Name.txt", visitor.names[13]);
+    EXPECT_EQ((fs::FatEntryPosition{ builder->FatEntry(directory), 1 }), position);
+}
+
 TEST_F(FatDirectoryReaderTest, directory_that_ends_with_its_last_cluster_is_done)
 {
     auto directory = builder->AddDirectory(0, "", "SUBDIR     ");

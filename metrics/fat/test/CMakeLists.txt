@@ -8,9 +8,11 @@ target_link_libraries(metrics.fat_test PUBLIC
     fs.fat_test_doubles
     hal.interfaces_test_doubles
     infra.event_test_helper
+    infra.timer_test_helper
 )
 
 target_sources(metrics.fat_test PRIVATE
     TestFatChecker.cpp
+    TestFatSubject.cpp
     TestFatSweep.cpp
 )

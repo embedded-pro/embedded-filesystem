@@ -81,3 +81,19 @@ TEST(FatClosedFilesWithoutStorageTest, remembers_nothing)
 
     EXPECT_EQ(std::nullopt, closed.Recall(fs::FatEntryPosition{ 0, 1 }, 10, 5000));
 }
+
+TEST_F(FatClosedFilesTest, forgotten_file_is_not_recalled)
+{
+    closed.Remember(Closed(1));
+    closed.Remember(Closed(2));
+
+    closed.Forget(fs::FatEntryPosition{ 0, 1 });
+    closed.Forget(fs::FatEntryPosition{ 0, 3 });
+
+    EXPECT_EQ(std::nullopt, closed.Recall(fs::FatEntryPosition{ 0, 1 }, 10, 5000));
+    EXPECT_NE(std::nullopt, closed.Recall(fs::FatEntryPosition{ 0, 2 }, 10, 5000));
+
+    closed.Forget(fs::FatEntryPosition{ 0, 2 });
+
+    EXPECT_EQ(std::nullopt, closed.Recall(fs::FatEntryPosition{ 0, 2 }, 10, 5000));
+}

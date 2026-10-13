@@ -102,7 +102,7 @@ Every modified sector carries a rank, which orders the writes:
 | 0    | Data, and the clusters of a directory that is created or grown, as zeros or with `.` and `..`         |
 | 1    | The FAT and FSINFO                                                                                    |
 | 2    | Existing directory entries, and new entry sets                                                        |
-| 3    | The sector with the short entry of a new entry set whose long name entries begin in the sector before |
+| 3    | The short entry of a new entry set that spans two sectors, and the long name entries of a removed set |
 
 Writing back writes the sectors of the lowest rank first, and within a rank in ascending sector order.
 When the cache is full, it replaces a free slot, else the least recently used sector that is not modified, else the least recently used sector of the lowest modified rank; so making room writes at most one device request, and never a sector of a higher rank before one of a lower rank.
@@ -187,7 +187,7 @@ An operation that needs another order flushes the cache between its steps:
 | Write, `Sync`   | Data, FAT entries of the new clusters, flush if needed, the link, the directory entry                                                                      |
 | Create          | New directory clusters with their entries, their FAT entries, then the rest of the set at rank 2, with its short entry at rank 3 when it spans two sectors |
 | `MakeDirectory` | The new cluster with `.` and `..`, its FAT entry, then the entry set in the parent                                                                         |
-| `Remove`        | The entry set marked free, flush, the FAT entries of the chain freed, then the discard of the freed clusters                                               |
+| `Remove`        | The short entry marked free, then the rest of its set at rank 3, flush, the FAT entries of the chain freed, then the discard of each freed run             |
 | `Truncate`      | The directory entry with the new size, flush, the end of chain at the new last cluster, flush, the FAT entries of the cut clusters freed, then the discard |
 | `Rename`        | The new entry set, flush, the old entry set marked free, then the `..` entry of a moved directory                                                          |
 
@@ -204,6 +204,7 @@ FAT12 has no such bit.
 A volume that was not clean at mount stays marked as not clean, and its FSINFO is not trusted.
 FSINFO is written only by `Unmount`, when the FAT changed during the mount, with the free count when it is known and as unknown otherwise; writing it on every `Sync` would add a write to every `Sync`, and an outdated FSINFO is harmless because it is only a hint.
 A write-protected card mounts and can be read; operations that write complete with `readOnly`.
+`Remove` and `MakeDirectory` flush the cache before they complete, so they are durable then, and a power loss afterwards leaves no clusters allocated but unused; a file that `Open` creates is written with its first `Sync` or `Close`, or at `Unmount`.
 
 ## Behaviour on power loss
 
@@ -215,6 +216,7 @@ A write-protected card mounts and can be read; operations that write complete wi
 | An overwrite inside a file  | Every sector holds either its previous or its new contents                                                        |
 | Creating a file             | The file exists, with what its first `Sync` committed, or not at all; a new directory cluster may stay unused     |
 | `Remove`                    | The file exists or not; its clusters may stay allocated but unused                                                |
+| `MakeDirectory`             | The directory exists, empty, or not at all; its cluster may stay allocated but unused                             |
 | `Rename`                    | The entry exists under its old name, its new name or both; in the last case both names refer to the same clusters |
 | Between `Sync` calls        | Data written after the last completed `Sync` may be lost                                                          |
 

@@ -78,7 +78,8 @@ On FAT volumes, the sweep runs in `metrics/fat` on small volumes of each FAT typ
 * the library mounts the volume;
 * an independent checker, which parses the image without the code of `fs/fat`, finds every link in range, no free or bad cluster in a chain, no cluster in two chains, and every chain at least as long as the size of its file;
 * every file holds, sector by sector, either its contents before the interrupted operation or its contents after it;
-* a file that was being created exists under its name or not at all, and no other entry appeared in its directory.
+* a file or directory that was being created exists under its name or not at all, and no other entry appeared in its directory;
+* an entry that was being removed exists with its previous contents or not at all, and no other entry disappeared.
 
 Chains longer than their file, lost clusters, orphaned long name entries and copies of the FAT that lag behind the first one are allowed after a cut, as described in [Fat.md](Fat.md#behaviour-on-power-loss), and the one exception to clusters in two chains is the old and the new name of an interrupted `Rename`.
 The run without a cut must pass the checker in its strict mode, which allows none of these.
@@ -90,6 +91,7 @@ Interoperability tests check that FAT volumes are exchanged correctly with the t
 
 * an image created by `mkfs.fat` is mounted, written by the library, verified with `fsck.fat -n` and read back with `mtools`;
 * files that the library creates are listed by `mtools` under their long names and short aliases;
+* directories that the library makes and entries that it removes leave an image that `fsck.fat -n` accepts and `mtools` lists as expected;
 * files written into an image with `mtools` are read back by the library;
 * an image created by `fs::FatFormatter` passes `fsck.fat -n`.
 

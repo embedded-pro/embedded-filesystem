@@ -35,12 +35,24 @@ namespace fs
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<File> file)> onDone;
     };
 
+    struct FatMakeDirectoryCall
+    {
+        infra::BoundedConstString path;
+        infra::AutoResetFunction<void(Result result)> onDone;
+    };
+
+    struct FatRemoveCall
+    {
+        infra::BoundedConstString path;
+        infra::AutoResetFunction<void(Result result)> onDone;
+    };
+
     struct FatUsageCall
     {
         infra::AutoResetFunction<void(Result result, VolumeUsage usage)> onDone;
     };
 
-    using FatPathCall = std::variant<FatStatCall, FatOpenDirectoryCall, FatOpenCall, FatUsageCall>;
+    using FatPathCall = std::variant<FatStatCall, FatOpenDirectoryCall, FatOpenCall, FatMakeDirectoryCall, FatRemoveCall, FatUsageCall>;
 
     struct FatPathSlot
     {
