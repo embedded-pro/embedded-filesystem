@@ -16,7 +16,7 @@ namespace fs
     {
         cursor = 2;
 
-        if (volume.cleanAtMount == true && volume.fsInfo && volume.fsInfo->nextFree && IsCluster(*volume.fsInfo->nextFree))
+        if (volume.cleanAtMount == true && volume.fsInfo.has_value() && volume.fsInfo->nextFree.has_value() && IsCluster(*volume.fsInfo->nextFree))
             cursor = *volume.fsInfo->nextFree;
     }
 
@@ -131,12 +131,12 @@ namespace fs
         if (allocated == 0)
             first = cluster;
 
-        barrier = barrier || (last && writer.SectorOf(cluster) != writer.SectorOf(*last));
+        barrier = barrier || (last.has_value() && writer.SectorOf(cluster) != writer.SectorOf(*last));
         previous = cluster;
         ++allocated;
         cursor = After(cluster) != 0 ? After(cluster) : 2;
 
-        if (volume.freeClusters)
+        if (volume.freeClusters.has_value())
             --*volume.freeClusters;
 
         Next();
@@ -148,7 +148,13 @@ namespace fs
             Done(result);
         else if (allocated == 0)
             Done(Result::noSpace);
-        else if (!last)
+        else
+            LinkAllocated(result);
+    }
+
+    void FatAllocator::LinkAllocated(Result result)
+    {
+        if (!last.has_value())
             Done(result);
         else if (barrier)
             cache.Flush([this, result](Result flushed)
@@ -180,7 +186,7 @@ namespace fs
         if (allocated != 0)
             return After(previous);
 
-        if (last)
+        if (last.has_value())
             return After(*last);
 
         return 0;
