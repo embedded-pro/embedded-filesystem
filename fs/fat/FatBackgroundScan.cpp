@@ -49,7 +49,7 @@ namespace fs
         claimer.Release();
     }
 
-    void FatBackgroundScan::Failed(Result result)
+    void FatBackgroundScan::Failed(Result result) const
     {
         onFailed(result);
     }

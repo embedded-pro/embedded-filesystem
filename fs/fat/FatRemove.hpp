@@ -17,7 +17,7 @@ namespace fs
         : private FatDirectoryVisitor
     {
     public:
-        FatRemove(FatVolume& volume, const FatRemoveCall& call, const infra::Function<void(Result result)>& onFinished);
+        FatRemove(FatVolume& volume, FatRemoveCall&& call, const infra::Function<void(Result result)>& onFinished);
         FatRemove(const FatRemove& other) = delete;
         FatRemove& operator=(const FatRemove& other) = delete;
         ~FatRemove();

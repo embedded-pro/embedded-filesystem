@@ -13,12 +13,12 @@ namespace fs
 
     FatUnmount::~FatUnmount() = default;
 
-    void FatUnmount::Start()
+    void FatUnmount::Start() const
     {
         CommitNextFile();
     }
 
-    void FatUnmount::CommitNextFile()
+    void FatUnmount::CommitNextFile() const
     {
         for (auto& file : volume.OpenFiles())
             if (file.State().Uncommitted())
@@ -36,11 +36,11 @@ namespace fs
         WriteFsInfo();
     }
 
-    void FatUnmount::WriteFsInfo()
+    void FatUnmount::WriteFsInfo() const
     {
         const auto& state = volume.State();
 
-        if (!state.geometry.fsInfoSector || !state.tableChanged)
+        if (!state.geometry.fsInfoSector.has_value() || !state.tableChanged)
         {
             Flush(Result::success);
             return;
@@ -55,7 +55,7 @@ namespace fs
             });
     }
 
-    void FatUnmount::Flush(Result previous)
+    void FatUnmount::Flush(Result previous) const
     {
         volume.Cache().Flush([this, previous](Result result)
             {
@@ -63,7 +63,7 @@ namespace fs
             });
     }
 
-    void FatUnmount::Done(Result result)
+    void FatUnmount::Done(Result result) const
     {
         volume.Cache().Clear();
         volume.Cache().SetMirroredRegion(std::nullopt);

@@ -22,9 +22,9 @@ namespace fs
         }
     }
 
-    FatMakeDirectory::FatMakeDirectory(FatVolume& volume, const FatMakeDirectoryCall& call, const infra::Function<void(Result result)>& onFinished)
+    FatMakeDirectory::FatMakeDirectory(FatVolume& volume, FatMakeDirectoryCall&& call, const infra::Function<void(Result result)>& onFinished)
         : volume(volume)
-        , call(call)
+        , call(std::move(call))
         , onFinished(onFinished)
         , parent(volume)
     {}

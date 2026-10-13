@@ -48,13 +48,19 @@ namespace fs
         }
         else if (run.Covers(target))
             onDone(Result::success, run);
-        else if (!next)
-            onDone(Result::corrupted, run);
         else
+            StartNextRun(next);
+    }
+
+    void FatChainWalk::StartNextRun(std::optional<uint32_t> next)
+    {
+        if (next.has_value())
         {
             run = FatExtent{ run.End(), *next, 1 };
             Step();
         }
+        else
+            onDone(Result::corrupted, run);
     }
 
     bool FatChainWalk::Covered() const

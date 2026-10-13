@@ -11,7 +11,7 @@ namespace fs
         constexpr std::size_t baseBytes = 8;
         constexpr std::size_t extensionBytes = 3;
         constexpr std::size_t hashedBytes = 2;
-        constexpr std::string_view notInShortNames{ "\"*/:<>?\\|+,;=[]. " };
+        constexpr std::string_view notInShortNames{ R"("*/:<>?\|+,;=[]. )" };
         constexpr std::string_view hexadecimal{ "0123456789ABCDEF" };
 
         enum class Case : uint8_t
@@ -161,7 +161,7 @@ namespace fs
 
         AppendBasis(name, 0, lastDot.value_or(name.size()), infra::Head(infra::MakeRange(basis), baseBytes));
 
-        if (lastDot)
+        if (lastDot.has_value())
             AppendBasis(name, *lastDot + 1, name.size(), infra::DiscardHead(infra::MakeRange(basis), baseBytes));
 
         return basis;

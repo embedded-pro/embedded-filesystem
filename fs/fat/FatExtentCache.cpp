@@ -50,10 +50,12 @@ namespace fs
 
     std::optional<FatExtent> FatExtentCache::Covering(uint32_t index)
     {
-        for (std::size_t position = 0; position != count; ++position)
-            if (storage[position].Covers(index))
+        auto extents = InUse();
+
+        for (std::size_t position = 0; position != extents.size(); ++position)
+            if (extents[position].Covers(index))
             {
-                auto extent = storage[position];
+                auto extent = extents[position];
                 Touch(position);
                 return extent;
             }
@@ -65,9 +67,9 @@ namespace fs
     {
         std::optional<FatExtent> nearest;
 
-        for (std::size_t position = 0; position != count; ++position)
-            if (storage[position].index <= index && (!nearest || storage[position].index > nearest->index))
-                nearest = storage[position];
+        for (const auto& extent : InUse())
+            if (extent.index <= index && (!nearest.has_value() || extent.index > nearest->index))
+                nearest = extent;
 
         return nearest;
     }
@@ -76,18 +78,20 @@ namespace fs
     {
         std::optional<FatExtent> last;
 
-        for (std::size_t position = 0; position != count; ++position)
-            if (!last || storage[position].End() > last->End())
-                last = storage[position];
+        for (const auto& extent : InUse())
+            if (!last.has_value() || extent.End() > last->End())
+                last = extent;
 
         return last;
     }
 
     bool FatExtentCache::Merge(const FatExtent& extent)
     {
-        for (std::size_t position = 0; position != count; ++position)
+        auto extents = InUse();
+
+        for (std::size_t position = 0; position != extents.size(); ++position)
         {
-            auto& cached = storage[position];
+            auto& cached = extents[position];
 
             if (Contiguous(cached, extent) || Contiguous(extent, cached))
             {
@@ -104,16 +108,30 @@ namespace fs
 
     void FatExtentCache::Replace(const FatExtent& extent)
     {
-        if (count == 1)
+        auto extents = InUse();
+
+        if (extents.size() == 1)
             return;
 
-        std::rotate(storage.begin() + 1, storage.begin() + 2, storage.begin() + count);
-        storage[count - 1] = extent;
+        std::rotate(extents.begin() + 1, extents.begin() + 2, extents.end());
+        extents.back() = extent;
     }
 
     void FatExtentCache::Touch(std::size_t position)
     {
+        auto extents = InUse();
+
         if (position != 0)
-            std::rotate(storage.begin() + position, storage.begin() + position + 1, storage.begin() + count);
+            std::rotate(extents.begin() + position, extents.begin() + position + 1, extents.end());
+    }
+
+    infra::MemoryRange<FatExtent> FatExtentCache::InUse()
+    {
+        return infra::Head(storage, count);
+    }
+
+    infra::MemoryRange<const FatExtent> FatExtentCache::InUse() const
+    {
+        return infra::Head(infra::MemoryRange<const FatExtent>(storage), count);
     }
 }

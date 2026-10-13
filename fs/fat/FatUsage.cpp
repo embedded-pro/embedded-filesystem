@@ -3,9 +3,9 @@
 
 namespace fs
 {
-    FatUsage::FatUsage(FatVolume& volume, const FatUsageCall& call, const infra::Function<void(Result result)>& onFinished)
+    FatUsage::FatUsage(FatVolume& volume, FatUsageCall&& call, const infra::Function<void(Result result)>& onFinished)
         : volume(volume)
-        , call(call)
+        , call(std::move(call))
         , onFinished(onFinished)
     {}
 

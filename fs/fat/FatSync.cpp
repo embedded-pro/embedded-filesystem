@@ -11,7 +11,7 @@ namespace fs
 
     FatSync::~FatSync() = default;
 
-    void FatSync::Start()
+    void FatSync::Start() const
     {
         if (file.Uncommitted())
             volume.EntryUpdate().Commit(file, [this](Result result)
@@ -22,7 +22,7 @@ namespace fs
             Flush(Result::success);
     }
 
-    void FatSync::Flush(Result result)
+    void FatSync::Flush(Result result) const
     {
         if (result != Result::success)
         {

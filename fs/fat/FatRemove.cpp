@@ -7,9 +7,9 @@
 
 namespace fs
 {
-    FatRemove::FatRemove(FatVolume& volume, const FatRemoveCall& call, const infra::Function<void(Result result)>& onFinished)
+    FatRemove::FatRemove(FatVolume& volume, FatRemoveCall&& call, const infra::Function<void(Result result)>& onFinished)
         : volume(volume)
-        , call(call)
+        , call(std::move(call))
         , onFinished(onFinished)
         , parent(volume)
         , clear(volume.Cache(), volume.Reader(), volume.Geometry())

@@ -26,7 +26,7 @@ namespace fs
         examined = 0;
         run = FatReservation{};
         best = FatReservation{};
-        adjacent = after && After(*after) != 0;
+        adjacent = after.has_value() && After(*after) != 0;
         candidate = adjacent ? After(*after) : cursor;
         run.first = candidate;
         ReadSector();

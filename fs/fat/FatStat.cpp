@@ -3,9 +3,9 @@
 
 namespace fs
 {
-    FatStat::FatStat(FatVolume& volume, const FatStatCall& call, const infra::Function<void(Result result)>& onFinished)
+    FatStat::FatStat(FatVolume& volume, FatStatCall&& call, const infra::Function<void(Result result)>& onFinished)
         : volume(volume)
-        , call(call)
+        , call(std::move(call))
         , onFinished(onFinished)
     {}
 

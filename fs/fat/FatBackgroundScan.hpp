@@ -89,7 +89,7 @@ namespace fs
         void Claim();
         void Step();
         void Release();
-        void Failed(Result result);
+        void Failed(Result result) const;
         bool ShouldYield() const;
         bool Done() const;
 

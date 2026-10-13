@@ -43,7 +43,7 @@ namespace fs
             this->onDone(Result::noSpace);
         else if (exact)
             Prepared(*exact);
-        else if (auto tail = scan.FreeTail())
+        else if (auto tail = scan.FreeTail(); tail.has_value())
             Prepared(ShortName{ WithNumericTail(alias, *tail) });
         else
         {

@@ -26,6 +26,7 @@ namespace fs
     private:
         void Step();
         void OnNext(Result result, std::optional<uint32_t> next);
+        void StartNextRun(std::optional<uint32_t> next);
         bool Covered() const;
 
     private:

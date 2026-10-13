@@ -17,10 +17,10 @@ namespace fs
         FatSync& operator=(const FatSync& other) = delete;
         ~FatSync();
 
-        void Start();
+        void Start() const;
 
     private:
-        void Flush(Result result);
+        void Flush(Result result) const;
 
     private:
         FatVolume& volume;

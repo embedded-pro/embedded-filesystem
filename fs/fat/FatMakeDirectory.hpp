@@ -15,7 +15,7 @@ namespace fs
     class FatMakeDirectory
     {
     public:
-        FatMakeDirectory(FatVolume& volume, const FatMakeDirectoryCall& call, const infra::Function<void(Result result)>& onFinished);
+        FatMakeDirectory(FatVolume& volume, FatMakeDirectoryCall&& call, const infra::Function<void(Result result)>& onFinished);
         FatMakeDirectory(const FatMakeDirectory& other) = delete;
         FatMakeDirectory& operator=(const FatMakeDirectory& other) = delete;
         ~FatMakeDirectory();
