@@ -23,7 +23,7 @@ namespace fs
         , public infra::IntrusiveList<FatFile>::NodeType
     {
     public:
-        template<std::size_t Extents>
+        template<std::size_t ExtentCount>
         class WithExtents;
 
         FatFile(FatVolume& volume, FatExtentCache& extents);
@@ -99,9 +99,9 @@ namespace fs
         };
     }
 
-    template<std::size_t Extents>
+    template<std::size_t ExtentCount>
     class FatFile::WithExtents
-        : private detail::FatFileExtents<Extents>
+        : private detail::FatFileExtents<ExtentCount>
         , public FatFile
     {
     public:
