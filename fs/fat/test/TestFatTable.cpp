@@ -89,6 +89,12 @@ TEST(FatTableTest, fat12_entry_in_the_next_sector)
     EXPECT_EQ(0x321u, fs::ReadEntry(fs::FatType::fat12, 342, infra::MakeRange(sector), infra::ConstByteRange()));
 }
 
+TEST(FatTableTest, decodes_fat12_entries_from_their_byte_pair)
+{
+    EXPECT_EQ(0xabcu, fs::DecodeFat12(341, 0xabc0));
+    EXPECT_EQ(0xbc0u, fs::DecodeFat12(340, 0xabc0));
+}
+
 TEST(FatTableTest, fat16_entry)
 {
     Sector sector{};
