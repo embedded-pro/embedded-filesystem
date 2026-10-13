@@ -108,7 +108,7 @@ namespace fs
         Result Unavailable() const;
         void MarkMounted();
         void MarkUnmounted(Result reason);
-        void Report(Result result);
+        void Report(Result result) const;
 
         template<class Callback>
         void Defer(const Callback& onDone, Result result);

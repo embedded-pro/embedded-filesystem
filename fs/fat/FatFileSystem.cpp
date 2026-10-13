@@ -188,7 +188,7 @@ namespace fs
             volume.Defer(call.onDone.Clone(), Result::busy);
     }
 
-    FatPathSlot* FatFileSystem::FreePathSlot()
+    FatPathSlot* FatFileSystem::FreePathSlot() const
     {
         for (auto& slot : pathSlots)
             if (!slot.InUse())
