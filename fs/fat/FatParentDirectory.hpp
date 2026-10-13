@@ -26,13 +26,16 @@ namespace fs
         ~FatParentDirectory();
 
         void Find(infra::BoundedConstString path, bool forCreation, const infra::Function<void(Result result)>& onDone);
+        void FindTarget(infra::BoundedConstString path, const FatScannedEntry& source, const infra::Function<void(Result result)>& onDone);
         const std::optional<FatScannedEntry>& Found() const;
         uint32_t Cluster() const;
         void PrepareAlias(const infra::Function<void(Result result)>& onDone);
         void Write(uint8_t attributes, uint32_t firstCluster, const infra::Function<void(Result result)>& onDone);
+        void WriteEntry(ShortEntry entry, const infra::Function<void(Result result)>& onDone);
         FatScannedEntry Written() const;
 
     private:
+        void Locate(infra::BoundedConstString path, uint32_t outside, const infra::Function<void(Result result)>& onDone);
         void OnParent(Result result);
         Result VerifyParent(Result result) const;
         void OnAliasScanned(Result result);
@@ -42,6 +45,7 @@ namespace fs
         FatVolume& volume;
         infra::BoundedConstString name;
         bool forCreation{ false };
+        std::optional<FatEntryPosition> except;
         uint32_t cluster{ 0 };
         std::optional<ShortName> exact;
         ShortNameBytes alias{};

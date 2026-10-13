@@ -90,6 +90,8 @@ target_sources(fs.fat PRIVATE
     FatRead.hpp
     FatRemove.cpp
     FatRemove.hpp
+    FatRename.cpp
+    FatRename.hpp
     FatReservation.cpp
     FatReservation.hpp
     FatRunLocator.cpp

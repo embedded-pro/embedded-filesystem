@@ -15,14 +15,16 @@ namespace fs
 
     void FatParentDirectory::Find(infra::BoundedConstString path, bool forCreation, const infra::Function<void(Result result)>& onDone)
     {
-        auto split = SplitLast(path);
-        name = split.name;
         this->forCreation = forCreation;
-        this->onDone = onDone;
-        volume.Walk().Find(split.parent, [this](Result result)
-            {
-                OnParent(result);
-            });
+        except = std::nullopt;
+        Locate(path, 0, onDone);
+    }
+
+    void FatParentDirectory::FindTarget(infra::BoundedConstString path, const FatScannedEntry& source, const infra::Function<void(Result result)>& onDone)
+    {
+        forCreation = true;
+        except = source.shortEntry;
+        Locate(path, IsDirectory(source) ? source.entry.firstCluster : 0, onDone);
     }
 
     const std::optional<FatScannedEntry>& FatParentDirectory::Found() const
@@ -59,7 +61,6 @@ namespace fs
     {
         auto now = volume.Timestamp();
         ShortEntry entry;
-        entry.name = shortName;
         entry.attributes = attributes;
         entry.createTime = now.time;
         entry.createDate = now.date;
@@ -67,13 +68,29 @@ namespace fs
         entry.writeTime = now.time;
         entry.writeDate = now.date;
         entry.firstCluster = firstCluster;
+        WriteEntry(entry, onDone);
+    }
 
+    void FatParentDirectory::WriteEntry(ShortEntry entry, const infra::Function<void(Result result)>& onDone)
+    {
+        entry.name = shortName;
         writer.Write(FatEntrySet{ exact ? infra::BoundedConstString() : name, entry }, *scan.Slots(), onDone);
     }
 
     FatScannedEntry FatParentDirectory::Written() const
     {
         return writer.Written();
+    }
+
+    void FatParentDirectory::Locate(infra::BoundedConstString path, uint32_t outside, const infra::Function<void(Result result)>& onDone)
+    {
+        auto split = SplitLast(path);
+        name = split.name;
+        this->onDone = onDone;
+        volume.Walk().FindOutside(split.parent, outside, [this](Result result)
+            {
+                OnParent(result);
+            });
     }
 
     void FatParentDirectory::OnParent(Result result)
@@ -92,7 +109,7 @@ namespace fs
         auto slots = static_cast<uint8_t>(exact ? 1 : LongEntriesFor(name) + 1);
         auto basis = exact || !forCreation ? std::nullopt : std::make_optional(alias);
 
-        scan.Scan(cluster, name, slots, basis, [this](Result result)
+        scan.Scan(cluster, name, slots, basis, except, [this](Result result)
             {
                 onDone(result);
             });

@@ -204,7 +204,9 @@ FAT12 has no such bit.
 A volume that was not clean at mount stays marked as not clean, and its FSINFO is not trusted.
 FSINFO is written only by `Unmount`, when the FAT changed during the mount, with the free count when it is known and as unknown otherwise; writing it on every `Sync` would add a write to every `Sync`, and an outdated FSINFO is harmless because it is only a hint.
 A write-protected card mounts and can be read; operations that write complete with `readOnly`.
-`Remove` and `MakeDirectory` flush the cache before they complete, so they are durable then, and a power loss afterwards leaves no clusters allocated but unused; a file that `Open` creates is written with its first `Sync` or `Close`, or at `Unmount`.
+`Remove`, `MakeDirectory`, `Rename` and `Truncate` flush the cache before they complete, so they are durable then, and a power loss afterwards leaves no clusters allocated but unused; a file that `Open` creates is written with its first `Sync` or `Close`, or at `Unmount`.
+`Open` in `write` mode truncates an existing file to zero in the same way as `Truncate`, before it completes.
+A `Truncate` at the end of the file writes nothing, and one within the last cluster writes only the directory entry.
 
 ## Behaviour on power loss
 
@@ -217,9 +219,11 @@ A write-protected card mounts and can be read; operations that write complete wi
 | Creating a file             | The file exists, with what its first `Sync` committed, or not at all; a new directory cluster may stay unused     |
 | `Remove`                    | The file exists or not; its clusters may stay allocated but unused                                                |
 | `MakeDirectory`             | The directory exists, empty, or not at all; its cluster may stay allocated but unused                             |
+| `Truncate`                  | The file has its previous size or its new one; the cut clusters may stay allocated but unused                     |
 | `Rename`                    | The entry exists under its old name, its new name or both; in the last case both names refer to the same clusters |
 | Between `Sync` calls        | Data written after the last completed `Sync` may be lost                                                          |
 
+After an interrupted `Rename` of a directory into another parent, its `..` entry may still name the previous parent, which a PC check corrects.
 Because the cache flushes the device between ranks, these guarantees also hold on devices that cache writes.
 They assume that the device writes a sector either completely or not at all.
 Some SD cards corrupt a sector that is being written when power fails, and some even corrupt other sectors that the card's controller was moving at the time.

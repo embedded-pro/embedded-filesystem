@@ -31,7 +31,7 @@ namespace fs
         FatNameScan& operator=(const FatNameScan& other) = delete;
         ~FatNameScan();
 
-        void Scan(uint32_t directory, infra::BoundedConstString name, uint8_t slots, const std::optional<ShortNameBytes>& basis, const infra::Function<void(Result result)>& onDone);
+        void Scan(uint32_t directory, infra::BoundedConstString name, uint8_t slots, const std::optional<ShortNameBytes>& basis, const std::optional<FatEntryPosition>& except, const infra::Function<void(Result result)>& onDone);
         void ScanForAlias(const ShortNameBytes& alias, const infra::Function<void(Result result)>& onDone);
 
         const std::optional<FatScannedEntry>& Found() const;
@@ -55,6 +55,7 @@ namespace fs
         infra::BoundedConstString name;
         uint8_t slots{ 1 };
         std::optional<ShortNameBytes> basis;
+        std::optional<FatEntryPosition> except;
         std::optional<ShortNameBytes> alias;
         FatDirectoryCursor cursor;
         std::optional<FatScannedEntry> found;

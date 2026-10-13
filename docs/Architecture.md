@@ -278,6 +278,7 @@ A file may be open in `read` mode any number of times.
 A file that is open in another mode cannot be opened again, and a file that is open cannot be opened in another mode; such an `Open` completes with `busy`.
 `Remove` and `Rename` of an open file or directory complete with `busy`.
 `Rename` onto an existing name completes with `alreadyExists`, and so does `MakeDirectory` of an existing name or of `/`.
+`Rename` of `/`, onto `/` or of a directory into its own subtree completes with `invalidPath`; `Rename` onto the name an entry already has does nothing, and one that changes only the case of the name renames it.
 `Remove` of a directory that is not empty completes with `notEmpty`, and `Remove("/")` with `invalidPath`.
 
 ### Handles

@@ -30,7 +30,6 @@ namespace fs
 
         void OnFound(Result result);
         Result Check() const;
-        bool InUse() const;
         void CheckEmpty();
         void OnChecked(Result result);
         void ClearEntry();

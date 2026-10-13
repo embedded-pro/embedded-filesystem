@@ -45,6 +45,7 @@ target_sources(fs.fat_test PRIVATE
     TestFatPartitionTable.cpp
     TestFatRead.cpp
     TestFatRemove.cpp
+    TestFatRename.cpp
     TestFatRunSearch.cpp
     TestFatShortName.cpp
     TestFatShortNameGeneration.cpp

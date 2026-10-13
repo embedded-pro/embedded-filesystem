@@ -24,6 +24,7 @@ namespace fs
         ~FatPathWalk();
 
         void Find(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone);
+        void FindOutside(infra::BoundedConstString path, uint32_t directoryCluster, const infra::Function<void(Result result)>& onDone);
 
         bool FoundRoot() const;
         const FatScannedEntry& Found() const;
@@ -43,6 +44,7 @@ namespace fs
         std::optional<PathComponents> components;
         infra::BoundedConstString component;
         FatDirectoryCursor cursor;
+        uint32_t outside{ 0 };
         std::optional<FatScannedEntry> found;
         infra::AutoResetFunction<void(Result result)> onDone;
     };

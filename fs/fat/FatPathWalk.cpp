@@ -12,7 +12,13 @@ namespace fs
 
     void FatPathWalk::Find(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
+        FindOutside(path, 0, onDone);
+    }
+
+    void FatPathWalk::FindOutside(infra::BoundedConstString path, uint32_t directoryCluster, const infra::Function<void(Result result)>& onDone)
+    {
         this->onDone = onDone;
+        outside = directoryCluster;
         components.emplace(path);
         found = std::nullopt;
         cursor = reader.Start(0);
@@ -81,6 +87,8 @@ namespace fs
             onDone(result);
         else if (!found)
             onDone(Result::notFound);
+        else if (outside != 0 && IsDirectory(*found) && FoundCluster() == outside)
+            onDone(Result::invalidPath);
         else if (components->Done())
             onDone(Result::success);
         else if (!FoundDirectory())
