@@ -22,7 +22,7 @@ namespace fs
             Flush(Result::success);
     }
 
-    void FatSync::Flush(Result result)
+    void FatSync::Flush(Result result) const
     {
         if (result != Result::success)
         {

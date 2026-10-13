@@ -63,7 +63,7 @@ namespace fs
             });
     }
 
-    void FatUnmount::Done(Result result)
+    void FatUnmount::Done(Result result) const
     {
         volume.Cache().Clear();
         volume.Cache().SetMirroredRegion(std::nullopt);

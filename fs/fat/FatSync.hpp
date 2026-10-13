@@ -20,7 +20,7 @@ namespace fs
         void Start();
 
     private:
-        void Flush(Result result);
+        void Flush(Result result) const;
 
     private:
         FatVolume& volume;
