@@ -211,27 +211,34 @@ TEST_F(MeteredBlockDeviceTest, records_a_histogram_of_blocks_per_write_request)
     EXPECT_EQ((std::map<uint32_t, uint64_t>{ { 1, 2 }, { 3, 1 } }), metered.BlocksPerWriteHistogram());
 }
 
-TEST_F(MeteredBlockDeviceTest, a_write_starting_on_an_allocation_unit_boundary_is_aligned)
+TEST_F(MeteredBlockDeviceTest, the_blocks_of_a_write_starting_on_an_allocation_unit_boundary_are_aligned)
 {
-    Write(8, 1);
+    Write(8, 3);
 
-    EXPECT_EQ(1, metered.Counters().alignedWrites);
+    EXPECT_EQ(3, metered.Counters().alignedBlocks);
 }
 
-TEST_F(MeteredBlockDeviceTest, a_write_continuing_the_previous_write_is_aligned)
-{
-    Write(1, 2);
-    Write(3, 1);
-
-    EXPECT_EQ(1, metered.Counters().alignedWrites);
-}
-
-TEST_F(MeteredBlockDeviceTest, a_write_neither_on_a_boundary_nor_continuing_is_not_aligned)
+TEST_F(MeteredBlockDeviceTest, the_blocks_of_a_write_continuing_the_previous_write_are_aligned)
 {
     Write(1, 1);
-    Write(6, 1);
+    Write(2, 2);
 
-    EXPECT_EQ(0, metered.Counters().alignedWrites);
+    EXPECT_EQ(2, metered.Counters().alignedBlocks);
+}
+
+TEST_F(MeteredBlockDeviceTest, only_the_first_block_of_a_write_neither_on_a_boundary_nor_continuing_is_not_aligned)
+{
+    Write(1, 1);
+    Write(6, 3);
+
+    EXPECT_EQ(2, metered.Counters().alignedBlocks);
+}
+
+TEST_F(MeteredBlockDeviceTest, an_empty_write_has_no_aligned_blocks)
+{
+    Write(1, 0);
+
+    EXPECT_EQ(0, metered.Counters().alignedBlocks);
 }
 
 TEST_F(MeteredBlockDeviceTest, counts_writes_per_allocation_unit)

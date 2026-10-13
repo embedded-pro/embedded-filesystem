@@ -74,6 +74,11 @@ namespace fs
 
             return sector + copyIndex * region->sectors;
         }
+
+        bool Continues(const Entry& previous, const Entry& next, const std::optional<MirroredRegion>& region)
+        {
+            return previous.valid && previous.dirty && next.valid && next.dirty && next.rank == previous.rank && next.sector == previous.sector + 1 && Copies(region, next.sector) == Copies(region, previous.sector);
+        }
     }
 
     SectorCache::SectorCache(FlushBarrier& barrier, infra::MemoryRange<Entry> entries, infra::ByteRange buffers)
@@ -207,14 +212,19 @@ namespace fs
 
     void SectorCache::Miss()
     {
-        target = &SelectSlot(leastRecentlyUsed);
+        target = &SlotFor(requestedSector);
 
-        if (target->valid && target->dirty && request == Request::readOnce)
+        if (relocation != nullptr)
+        {
+            Relocate();
+            Load();
+        }
+        else if (target->valid && target->dirty && request == Request::readOnce)
             Complete(Result::busy);
         else if (target->valid && target->dirty)
         {
             writingVictim = true;
-            WriteEntry(*target);
+            WriteRunOf(*target);
         }
         else
             Load();
@@ -287,7 +297,7 @@ namespace fs
         if (next == nullptr)
             AllWritten();
         else
-            WriteEntry(*next);
+            WriteRunOf(*next);
     }
 
     void SectorCache::AllWritten()
@@ -303,16 +313,25 @@ namespace fs
             Available();
     }
 
-    void SectorCache::WriteEntry(Entry& entry)
+    void SectorCache::WriteRunOf(Entry& entry)
     {
-        writing = &entry;
+        auto first = IndexOf(entry);
+        while (first != 0 && Continues(entries[first - 1], entries[first], mirroredRegion))
+            --first;
+
+        auto end = first + 1;
+        while (end != entries.size() && Continues(entries[end - 1], entries[end], mirroredRegion))
+            ++end;
+
+        writing = infra::MemoryRange<Entry>(entries.begin() + first, entries.begin() + end);
         copy = 0;
         WriteCopy();
     }
 
     void SectorCache::WriteCopy()
     {
-        barrier.Write(BufferOf(*writing), CopySector(mirroredRegion, writing->sector, copy), writing->rank, [this](hal::BlockDevice::Result deviceResult)
+        auto data = infra::Head(infra::DiscardHead(buffers, IndexOf(writing.front()) * sectorSize), writing.size() * sectorSize);
+        barrier.Write(data, CopySector(mirroredRegion, writing.front().sector, copy), writing.front().rank, [this](hal::BlockDevice::Result deviceResult)
             {
                 OnWritten(deviceResult);
             });
@@ -322,11 +341,12 @@ namespace fs
     {
         if (deviceResult != hal::BlockDevice::Result::success)
             Complete(ToResult(deviceResult));
-        else if (++copy != Copies(mirroredRegion, writing->sector))
+        else if (++copy != Copies(mirroredRegion, writing.front().sector))
             WriteCopy();
         else
         {
-            writing->dirty = false;
+            for (auto& written : writing)
+                written.dirty = false;
 
             if (writingVictim)
                 Load();
@@ -357,6 +377,64 @@ namespace fs
             onModify(result, contents);
     }
 
+    SectorCache::Entry& SectorCache::SlotFor(uint32_t sector)
+    {
+        relocation = nullptr;
+
+        if (request != Request::modify && request != Request::overwrite)
+            return SelectSlot(leastRecentlyUsed);
+
+        if (auto* after = AfterPrevious(sector); after != nullptr)
+        {
+            if (!after->dirty)
+                return *after;
+
+            relocation = FirstAvailable(after + 1);
+            if (relocation != nullptr)
+                return *after;
+        }
+
+        if (auto* available = FirstAvailable(entries.begin()); available != nullptr)
+            return *available;
+
+        return SelectSlot(leastRecentlyUsed);
+    }
+
+    SectorCache::Entry* SectorCache::AfterPrevious(uint32_t sector) const
+    {
+        auto* previous = sector != 0 ? Find(entries, sector - 1) : nullptr;
+
+        return previous != nullptr && previous + 1 != entries.end() ? previous + 1 : nullptr;
+    }
+
+    SectorCache::Entry* SectorCache::FirstAvailable(Entry* from) const
+    {
+        Entry* clean = nullptr;
+
+        for (auto* entry = from; entry != entries.end(); ++entry)
+            if (!entry->valid)
+                return entry;
+            else if (!entry->dirty && clean == nullptr)
+                clean = entry;
+
+        return clean;
+    }
+
+    void SectorCache::Relocate()
+    {
+        infra::Copy(infra::MakeConst(BufferOf(*target)), BufferOf(*relocation));
+        relocation->sector = target->sector;
+        relocation->rank = target->rank;
+        relocation->valid = true;
+        relocation->dirty = true;
+        Touch(*relocation);
+    }
+
+    std::size_t SectorCache::IndexOf(const Entry& entry) const
+    {
+        return static_cast<std::size_t>(&entry - entries.begin());
+    }
+
     void SectorCache::Touch(Entry& entry)
     {
         leastRecentlyUsed.erase(entry);
@@ -371,8 +449,6 @@ namespace fs
 
     infra::ByteRange SectorCache::BufferOf(const Entry& entry) const
     {
-        auto index = static_cast<std::size_t>(&entry - entries.begin());
-
-        return infra::Head(infra::DiscardHead(buffers, index * sectorSize), sectorSize);
+        return infra::Head(infra::DiscardHead(buffers, IndexOf(entry) * sectorSize), sectorSize);
     }
 }

@@ -16,7 +16,7 @@ namespace metrics
         uint64_t blocksRead{};
         uint64_t blocksWritten{};
         uint64_t blocksDiscarded{};
-        uint64_t alignedWrites{};
+        uint64_t alignedBlocks{};
         uint64_t allocationUnitOpenings{};
         infra::Duration readTime{};
         infra::Duration writeTime{};

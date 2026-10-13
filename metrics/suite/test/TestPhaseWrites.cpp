@@ -43,7 +43,7 @@ TEST_F(PhaseWritesTest, a_phase_counts_the_writes_since_the_previous_phase_ended
     const auto& writes = phaseWrites.Of("measured");
     EXPECT_EQ(2, writes.writeRequests);
     EXPECT_EQ(4, writes.blocksWritten);
-    EXPECT_EQ(2, writes.alignedWrites);
+    EXPECT_EQ(4, writes.alignedBlocks);
     EXPECT_EQ((std::set<uint32_t>{ 1 }), writes.allocationUnits);
 }
 
@@ -77,7 +77,7 @@ TEST_F(PhaseWritesTest, an_unknown_phase_has_no_writes)
 
 TEST(WritesOfPhaseTest, derives_the_device_metrics)
 {
-    metrics::WritesOfPhase writes{ 4, 32, 3, { 1, 2 } };
+    metrics::WritesOfPhase writes{ 4, 32, 24, { 1, 2 } };
 
     EXPECT_DOUBLE_EQ(8.0, writes.MeanBlocksPerWrite());
     EXPECT_DOUBLE_EQ(0.75, writes.AlignedShare());

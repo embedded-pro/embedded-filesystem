@@ -32,11 +32,12 @@ TEST(BlockDeviceStatisticsTest, mean_blocks_per_write_divides_blocks_written_by_
     EXPECT_DOUBLE_EQ(2.5, counters.MeanBlocksPerWrite());
 }
 
-TEST(BlockDeviceStatisticsTest, aligned_share_divides_aligned_writes_by_write_requests)
+TEST(BlockDeviceStatisticsTest, aligned_share_divides_aligned_blocks_by_blocks_written)
 {
     metrics::BlockDeviceCounters counters{};
-    counters.writeRequests = 4;
-    counters.alignedWrites = 3;
+    counters.writeRequests = 1;
+    counters.blocksWritten = 8;
+    counters.alignedBlocks = 6;
 
     EXPECT_DOUBLE_EQ(0.75, counters.AlignedShare());
 }

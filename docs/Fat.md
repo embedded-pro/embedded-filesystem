@@ -105,7 +105,7 @@ Every modified sector carries a rank, which orders the writes:
 | 3    | The short entry of a new entry set that spans two sectors, and the long name entries of a removed set |
 
 Writing back writes the sectors of the lowest rank first, and within a rank in ascending sector order.
-When the cache is full, it replaces a free slot, else the least recently used sector that is not modified, else the least recently used sector of the lowest modified rank; so making room writes at most one device request, and never a sector of a higher rank before one of a lower rank.
+When the cache is full, it replaces a free slot, else the least recently used sector that is not modified, else the least recently used sector of the lowest modified rank, written together with the consecutive sectors of its rank in the adjacent slots; so making room writes at most one device request per copy, and never a sector of a higher rank before one of a lower rank.
 A sector that is modified again with another rank first makes the cache write back everything.
 A write that fails leaves its sector modified, and writing back stops at the first failure, so a sector of a higher rank is never written after a failed write of a lower rank.
 FAT sectors are written to the first FAT and then to every other copy in turn.
@@ -123,7 +123,9 @@ An operation that needs a barrier, as described under [Writing](#writing), asks 
 The whole sectors of a read go directly from the device into the buffer of the caller, one request per contiguous run of clusters, and the cache then copies the sectors it holds of that range over the buffer, so that the caller sees the latest contents.
 A write goes directly to the device when its whole sectors form a contiguous run longer than the cache can collect, which is the number of cache sectors minus two; the cache drops the sectors it holds of that range, and the run is written at rank 0 in one request.
 Shorter writes, and the partial sectors at the ends of any transfer, go through the cache.
-The cache writes back consecutive sectors of the same rank that it holds in adjacent slots in one multi-block request, and places a data sector in the slot after the one of its predecessor when it can, so that collected writes leave the cache as multi-block requests.
+The cache writes back consecutive sectors of the same rank that it holds in adjacent slots in one multi-block request, so that collected writes leave the cache as multi-block requests.
+To keep such sectors adjacent, a sector that is written takes the slot after the one of its predecessor; when that slot holds a modified sector, the cache moves it to the first free or unmodified slot after it, and otherwise a written sector takes the first free slot, else the first unmodified one.
+Modified metadata thereby moves to the last slots, and a stream of collected writes fills the others in order.
 Clusters that are freed are discarded through `fs::DirectTransfers`, after the cache drops the sectors it holds of them.
 Background reads, such as the scan of the FAT for free clusters, use `SectorCache::ReadOnce`, which takes only free or unmodified slots and leaves them least recently used, so a background read is one device request and never pushes useful sectors out of the cache; when every slot is modified, it completes with `busy`.
 As everywhere in EmIL, a buffer passed to `Read` or `Write` must stay valid until the operation completes.

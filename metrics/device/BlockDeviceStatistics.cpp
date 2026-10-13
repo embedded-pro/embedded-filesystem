@@ -14,7 +14,7 @@ namespace metrics
 
     double BlockDeviceCounters::AlignedShare() const
     {
-        return writeRequests == 0 ? 0.0 : static_cast<double>(alignedWrites) / writeRequests;
+        return blocksWritten == 0 ? 0.0 : static_cast<double>(alignedBlocks) / blocksWritten;
     }
 
     BlockDeviceCounters BlockDeviceCounters::operator-(const BlockDeviceCounters& earlier) const
@@ -28,7 +28,7 @@ namespace metrics
             blocksRead - earlier.blocksRead,
             blocksWritten - earlier.blocksWritten,
             blocksDiscarded - earlier.blocksDiscarded,
-            alignedWrites - earlier.alignedWrites,
+            alignedBlocks - earlier.alignedBlocks,
             allocationUnitOpenings - earlier.allocationUnitOpenings,
             readTime - earlier.readTime,
             writeTime - earlier.writeTime,
