@@ -140,7 +140,8 @@ namespace
     const std::vector<SweepMode> modes{
         { "unwritten", { 0, metrics::InterruptedBlock::unwritten }, true },
         { "written", { 0, metrics::InterruptedBlock::written }, true },
-        { "lost", { 0, metrics::InterruptedBlock::unwritten, true }, true },
+        { "lost", { 0, metrics::InterruptedBlock::unwritten, metrics::UnflushedWrites::lost }, true },
+        { "reordered", { 0, metrics::InterruptedBlock::written, metrics::UnflushedWrites::reordered }, true },
         { "torn", { 0, metrics::InterruptedBlock::torn }, false },
     };
 
