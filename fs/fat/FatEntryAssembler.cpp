@@ -53,11 +53,9 @@ namespace fs
 
     void FatEntryAssembler::FeedLongEntry(const std::optional<LongEntry>& entry, FatEntryPosition position)
     {
-        if (!entry)
-            Reset();
-        else if (entry->last)
+        if (entry.has_value() && entry->last)
             StartSet(*entry, position);
-        else if (expectedOrdinal.has_value() && entry->ordinal + 1 == *expectedOrdinal && entry->checksum == checksum)
+        else if (entry.has_value() && expectedOrdinal.has_value() && entry->ordinal + 1 == *expectedOrdinal && entry->checksum == checksum)
         {
             expectedOrdinal = entry->ordinal;
             ++scanned.slots;
