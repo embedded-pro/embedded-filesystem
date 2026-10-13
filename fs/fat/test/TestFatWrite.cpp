@@ -31,6 +31,7 @@ namespace
         {
             builder->AddFile(0, "notes.txt", "NOTES   TXT", infra::MakeRange(original));
             builder->AddFile(0, "", "EMPTY   TXT", infra::ConstByteRange());
+            MarkVolumeDirty();
             ExpectMount();
         }
 
@@ -604,11 +605,15 @@ TEST_F(FatWriteOnFat32Test, unmount_without_allocation_leaves_fsinfo_alone)
     ExpectWrite(*file, infra::MakeRange(update));
     file = nullptr;
     ExecuteAllActions();
-    auto writes = device.WriteRequests();
+    bool fsInfoWritten = false;
+    device.Observe([this, &fsInfoWritten](fs::SparseBlockDevice::Request request, uint32_t block)
+        {
+            fsInfoWritten = fsInfoWritten || (request == fs::SparseBlockDevice::Request::write && block == *builder->Geometry().fsInfoSector);
+        });
 
     ExpectUnmount();
 
-    EXPECT_EQ(writes, device.WriteRequests());
+    EXPECT_FALSE(fsInfoWritten);
 }
 
 TEST_F(FatWriteOnFat32Test, unmount_of_a_volume_with_an_unknown_count_marks_the_count_unknown)

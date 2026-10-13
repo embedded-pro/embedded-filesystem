@@ -144,6 +144,9 @@ namespace fs
     void FatParentDirectory::Prepared(const ShortName& prepared)
     {
         shortName = prepared;
-        onDone(Result::success);
+        volume.DirtyFlag().MarkDirty([this](Result result)
+            {
+                onDone(result);
+            });
     }
 }

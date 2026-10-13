@@ -30,6 +30,7 @@ namespace fs
         void LocateLastKept();
         void ReadFirstCut(uint32_t cluster);
         void Commit();
+        void CommitEntry();
         void CutChain();
         void FreeCut();
         void Succeed();

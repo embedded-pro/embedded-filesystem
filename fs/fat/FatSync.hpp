@@ -20,6 +20,7 @@ namespace fs
         void Start() const;
 
     private:
+        void Commit() const;
         void Flush(Result result) const;
 
     private:

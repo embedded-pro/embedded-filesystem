@@ -25,6 +25,7 @@ namespace fs
         , allocator(parts.cache, state, tableWriter, *this, freeSpace)
         , entryUpdate(parts.cache, reader, config.timerServiceId)
         , chainFree(parts.cache, transfers, state, tableWriter, freeSpace, config.discard)
+        , dirtyFlag(parts.cache, state)
         , closedFiles(parts.closedFiles)
         , queue(config.idleDelay, [this]
               {
@@ -103,6 +104,11 @@ namespace fs
         return chainFree;
     }
 
+    FatDirtyFlag& FatVolume::DirtyFlag()
+    {
+        return dirtyFlag;
+    }
+
     FatTableWriter& FatVolume::TableWriter()
     {
         return tableWriter;
@@ -174,6 +180,7 @@ namespace fs
         state.allocationUnits = AllocationUnitsOf(state.geometry, blocksPerAllocationUnit);
         freeSpace.Restart();
         allocator.Reset();
+        dirtyFlag.Reset();
         ++generation;
         mounted = true;
         background.Start();

@@ -32,6 +32,7 @@ namespace
             documents = builder->AddDirectory(0, "Documents", "DOCUME~1   ");
             builder->AddFile(documents, "", "REPORT  TXT", infra::MakeRange(notes));
             sub = builder->AddDirectory(documents, "", "SUB        ");
+            MarkVolumeDirty();
             ExpectMount();
         }
 

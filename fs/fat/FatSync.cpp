@@ -14,12 +14,23 @@ namespace fs
     void FatSync::Start() const
     {
         if (file.Uncommitted())
-            volume.EntryUpdate().Commit(file, [this](Result result)
+            volume.DirtyFlag().MarkDirty([this](Result result)
                 {
-                    Flush(result);
+                    if (result != Result::success)
+                        onDone(result);
+                    else
+                        Commit();
                 });
         else
             Flush(Result::success);
+    }
+
+    void FatSync::Commit() const
+    {
+        volume.EntryUpdate().Commit(file, [this](Result result)
+            {
+                Flush(result);
+            });
     }
 
     void FatSync::Flush(Result result) const
