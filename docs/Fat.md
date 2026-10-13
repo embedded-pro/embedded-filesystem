@@ -152,11 +152,12 @@ Clusters are allocated in this order:
 
 1. A file with a reservation takes its clusters from the reservation.
 2. A file that grows takes the cluster after its last cluster when it is free.
-3. Otherwise the first cluster of a new chain is the first free cluster of the allocation unit of the cursor, so that new files take the clusters that removed files freed in the unit the card is already writing; any other cluster is the first free cluster at or after the cursor. Either search continues past the unit, wrapping around at the end of the volume. A search from the start of the unit reads the FAT sectors that cover it, one or two on a card formatted to the SD specification.
+3. Otherwise the first cluster of a new chain is the first free cluster of the allocation unit of the cursor, and any other cluster is the first free cluster at or after the cursor; either search continues past the unit, wrapping around at the end of the volume.
 4. A reservation that would cross an allocation unit boundary starts at the next boundary instead, when a free run of its length starts there.
 5. A file opened in `append` mode that has no clusters yet starts at the first allocation unit boundary at or after the cursor, wrapping around, whose whole allocation unit the cache of free runs holds, so that a log fills allocation units one after the other; when the cache holds no such allocation unit, rule 3 applies.
 6. When the allocation unit of the card is not known, the rules about allocation units do not apply.
 
+With rule 3, new files take the clusters that removed files freed in the unit the card is already writing; its search from the start of the unit reads the FAT sectors that cover it, one or two on a card formatted to the SD specification.
 The allocation unit is given by `FatConfig::blocksPerAllocationUnit`, because `hal::BlockDevice` does not report it.
 On FAT12, the allocator never takes a cluster whose 12-bit FAT entry straddles two sectors, because such an entry is changed by two writes; these clusters count as used.
 A file whose last cluster has such an entry, which only another implementation creates, is extended by writing both halves of that entry, so a power loss between the two writes can corrupt its chain.
