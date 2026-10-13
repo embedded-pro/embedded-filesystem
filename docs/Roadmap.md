@@ -61,12 +61,12 @@ The formatter comes early, because every later test and the metrics need formatt
 9. Free space: the background scan that counts free clusters, and `Usage`.
 10. The independent consistency checker for FAT images.
 11. Allocation: the cursor from the FSINFO hint, the cluster after the last one, next fit, and the flush before a link into another FAT sector.
-12. Writing, `Sync` and `Close` of existing files, with the first power-cut sweep.
+12. Writing, `Sync` and `Close` of existing files, FSINFO at unmount, and the first power-cut sweep.
 13. Creating files with long names and short aliases, and `ExpectSize` with allocation-unit-aligned runs.
 14. `Remove` with discard and `MakeDirectory`, and the FAT subject of the metrics.
 15. `Rename` and `Truncate`.
 16. Multi-block write-back in the sector cache (M-1), and the cache of free runs.
-17. The dirty flag, FSINFO at unmount, and the sweep with reordered unflushed writes.
+17. The dirty flag, and the sweep with reordered unflushed writes.
 18. The targets of embedded-filesystem in the metrics, and P-1.
 
 ## Phase 7: NOR

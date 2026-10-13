@@ -26,27 +26,14 @@ namespace fs
     {
         auto index = file.position / ClusterBytes();
         auto limit = (file.position + Remaining() - 1) / ClusterBytes();
-        auto run = extents.Covering(index);
 
-        if (run && run->Covers(limit))
-            Transfer(*run);
-        else
-            volume.Chain().Walk(run ? *run : *extents.NearestBefore(index), index, limit, [this](Result result, const FatExtent& found)
-                {
-                    OnLocated(result, found);
-                });
-    }
-
-    void FatRead::OnLocated(Result result, const FatExtent& run)
-    {
-        if (result != Result::success)
-        {
-            onDone(result, bytesRead);
-            return;
-        }
-
-        extents.Add(run);
-        Transfer(run);
+        volume.Locator().Locate(extents, index, limit, [this](Result result, const FatExtent& run)
+            {
+                if (result != Result::success)
+                    onDone(result, bytesRead);
+                else
+                    Transfer(run);
+            });
     }
 
     void FatRead::Transfer(const FatExtent& run)

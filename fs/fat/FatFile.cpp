@@ -1,5 +1,6 @@
 #include "fs/fat/FatFile.hpp"
 #include <algorithm>
+#include <utility>
 
 namespace fs
 {
@@ -9,22 +10,46 @@ namespace fs
         , claimer(volume.Queue())
     {}
 
-    FatFile::~FatFile() = default;
+    FatFile::~FatFile()
+    {
+        if (open)
+            Detach();
+    }
 
     void FatFile::Open(const FatScannedEntry& scanned, OpenMode mode)
     {
-        state = FatOpenFile{ scanned.shortEntry, scanned.entry.firstCluster, scanned.entry.size, 0, mode };
+        auto clusterBytes = volume.Geometry().sectorsPerCluster * volume.Cache().SectorSize();
+        state = FatOpenFile{};
+        state.entry = scanned.shortEntry;
+        state.firstCluster = scanned.entry.firstCluster;
+        state.size = scanned.entry.size;
+        state.clusters = static_cast<uint32_t>((uint64_t{ state.size } + clusterBytes - 1) / clusterBytes);
+        state.mode = mode;
+        state.position = mode == OpenMode::append ? state.size : 0;
+        state.Committed();
         generation = volume.Generation();
         open = true;
+        volume.OpenFiles().push_back(*this);
         extents.Clear();
 
-        if (state.size == 0)
+        if (state.clusters == 0)
             return;
 
         extents.Add(FatExtent{ 0, state.firstCluster, 1 });
 
         if (auto last = volume.ClosedFiles().Recall(state.entry, state.firstCluster, state.size))
             extents.Add(*last);
+    }
+
+    FatOpenFile& FatFile::State()
+    {
+        return state;
+    }
+
+    void FatFile::Detach()
+    {
+        volume.OpenFiles().erase(*this);
+        open = false;
     }
 
     uint32_t FatFile::Size() const
@@ -44,7 +69,7 @@ namespace fs
 
     void FatFile::Read(infra::ByteRange buffer, const infra::Function<void(Result result, std::size_t bytesRead)>& onDone)
     {
-        if (onRead)
+        if (Pending())
         {
             volume.Defer(onDone, Result::busy);
             return;
@@ -52,63 +77,112 @@ namespace fs
 
         readBuffer = buffer;
         onRead = onDone;
-        self = Share(*this);
-        claimer.Claim([this]
-            {
-                StartRead();
-            });
+        Claim(Call::read);
     }
 
-    void FatFile::Write(infra::ConstByteRange, const infra::Function<void(Result result)>& onDone)
+    void FatFile::Write(infra::ConstByteRange data, const infra::Function<void(Result result)>& onDone)
     {
-        volume.Defer(onDone, Unwritable());
+        if (Pending() || !state.Writable())
+        {
+            volume.Defer(onDone, Unwritable());
+            return;
+        }
+
+        writeData = data;
+        this->onDone = onDone;
+        Claim(Call::write);
     }
 
     void FatFile::Truncate(const infra::Function<void(Result result)>& onDone)
     {
-        volume.Defer(onDone, Unwritable());
+        volume.Defer(onDone, Pending() || !state.Writable() ? Unwritable() : Result::unsupported);
     }
 
     void FatFile::ExpectSize(uint32_t, const infra::Function<void(Result result)>& onDone)
     {
-        volume.Defer(onDone, Unwritable());
+        volume.Defer(onDone, Pending() || !state.Writable() ? Unwritable() : Result::unsupported);
     }
 
     void FatFile::Sync(const infra::Function<void(Result result)>& onDone)
     {
-        if (onRead)
+        if (Pending())
             volume.Defer(onDone, Result::busy);
-        else
+        else if (!state.Writable())
             volume.Defer(onDone, volume.Available(generation) ? Result::success : volume.Unavailable());
+        else
+        {
+            this->onDone = onDone;
+            Claim(Call::sync);
+        }
     }
 
     void FatFile::Close(const infra::Function<void(Result result)>& onDone)
     {
-        if (onRead)
-        {
+        if (Pending())
             volume.Defer(onDone, Result::busy);
-            return;
+        else if (!state.Writable())
+        {
+            auto result = volume.Available(generation) ? Result::success : volume.Unavailable();
+            Forget();
+            volume.Defer(onDone, result);
         }
-
-        auto result = volume.Available(generation) ? Result::success : volume.Unavailable();
-        Forget();
-        volume.Defer(onDone, result);
+        else
+        {
+            this->onDone = onDone;
+            Claim(Call::close);
+        }
     }
 
     void FatFile::UnReferenced()
     {
+        if (open && state.Writable() && state.Uncommitted() && volume.Available(generation))
+        {
+            call = Call::implicitClose;
+            claimer.Claim([this]
+                {
+                    Granted();
+                });
+            return;
+        }
+
         Forget();
         Release();
     }
 
-    void FatFile::StartRead()
+    bool FatFile::Pending() const
+    {
+        return call != Call::none;
+    }
+
+    void FatFile::Claim(Call call)
+    {
+        this->call = call;
+        self = Share(*this);
+        claimer.Claim([this]
+            {
+                Granted();
+            });
+    }
+
+    void FatFile::Granted()
     {
         if (!volume.Available(generation))
         {
-            ReadDone(volume.Unavailable(), 0);
-            return;
+            if (call == Call::read)
+                ReadDone(volume.Unavailable(), 0);
+            else
+                Done(volume.Unavailable());
         }
+        else if (call == Call::read)
+            StartRead();
+        else if (call == Call::write)
+            StartWrite();
+        else
+            StartSync();
+    }
 
+    void FatFile::StartRead()
+    {
         volume.Operation().emplace<FatRead>(volume, state, extents, readBuffer, [this](Result result, std::size_t bytesRead)
                               {
                                   volume.Report(result);
@@ -117,24 +191,66 @@ namespace fs
             .Start();
     }
 
+    void FatFile::StartWrite()
+    {
+        volume.Operation().emplace<FatWrite>(volume, state, extents, writeData, [this](Result result)
+                              {
+                                  volume.Report(result);
+                                  Done(result);
+                              })
+            .Start();
+    }
+
+    void FatFile::StartSync()
+    {
+        volume.Operation().emplace<FatSync>(volume, state, [this](Result result)
+                              {
+                                  volume.Report(result);
+                                  Done(result);
+                              })
+            .Start();
+    }
+
     void FatFile::ReadDone(Result result, std::size_t bytesRead)
     {
         claimer.Release();
+        call = Call::none;
         self = nullptr;
         onRead(result, bytesRead);
     }
 
+    void FatFile::Done(Result result)
+    {
+        auto completed = std::exchange(call, Call::none);
+        claimer.Release();
+
+        if (completed == Call::close || completed == Call::implicitClose)
+            Forget();
+
+        if (completed == Call::implicitClose)
+        {
+            Release();
+            return;
+        }
+
+        self = nullptr;
+        onDone(result);
+    }
+
     Result FatFile::Unwritable() const
     {
-        return onRead ? Result::busy : Result::readOnly;
+        return Pending() ? Result::busy : Result::readOnly;
     }
 
     void FatFile::Forget()
     {
-        if (open && volume.Available(generation))
+        if (!open)
+            return;
+
+        if (volume.Available(generation))
             if (auto last = extents.Last())
                 volume.ClosedFiles().Remember(FatClosedFile{ state.entry, state.firstCluster, state.size, *last });
 
-        open = false;
+        Detach();
     }
 }

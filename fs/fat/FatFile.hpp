@@ -10,6 +10,7 @@
 #include "fs/interfaces/File.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/ByteRange.hpp"
+#include "infra/util/IntrusiveList.hpp"
 #include "infra/util/SharedPtr.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -19,6 +20,7 @@ namespace fs
     class FatFile
         : public File
         , public PooledHandle
+        , public infra::IntrusiveList<FatFile>::NodeType
     {
     public:
         template<std::size_t Extents>
@@ -30,6 +32,8 @@ namespace fs
         ~FatFile();
 
         void Open(const FatScannedEntry& scanned, OpenMode mode);
+        FatOpenFile& State();
+        void Detach();
 
         uint32_t Size() const override;
         uint32_t Position() const override;
@@ -42,9 +46,25 @@ namespace fs
         void Close(const infra::Function<void(Result result)>& onDone) override;
 
     private:
+        enum class Call : uint8_t
+        {
+            none,
+            read,
+            write,
+            sync,
+            close,
+            implicitClose
+        };
+
         void UnReferenced() override;
+        bool Pending() const;
+        void Claim(Call call);
+        void Granted();
         void StartRead();
+        void StartWrite();
+        void StartSync();
         void ReadDone(Result result, std::size_t bytesRead);
+        void Done(Result result);
         Result Unwritable() const;
         void Forget();
 
@@ -55,9 +75,12 @@ namespace fs
         FatOpenFile state;
         uint32_t generation{ 0 };
         bool open{ false };
+        Call call{ Call::none };
         infra::ByteRange readBuffer;
+        infra::ConstByteRange writeData;
         infra::SharedPtr<FatFile> self;
         infra::AutoResetFunction<void(Result result, std::size_t bytesRead)> onRead;
+        infra::AutoResetFunction<void(Result result)> onDone;
     };
 
     namespace detail

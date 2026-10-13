@@ -196,7 +196,7 @@ Discard can be disabled with `FatConfig::discard` for devices that implement it 
 The clean-shutdown bit of the second FAT entry is cleared before the first change to the metadata of a mount is written, and set again by a clean `Unmount`, so that a PC checks the volume after a power loss.
 FAT12 has no such bit.
 A volume that was not clean at mount stays marked as not clean, and its FSINFO is not trusted.
-FSINFO is written only by `Unmount`, when the free count or the hint changed; writing it on every `Sync` would add a write to every `Sync`, and an outdated FSINFO is harmless because it is only a hint.
+FSINFO is written only by `Unmount`, when the FAT changed during the mount, with the free count when it is known and as unknown otherwise; writing it on every `Sync` would add a write to every `Sync`, and an outdated FSINFO is harmless because it is only a hint.
 A write-protected card mounts and can be read; operations that write complete with `readOnly`.
 
 ## Behaviour on power loss

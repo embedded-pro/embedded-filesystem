@@ -49,12 +49,60 @@ TEST_F(FatOpenTest, opening_a_missing_file_is_not_found)
     ExpectOpen("notes.txt", fs::OpenMode::read, fs::Result::invalidPath);
 }
 
-TEST_F(FatOpenTest, modes_that_write_are_not_supported_yet)
+TEST_F(FatOpenTest, existing_file_opens_for_appending_at_its_end)
+{
+    auto file = ExpectOpen("/notes.txt", fs::OpenMode::append);
+
+    EXPECT_EQ(700u, file->Position());
+}
+
+TEST_F(FatOpenTest, existing_file_opens_for_reading_and_writing_at_its_start)
+{
+    auto file = ExpectOpen("/notes.txt", fs::OpenMode::readWrite);
+
+    EXPECT_EQ(0u, file->Position());
+}
+
+TEST_F(FatOpenTest, modes_that_create_or_truncate_are_not_supported_yet)
 {
     ExpectOpen("/notes.txt", fs::OpenMode::write, fs::Result::unsupported);
-    ExpectOpen("/notes.txt", fs::OpenMode::append, fs::Result::unsupported);
     ExpectOpen("/missing.txt", fs::OpenMode::readWrite, fs::Result::unsupported);
     ExpectOpen("/documents", fs::OpenMode::write, fs::Result::isADirectory);
+}
+
+TEST_F(FatOpenTest, read_only_file_cannot_be_opened_for_writing)
+{
+    auto entry = fs::ShortEntry{};
+    entry.name.bytes = { 'L', 'O', 'C', 'K', 'E', 'D', ' ', ' ', ' ', ' ', ' ' };
+    entry.attributes = fs::FatAttributes::readOnly;
+    builder->AddEntries(0, "", entry);
+
+    ExpectOpen("/locked", fs::OpenMode::append, fs::Result::readOnly);
+    ExpectOpen("/locked", fs::OpenMode::read);
+}
+
+TEST_F(FatOpenTest, file_open_for_writing_cannot_be_opened_again)
+{
+    auto writer = ExpectOpen("/notes.txt", fs::OpenMode::append);
+
+    ExpectOpen("/notes.txt", fs::OpenMode::read, fs::Result::busy);
+    ExpectOpen("/NOTES.TXT", fs::OpenMode::readWrite, fs::Result::busy);
+}
+
+TEST_F(FatOpenTest, file_open_for_reading_cannot_be_opened_for_writing)
+{
+    auto reader = ExpectOpen("/notes.txt");
+
+    ExpectOpen("/notes.txt", fs::OpenMode::append, fs::Result::busy);
+}
+
+TEST_F(FatOpenTest, closed_file_can_be_opened_in_another_mode)
+{
+    auto reader = ExpectOpen("/notes.txt");
+    reader->Close(Done());
+    ExpectDone(fs::Result::success);
+
+    auto writer = ExpectOpen("/notes.txt", fs::OpenMode::append);
 }
 
 TEST_F(FatOpenTest, file_whose_chain_starts_outside_the_volume_is_corrupted)

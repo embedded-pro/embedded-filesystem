@@ -85,6 +85,7 @@ TEST_F(FatAllocatorTest, chain_takes_contiguous_free_clusters)
     ExpectGrow(std::nullopt, 3, fs::Result::success, 2, 3);
     Flush();
 
+    EXPECT_EQ(3u, allocator.Contiguous());
     EXPECT_EQ(3u, builder->FatEntry(2));
     EXPECT_EQ(4u, builder->FatEntry(3));
     EXPECT_EQ(EndOfChain(), builder->FatEntry(4));
@@ -97,6 +98,7 @@ TEST_F(FatAllocatorTest, chain_skips_clusters_in_use)
     ExpectGrow(std::nullopt, 2, fs::Result::success, 2, 2);
     Flush();
 
+    EXPECT_EQ(1u, allocator.Contiguous());
     EXPECT_EQ(4u, builder->FatEntry(2));
     EXPECT_EQ(EndOfChain(), builder->FatEntry(4));
 }

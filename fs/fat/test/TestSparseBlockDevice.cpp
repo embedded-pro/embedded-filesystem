@@ -58,6 +58,13 @@ TEST_F(SparseBlockDeviceTest, reports_its_geometry)
     EXPECT_EQ(1000u, device.NumberOfBlocks());
 }
 
+TEST_F(SparseBlockDeviceTest, image_reports_the_number_of_blocks)
+{
+    const fs::BlockImage& image = device;
+
+    EXPECT_EQ(1000u, image.Blocks());
+}
+
 TEST_F(SparseBlockDeviceTest, absent_block_reads_as_zeros)
 {
     EXPECT_EQ(Block{}, Read(999));

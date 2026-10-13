@@ -1,4 +1,5 @@
 #include "fs/fat/FatVolume.hpp"
+#include "fs/fat/FatFile.hpp"
 
 namespace fs
 {
@@ -6,6 +7,7 @@ namespace fs
         : device(parts.device)
         , cache(parts.cache)
         , deferred(parts.deferred)
+        , cacheSectors(parts.cacheSectors)
         , limits{ parts.nameBuffer.size(), config.maxPathBytes }
         , onMediaRemoved(onMediaRemoved)
         , transfers(parts.barrier, parts.cache)
@@ -13,6 +15,10 @@ namespace fs
         , reader(parts.cache, state.geometry, assembler)
         , walk(reader, state.geometry)
         , chain(parts.cache, state.geometry)
+        , locator(chain)
+        , tableWriter(parts.cache, state.geometry)
+        , allocator(parts.cache, state, tableWriter)
+        , entryUpdate(parts.cache, reader)
         , closedFiles(parts.closedFiles)
         , freeSpace(parts.cache, state)
         , queue(config.idleDelay, [this]
@@ -35,6 +41,11 @@ namespace fs
     SectorCache& FatVolume::Cache() const
     {
         return cache;
+    }
+
+    uint32_t FatVolume::CacheSectors() const
+    {
+        return cacheSectors;
     }
 
     DirectTransfers& FatVolume::Transfers()
@@ -67,9 +78,19 @@ namespace fs
         return walk;
     }
 
-    FatChainWalk& FatVolume::Chain()
+    FatRunLocator& FatVolume::Locator()
     {
-        return chain;
+        return locator;
+    }
+
+    FatAllocator& FatVolume::Allocator()
+    {
+        return allocator;
+    }
+
+    FatEntryUpdate& FatVolume::EntryUpdate()
+    {
+        return entryUpdate;
     }
 
     FatClosedFiles& FatVolume::ClosedFiles()
@@ -80,6 +101,11 @@ namespace fs
     FatFreeSpaceScan& FatVolume::FreeSpace()
     {
         return freeSpace;
+    }
+
+    infra::IntrusiveList<FatFile>& FatVolume::OpenFiles()
+    {
+        return openFiles;
     }
 
     OperationQueue& FatVolume::Queue()
@@ -116,6 +142,7 @@ namespace fs
     {
         closedFiles.Clear();
         freeSpace.Restart();
+        allocator.Reset();
         ++generation;
         mounted = true;
         background.Start();
@@ -125,6 +152,10 @@ namespace fs
     {
         mounted = false;
         background.Stop();
+
+        while (!openFiles.empty())
+            openFiles.front().Detach();
+
         unavailable = reason == Result::mediaRemoved ? Result::mediaRemoved : Result::notMounted;
     }
 

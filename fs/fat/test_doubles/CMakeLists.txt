@@ -9,6 +9,7 @@ target_link_libraries(fs.fat_test_doubles PUBLIC
 )
 
 target_sources(fs.fat_test_doubles PRIVATE
+    BlockImage.hpp
     FatImageBuilder.cpp
     FatImageBuilder.hpp
     SparseBlockDevice.cpp
