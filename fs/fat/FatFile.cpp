@@ -51,7 +51,7 @@ namespace fs
         return state;
     }
 
-    FatExtentCache& FatFile::Extents()
+    FatExtentCache& FatFile::Extents() const
     {
         return extents;
     }

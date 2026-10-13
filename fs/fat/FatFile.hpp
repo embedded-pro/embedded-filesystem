@@ -34,7 +34,7 @@ namespace fs
         void Open(const FatScannedEntry& scanned, OpenMode mode);
         FatOpenFile& State();
         const FatOpenFile& State() const;
-        FatExtentCache& Extents();
+        FatExtentCache& Extents() const;
         void Detach();
 
         uint32_t Size() const override;
