@@ -238,6 +238,7 @@ namespace
     public:
         void SetUp() override
         {
+            MarkVolumeDirty();
             exposed.Mount([this](fs::Result result)
                 {
                     done.callback(result);

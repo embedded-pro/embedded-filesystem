@@ -374,6 +374,19 @@ TEST_F(FatWriteTest, append_to_a_chain_shorter_than_its_file_is_corrupted)
     ExpectWrite(*file, infra::MakeRange(added), fs::Result::corrupted);
 }
 
+TEST_F(FatWriteTest, failure_to_find_the_cluster_of_the_position_is_reported)
+{
+    builder->AllocateChain(300);
+    auto contents = Pattern<700>(3);
+    builder->AddFile(0, "", "FAR     BIN", infra::MakeRange(contents));
+    auto file = ExpectOpen("/far.bin", fs::OpenMode::readWrite);
+    file->Seek(600);
+    auto update = Pattern<10>(6);
+    device.FailNextOperationWith(hal::BlockDevice::Result::timeout, 1);
+
+    ExpectWrite(*file, infra::MakeRange(update), fs::Result::deviceError);
+}
+
 TEST_F(FatWriteTest, failure_to_allocate_is_reported)
 {
     auto file = ExpectOpen("/empty.txt", fs::OpenMode::append);
@@ -614,6 +627,31 @@ TEST_F(FatWriteOnFat32Test, unmount_without_allocation_leaves_fsinfo_alone)
     ExpectUnmount();
 
     EXPECT_FALSE(fsInfoWritten);
+}
+
+TEST_F(FatWriteOnFat32Test, unmount_that_cannot_write_fsinfo_leaves_the_volume_not_clean)
+{
+    ExpectMount();
+    auto file = ExpectOpen("/notes.txt", fs::OpenMode::append);
+    auto added = Pattern<600>(6);
+    ExpectWrite(*file, infra::MakeRange(added));
+    ExpectSync(*file);
+    file = nullptr;
+    ExecuteAllActions();
+    auto big = ExpectOpen("/notes.txt");
+    std::array<uint8_t, 1> byte{};
+    for (uint32_t offset = 1; offset < 1300; offset += 512)
+    {
+        big->Seek(offset);
+        ExpectRead(*big, infra::MakeRange(byte), fs::Result::success, 1);
+    }
+    big = nullptr;
+    ExecuteAllActions();
+    device.FailNextOperationWith(hal::BlockDevice::Result::timeout);
+
+    ExpectUnmount(fs::Result::deviceError);
+
+    EXPECT_EQ(false, fs::CleanShutdown(builder->Geometry().type, builder->FatEntry(1)));
 }
 
 TEST_F(FatWriteOnFat32Test, unmount_of_a_volume_with_an_unknown_count_marks_the_count_unknown)

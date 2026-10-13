@@ -213,6 +213,18 @@ TEST_F(FatCleanShutdownTest, removed_card_leaves_the_volume_not_clean)
     EXPECT_EQ(false, Clean());
 }
 
+TEST_F(FatCleanShutdownTest, empty_write_leaves_the_volume_clean)
+{
+    auto file = ExpectOpen("/notes.txt", fs::OpenMode::append);
+    auto writes = device.WriteRequests();
+
+    file->Write(infra::ConstByteRange(), Done());
+    ExpectDone(fs::Result::success);
+
+    EXPECT_EQ(writes, device.WriteRequests());
+    EXPECT_EQ(true, Clean());
+}
+
 TEST_F(FatCleanShutdownTest, write_protected_card_can_be_read_while_changes_complete_with_read_only)
 {
     WriteProtect();
@@ -220,6 +232,14 @@ TEST_F(FatCleanShutdownTest, write_protected_card_can_be_read_while_changes_comp
     ExpectOpen("/new.txt", fs::OpenMode::write, fs::Result::readOnly);
     volume.MakeDirectory("/new", Done());
     ExpectDone(fs::Result::readOnly);
+    volume.Remove("/notes.txt", Done());
+    ExpectDone(fs::Result::readOnly);
+    auto changed = ExpectOpen("/notes.txt", fs::OpenMode::readWrite);
+    std::array<uint8_t, 10> data{};
+    changed->Write(infra::MakeRange(data), Done());
+    ExpectDone(fs::Result::readOnly);
+    changed = nullptr;
+    ExecuteAllActions();
 
     auto file = ExpectOpen("/notes.txt");
     std::array<uint8_t, 700> read{};

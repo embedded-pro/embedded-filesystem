@@ -223,3 +223,12 @@ TEST_F(FatDirtyFlagOnFat32Test, marking_dirty_clears_the_clean_bit_of_fat32)
 
     EXPECT_EQ(false, CleanInCopy(0));
 }
+
+TEST_F(FatDirtyFlagTest, failure_to_modify_the_first_fat_sector_is_reported)
+{
+    cache.Modify(state.geometry.ActiveFatSector(), 2, [](fs::Result, infra::ByteRange) {});
+    ExecuteAllActions();
+    device.FailNextOperationWith(hal::BlockDevice::Result::timeout);
+
+    ExpectMarkDirty(fs::Result::deviceError);
+}
