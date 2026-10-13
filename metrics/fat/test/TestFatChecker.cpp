@@ -305,3 +305,30 @@ TEST_F(FatCheckerWithoutPartitionTableTest, volume_without_a_partition_table_is_
     EXPECT_EQ(0u, check.layout.volumeStart);
     EXPECT_NE(nullptr, check.Find("/FILE.BIN"));
 }
+
+TEST_F(FatCheckerTest, reports_a_volume_that_is_marked_clean)
+{
+    EXPECT_EQ(true, Check(metrics::FatCheckMode::strict).clean);
+}
+
+TEST_F(FatCheckerTest, reports_a_volume_that_is_not_marked_clean)
+{
+    builder->SetFatEntry(1, fs::WithCleanShutdown(fs::FatType::fat16, builder->FatEntry(1), false));
+
+    auto check = Check(metrics::FatCheckMode::strict);
+
+    EXPECT_EQ(false, check.clean);
+    EXPECT_EQ(std::nullopt, check.problem);
+}
+
+TEST_F(FatCheckerOnFat32Test, reports_the_clean_bit_of_fat32)
+{
+    builder->SetFatEntry(1, fs::WithCleanShutdown(fs::FatType::fat32, builder->FatEntry(1), false));
+
+    EXPECT_EQ(false, Check(metrics::FatCheckMode::strict).clean);
+}
+
+TEST_F(FatCheckerOnFat12Test, fat12_has_no_clean_bit)
+{
+    EXPECT_EQ(std::nullopt, Check(metrics::FatCheckMode::strict).clean);
+}

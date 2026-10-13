@@ -293,6 +293,9 @@ namespace metrics
                     if (mode == FatCheckMode::strict && !std::equal(tables[0].begin() + 2, tables[0].begin() + layout.clusterCount + 2, tables[copy].begin() + 2))
                         Problem("FAT copy " + std::to_string(copy) + " differs from the first");
 
+                if (layout.bits != 12)
+                    check.clean = (tables[0][1] & (layout.bits == 16 ? 0x8000u : 0x08000000u)) != 0;
+
                 return true;
             }
 

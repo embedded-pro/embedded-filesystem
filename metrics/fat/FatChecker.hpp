@@ -51,6 +51,7 @@ namespace metrics
         std::vector<FatImageEntry> entries;
         uint32_t lostClusters{ 0 };
         uint32_t orphanedLongNames{ 0 };
+        std::optional<bool> clean;
 
         const FatImageEntry* Find(const std::string& path) const;
     };

@@ -37,6 +37,7 @@ namespace
         uint32_t expectedSize{ 0 };
         std::optional<uint32_t> keptClusters{};
         bool reverseChain{ false };
+        bool unmountAtEnd{ false };
     };
 
     struct SweepMode
@@ -47,6 +48,21 @@ namespace
     };
 
     using SweepParameter = std::tuple<const metrics::BlockDeviceModel*, SweepCase>;
+
+    std::optional<std::string> VerifyCleanBit(const metrics::SectorReader& reader, const metrics::FatCheck& check, bool unmounted)
+    {
+        if (unmounted && check.clean == false)
+            return "the volume is not marked clean after its unmount";
+
+        if (check.clean != true)
+            return std::nullopt;
+
+        auto strict = metrics::CheckFatImage(reader, metrics::FatCheckMode::strict);
+        if (strict.problem)
+            return "the volume is marked clean, but " + *strict.problem;
+
+        return std::nullopt;
+    }
 
     std::vector<uint8_t> Pattern(std::size_t size, uint8_t seed)
     {
@@ -276,6 +292,12 @@ public:
             volume.Close(*file);
         else
             volume.Sync(*file);
+
+        if (sweepCase.unmountAtEnd)
+        {
+            file = nullptr;
+            volume.Unmount();
+        }
     }
 
     std::optional<std::string> Verify(metrics::SweepContext<hal::BlockDevice>& context, metrics::FatCheckMode mode)
@@ -291,6 +313,9 @@ public:
 
         if (auto difference = Compare(metrics::ReadContents(reader, check, *entry), before, after))
             return difference;
+
+        if (auto unclean = VerifyCleanBit(reader, check, sweepCase.unmountAtEnd && mode == metrics::FatCheckMode::strict))
+            return unclean;
 
         metrics::SweepVolume volume{ context };
         if (volume.Mount() != fs::Result::success)
@@ -339,7 +364,8 @@ INSTANTIATE_TEST_SUITE_P(Fat, FatPowerCut,
             SweepCase{ "truncate_middle", 4, -100, true, fs::OpenMode::readWrite, {}, false, false, 0, 2 },
             SweepCase{ "truncate_reverse_chain_across_fat_sectors", 4, -100, true, fs::OpenMode::readWrite, {}, false, false, 0, 2, true },
             SweepCase{ "truncate_zero", 3, -100, true, fs::OpenMode::readWrite, {}, true, false, 0, 0 },
-            SweepCase{ "open_write_existing", 3, -100, true, fs::OpenMode::write, {}, true, false })),
+            SweepCase{ "open_write_existing", 3, -100, true, fs::OpenMode::write, {}, true, false },
+            SweepCase{ "append_close_and_unmount", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 0 } }, true, false, 0, std::nullopt, false, true })),
     ParameterName);
 
 namespace
@@ -483,6 +509,9 @@ public:
         auto problem = VerifyOperation(reader, check, mode);
         if (problem)
             return problem;
+
+        if (auto unclean = VerifyCleanBit(reader, check, false))
+            return unclean;
 
         metrics::SweepVolume volume{ context };
         if (volume.Mount() != fs::Result::success)
