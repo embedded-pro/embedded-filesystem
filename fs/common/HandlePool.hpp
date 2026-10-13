@@ -22,6 +22,9 @@ namespace fs
         void Release();
         virtual void UnReferenced() = 0;
 
+        template<class Handle>
+        infra::SharedPtr<Handle> Share(Handle& handle);
+
     public:
         bool InUse() const;
 
@@ -54,6 +57,12 @@ namespace fs
     };
 
     ////    Implementation    ////
+
+    template<class Handle>
+    infra::SharedPtr<Handle> PooledHandle::Share(Handle& handle)
+    {
+        return access.MakeShared(handle);
+    }
 
     template<class Handle, std::size_t Size>
     template<class... Args>

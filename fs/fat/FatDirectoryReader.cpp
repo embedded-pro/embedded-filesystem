@@ -5,12 +5,16 @@
 
 namespace fs
 {
+    FatDirectoryVisitor::FatDirectoryVisitor() = default;
+
     FatDirectoryReader::FatDirectoryReader(SectorCache& cache, const FatGeometry& geometry, FatEntryAssembler& assembler)
         : cache(cache)
         , geometry(geometry)
         , assembler(assembler)
         , table(cache, geometry)
     {}
+
+    FatDirectoryReader::~FatDirectoryReader() = default;
 
     FatDirectoryCursor FatDirectoryReader::Start(uint32_t firstCluster) const
     {

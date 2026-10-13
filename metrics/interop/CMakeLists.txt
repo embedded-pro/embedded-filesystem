@@ -18,5 +18,6 @@ target_sources(metrics.interop_test PRIVATE
     InteropTools.cpp
     InteropTools.hpp
     TestFormatterInterop.cpp
+    TestListingInterop.cpp
     TestMountInterop.cpp
 )

@@ -275,3 +275,25 @@ TEST_F(FatEntryAssemblerTest, oem_short_names_decode_as_code_page_437)
 
     EXPECT_EQ("\xc3\x9cN\xe2\x95\xaa.DAT", Name());
 }
+
+TEST(FatEntryInfoTest, file_reports_its_name_and_size)
+{
+    fs::FatScannedEntry scanned;
+    scanned.entry.attributes = fs::FatAttributes::archive;
+    scanned.entry.size = 1234;
+    scanned.name = infra::BoundedConstString("notes.txt");
+
+    EXPECT_FALSE(fs::IsDirectory(scanned));
+    EXPECT_EQ((fs::EntryInfo{ "notes.txt", fs::EntryType::file, 1234 }), fs::InfoOf(scanned));
+}
+
+TEST(FatEntryInfoTest, directory_has_no_size_whatever_its_entry_holds)
+{
+    fs::FatScannedEntry scanned;
+    scanned.entry.attributes = fs::FatAttributes::directory;
+    scanned.entry.size = 1234;
+    scanned.name = infra::BoundedConstString("Documents");
+
+    EXPECT_TRUE(fs::IsDirectory(scanned));
+    EXPECT_EQ((fs::EntryInfo{ "Documents", fs::EntryType::directory, 0 }), fs::InfoOf(scanned));
+}

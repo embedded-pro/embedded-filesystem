@@ -5,6 +5,19 @@
 
 namespace fs
 {
+    bool IsDirectory(const FatScannedEntry& entry)
+    {
+        return (entry.entry.attributes & FatAttributes::directory) != 0;
+    }
+
+    EntryInfo InfoOf(const FatScannedEntry& entry)
+    {
+        if (IsDirectory(entry))
+            return EntryInfo{ entry.name, EntryType::directory, 0 };
+
+        return EntryInfo{ entry.name, EntryType::file, entry.entry.size };
+    }
+
     namespace
     {
         constexpr char16_t terminator = 0x0000;

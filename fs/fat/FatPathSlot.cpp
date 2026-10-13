@@ -10,6 +10,6 @@ namespace fs
 
     bool FatPathSlot::InUse() const
     {
-        return !std::holds_alternative<std::monostate>(call);
+        return call.has_value();
     }
 }
