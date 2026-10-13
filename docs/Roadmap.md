@@ -65,7 +65,7 @@ The formatter comes early, because every later test and the metrics need formatt
 13. Creating files with long names and short aliases, and `ExpectSize` with allocation-unit-aligned runs.
 14. `Remove` with discard and `MakeDirectory`, and the FAT subject of the metrics.
 15. `Rename` and `Truncate`.
-16. Multi-block write-back in the sector cache (M-1), and the cache of free runs, with which a file created in `append` mode starts at an allocation unit.
+16. Multi-block write-back in the sector cache (M-1), and the cache of free runs, with which a file opened in `append` mode starts at an allocation unit.
 17. The dirty flag, and the sweep with reordered unflushed writes.
 18. The targets of embedded-filesystem in the metrics, and P-1.
 

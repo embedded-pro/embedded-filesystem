@@ -34,17 +34,22 @@ namespace fs
 
     void FatAllocator::Grow(std::optional<uint32_t> last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
     {
-        Start(last, clusters, true, nullptr, onDone);
+        Start(last, 0, clusters, true, nullptr, onDone);
     }
 
     void FatAllocator::Grow(std::optional<uint32_t> last, uint32_t clusters, FatReservation& reservation, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
     {
-        Start(last, clusters, true, &reservation, onDone);
+        Start(last, 0, clusters, true, &reservation, onDone);
+    }
+
+    void FatAllocator::GrowAt(uint32_t start, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
+    {
+        Start(std::nullopt, start, clusters, true, nullptr, onDone);
     }
 
     void FatAllocator::Take(uint32_t last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
     {
-        Start(last, clusters, false, nullptr, onDone);
+        Start(last, 0, clusters, false, nullptr, onDone);
     }
 
     void FatAllocator::Link(const infra::Function<void(Result result)>& onDone)
@@ -55,11 +60,12 @@ namespace fs
         LinkAfterBarrier();
     }
 
-    void FatAllocator::Start(std::optional<uint32_t> last, uint32_t clusters, bool link, FatReservation* reservation, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
+    void FatAllocator::Start(std::optional<uint32_t> last, uint32_t start, uint32_t clusters, bool link, FatReservation* reservation, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
     {
         really_assert(clusters != 0);
 
         this->last = last;
+        this->start = start;
         own = reservation;
         this->onDone = onDone;
         linkWhenTaken = link;
@@ -249,7 +255,7 @@ namespace fs
         if (last.has_value())
             return After(*last);
 
-        return 0;
+        return start;
     }
 
     bool FatAllocator::IsCluster(uint32_t cluster) const

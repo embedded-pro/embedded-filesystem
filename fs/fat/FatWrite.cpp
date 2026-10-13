@@ -62,7 +62,7 @@ namespace fs
     {
         if (file.clusters == 0)
         {
-            GrowAfter(std::nullopt);
+            GrowFirst();
             return;
         }
 
@@ -75,11 +75,20 @@ namespace fs
             });
     }
 
+    void FatWrite::GrowFirst()
+    {
+        if (auto start = LogStart(); start.has_value())
+            volume.Allocator().GrowAt(*start, Needed(), [this](Result result, uint32_t first, uint32_t allocated)
+                {
+                    OnGrown(result, first, allocated);
+                });
+        else
+            GrowAfter(std::nullopt);
+    }
+
     void FatWrite::GrowAfter(std::optional<uint32_t> last)
     {
-        auto needed = (uint64_t{ file.position } + data.size() + ClusterBytes() - 1) / ClusterBytes() - file.clusters;
-
-        volume.Allocator().Grow(last, static_cast<uint32_t>(needed), file.reservation, [this](Result result, uint32_t first, uint32_t allocated)
+        volume.Allocator().Grow(last, Needed(), file.reservation, [this](Result result, uint32_t first, uint32_t allocated)
             {
                 OnGrown(result, first, allocated);
             });
@@ -181,5 +190,20 @@ namespace fs
     uint32_t FatWrite::ClusterBytes() const
     {
         return volume.Geometry().sectorsPerCluster * SectorSize();
+    }
+
+    uint32_t FatWrite::Needed() const
+    {
+        return static_cast<uint32_t>((uint64_t{ file.position } + data.size() + ClusterBytes() - 1) / ClusterBytes() - file.clusters);
+    }
+
+    std::optional<uint32_t> FatWrite::LogStart() const
+    {
+        const auto& units = volume.State().allocationUnits;
+
+        if (file.mode != OpenMode::append || file.reservation.count != 0 || !units.has_value())
+            return std::nullopt;
+
+        return volume.FreeSpace().Runs().WholeUnit(*units, volume.Allocator().Cursor(), volume.Reservations());
     }
 }

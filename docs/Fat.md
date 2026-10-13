@@ -153,7 +153,7 @@ Clusters are allocated in this order:
 2. A file that grows takes the cluster after its last cluster when it is free.
 3. Otherwise a file takes the first free cluster at or after the cursor within the allocation unit of the cursor, else the next free cluster after it, wrapping around at the end of the volume.
 4. A reservation that would cross an allocation unit boundary starts at the next boundary instead, when a free run of its length starts there.
-5. A file created by `Open` in `append` mode starts at an allocation unit boundary when a whole free allocation unit is known, so that a log fills allocation units one after the other.
+5. A file opened in `append` mode that has no clusters yet starts at the first allocation unit boundary at or after the cursor, wrapping around, whose whole allocation unit the cache of free runs holds, so that a log fills allocation units one after the other; when the cache holds no such allocation unit, rule 3 applies.
 6. When the allocation unit of the card is not known, the rules about allocation units do not apply.
 
 The allocation unit is given by `FatConfig::blocksPerAllocationUnit`, because `hal::BlockDevice` does not report it.

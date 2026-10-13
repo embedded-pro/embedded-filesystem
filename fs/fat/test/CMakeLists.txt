@@ -16,6 +16,7 @@ target_sources(fs.fat_test PRIVATE
     FatFileSystemFixture.hpp
     FatVolumeFixture.hpp
     TestFatAllocationUnits.cpp
+    TestFatAppendPlacement.cpp
     TestFatAllocator.cpp
     TestFatBackgroundScan.cpp
     TestFatBootSector.cpp
