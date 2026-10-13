@@ -597,7 +597,7 @@ TEST_F(FatWriteOnFat32Test, unmount_after_allocation_writes_fsinfo)
 
     ExpectUnmount();
 
-    ASSERT_TRUE(before && before->freeClusters);
+    ASSERT_TRUE(before.has_value() && before->freeClusters.has_value());
     auto after = FsInfoOnDevice();
     ASSERT_TRUE(after.has_value());
     EXPECT_EQ(*before->freeClusters - 4, after->freeClusters);
