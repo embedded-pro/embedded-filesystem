@@ -58,6 +58,11 @@ namespace
         FatBackgroundScanOnFat32Test()
             : FatBackgroundScanTest(81920)
         {}
+
+        uint32_t FatSectorsAfterTheFirst() const
+        {
+            return ((builder->Geometry().clusterCount + 2) * 4 + 511) / 512 - 1;
+        }
     };
 }
 
@@ -194,12 +199,35 @@ TEST_F(FatBackgroundScanTest, unmount_requested_while_the_scan_waits_for_the_que
     EXPECT_EQ(before, device.ReadRequests());
 }
 
-TEST_F(FatBackgroundScanOnFat32Test, clean_volume_needs_no_scan)
+TEST_F(FatBackgroundScanOnFat32Test, clean_volume_is_scanned_for_free_runs_once_per_mount)
 {
     auto before = device.ReadRequests();
 
     ForwardTime(idleDelay);
+    ExpectStat("/", fs::Result::success, fs::EntryInfo{ "", fs::EntryType::directory, 0 });
+    ForwardTime(idleDelay);
 
-    EXPECT_EQ(before, device.ReadRequests());
+    EXPECT_EQ(before + FatSectorsAfterTheFirst(), device.ReadRequests());
     ExpectUsageFromMemory();
+}
+
+TEST_F(FatBackgroundScanTest, clusters_taken_in_a_counted_sector_during_the_scan_are_used)
+{
+    builder->AddFile(0, "", "NOTES   TXT", infra::ConstByteRange());
+    StartScan();
+    auto file = ExpectOpen("/notes.txt", fs::OpenMode::write);
+    std::array<uint8_t, 1024> data{};
+
+    file->Write(infra::MakeRange(data), [this](fs::Result result)
+        {
+            done.callback(result);
+        });
+    ExpectDone(fs::Result::success);
+
+    volume.Usage([this](fs::Result result, fs::VolumeUsage usage)
+        {
+            usageDone.callback(result, usage.usedBytes);
+        });
+    EXPECT_CALL(usageDone, callback(fs::Result::success, 2 * 512));
+    ExecuteAllActions();
 }

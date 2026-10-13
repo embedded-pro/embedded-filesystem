@@ -41,8 +41,25 @@ namespace
             return ((geometry.clusterCount + 2) * bytesPerEntryTimesTwo / 2 + 511) / 512;
         }
 
+        std::optional<uint32_t> FirstKnownFrom(uint32_t from) const
+        {
+            return scan.Runs().WholeUnit(fs::FatAllocationUnits{ 1, 2 }, from, noReservations);
+        }
+
+        class NoReservations
+            : public fs::FatReservations
+        {
+        public:
+            bool Reserved(uint32_t) const override
+            {
+                return false;
+            }
+        };
+
         fs::FatVolumeState state;
-        fs::FatFreeSpaceScan scan{ cache, state };
+        std::array<fs::FatReservation, 8> runStorage{};
+        fs::FatFreeSpaceScan scan{ cache, state, infra::MakeRange(runStorage) };
+        NoReservations noReservations;
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
     };
 
@@ -151,4 +168,125 @@ TEST_F(FatFreeSpaceScanOnFat32Test, root_cluster_of_fat32_is_used)
     EXPECT_EQ(FatSectorsFor(8), ScanAll());
 
     EXPECT_EQ(geometry.clusterCount - 1, state.freeClusters);
+}
+
+TEST_F(FatFreeSpaceScanTest, cluster_allocated_in_a_counted_sector_is_used)
+{
+    ExpectStep();
+
+    scan.Allocated(2);
+    ScanAll();
+
+    EXPECT_EQ(geometry.clusterCount - 1, state.freeClusters);
+}
+
+TEST_F(FatFreeSpaceScanTest, cluster_allocated_in_a_sector_not_yet_counted_is_left_to_the_scan)
+{
+    ExpectStep();
+
+    scan.Allocated(300);
+    ScanAll();
+
+    EXPECT_EQ(geometry.clusterCount, state.freeClusters);
+}
+
+TEST_F(FatFreeSpaceScanTest, cluster_freed_in_a_counted_sector_is_free)
+{
+    std::array<uint8_t, 1500> contents{};
+    builder->AddFile(0, "", "FILE    BIN", infra::MakeRange(contents), true);
+    ExpectStep();
+
+    scan.Freed(2);
+    ScanAll();
+
+    EXPECT_EQ(geometry.clusterCount - 2, state.freeClusters);
+}
+
+TEST_F(FatFreeSpaceScanTest, known_count_follows_allocated_and_freed_clusters)
+{
+    state.freeClusters = 10;
+
+    scan.Allocated(2);
+    scan.Allocated(300);
+    scan.Freed(4);
+
+    EXPECT_EQ(9, state.freeClusters);
+}
+
+TEST_F(FatFreeSpaceScanTest, free_clusters_across_sectors_form_one_run)
+{
+    ScanAll();
+
+    EXPECT_EQ(2, FirstKnownFrom(2));
+    EXPECT_EQ(300, FirstKnownFrom(300));
+}
+
+TEST_F(FatFreeSpaceScanTest, clusters_of_files_split_the_runs)
+{
+    std::array<uint8_t, 1500> contents{};
+    builder->AddFile(0, "", "FILE    BIN", infra::MakeRange(contents));
+    builder->AddDirectory(0, "", "SUBDIR     ");
+
+    ScanAll();
+
+    EXPECT_EQ(6, FirstKnownFrom(2));
+}
+
+TEST_F(FatFreeSpaceScanTest, run_found_so_far_is_known_before_the_scan_ends)
+{
+    ExpectStep();
+
+    EXPECT_EQ(100, FirstKnownFrom(100));
+    EXPECT_EQ(2, FirstKnownFrom(256));
+}
+
+TEST_F(FatFreeSpaceScanTest, allocated_cluster_leaves_its_run)
+{
+    ScanAll();
+
+    scan.Allocated(300);
+
+    EXPECT_EQ(301, FirstKnownFrom(300));
+}
+
+TEST_F(FatFreeSpaceScanTest, freed_cluster_does_not_join_a_run)
+{
+    std::array<uint8_t, 1500> contents{};
+    builder->AddFile(0, "", "FILE    BIN", infra::MakeRange(contents));
+    ScanAll();
+
+    scan.Freed(3);
+
+    EXPECT_EQ(5, FirstKnownFrom(3));
+}
+
+TEST_F(FatFreeSpaceScanTest, known_count_is_kept_while_the_runs_are_found)
+{
+    state.freeClusters = 7;
+
+    EXPECT_FALSE(scan.Done());
+    EXPECT_EQ(FatSectorsFor(4), ScanAll());
+
+    EXPECT_EQ(7, state.freeClusters);
+    EXPECT_EQ(2, FirstKnownFrom(2));
+}
+
+TEST_F(FatFreeSpaceScanTest, restart_forgets_the_runs)
+{
+    ScanAll();
+
+    scan.Restart();
+
+    EXPECT_EQ(std::nullopt, FirstKnownFrom(2));
+}
+
+TEST_F(FatFreeSpaceScanOnFat12Test, cluster_whose_entry_straddles_two_sectors_ends_a_run)
+{
+    uint32_t straddling = 2;
+    while (straddling * 3 / 2 % 512 != 511)
+        ++straddling;
+
+    ScanAll();
+
+    EXPECT_EQ(straddling + 1, FirstKnownFrom(straddling));
 }

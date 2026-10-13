@@ -43,6 +43,16 @@ namespace
             ExecuteAllActions();
         }
 
+        void ExpectGrowAt(uint32_t start, uint32_t clusters, fs::Result result, uint32_t first, uint32_t allocated)
+        {
+            allocator.GrowAt(start, clusters, [this](fs::Result result, uint32_t first, uint32_t allocated)
+                {
+                    grown.callback(result, first, allocated);
+                });
+            EXPECT_CALL(grown, callback(result, first, allocated));
+            ExecuteAllActions();
+        }
+
         void ExpectGrowWithReservation(std::optional<uint32_t> last, uint32_t clusters, fs::Result result, uint32_t first, uint32_t allocated)
         {
             allocator.Grow(last, clusters, reservations.reservation, [this](fs::Result result, uint32_t first, uint32_t allocated)
@@ -98,7 +108,8 @@ namespace
         fs::FatVolumeState state;
         fs::FatTableWriter writer{ cache, state.geometry };
         RangeReservations reservations;
-        fs::FatAllocator allocator{ cache, state, writer, reservations };
+        fs::FatFreeSpaceScan freeSpace{ cache, state, infra::MemoryRange<fs::FatReservation>() };
+        fs::FatAllocator allocator{ cache, state, writer, reservations, freeSpace };
         testing::StrictMock<infra::MockCallback<void(fs::Result, uint32_t, uint32_t)>> grown;
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> flushed;
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> linked;
@@ -172,6 +183,23 @@ TEST_F(FatAllocatorTest, file_whose_next_cluster_is_in_use_grows_at_the_cursor)
 
     EXPECT_EQ(100u, builder->FatEntry(last));
     EXPECT_EQ(101u, allocator.Cursor());
+}
+
+TEST_F(FatAllocatorTest, chain_grown_at_a_cluster_starts_there)
+{
+    ExpectGrowAt(40, 2, fs::Result::success, 40, 2);
+    Flush();
+
+    EXPECT_EQ(41u, builder->FatEntry(40));
+    EXPECT_EQ(EndOfChain(), builder->FatEntry(41));
+    EXPECT_EQ(42u, allocator.Cursor());
+}
+
+TEST_F(FatAllocatorTest, chain_grown_at_a_cluster_in_use_starts_at_the_cursor)
+{
+    builder->SetFatEntry(40, EndOfChain());
+
+    ExpectGrowAt(40, 1, fs::Result::success, 2, 1);
 }
 
 TEST_F(FatAllocatorTest, cursor_moves_past_each_allocation)

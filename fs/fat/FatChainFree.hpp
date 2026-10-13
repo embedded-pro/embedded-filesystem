@@ -3,6 +3,7 @@
 
 #include "fs/common/DirectTransfers.hpp"
 #include "fs/common/SectorCache.hpp"
+#include "fs/fat/FatFreeSpaceScan.hpp"
 #include "fs/fat/FatReservation.hpp"
 #include "fs/fat/FatTableReader.hpp"
 #include "fs/fat/FatTableWriter.hpp"
@@ -18,7 +19,7 @@ namespace fs
     class FatChainFree
     {
     public:
-        FatChainFree(SectorCache& cache, DirectTransfers& transfers, FatVolumeState& volume, FatTableWriter& writer, bool discard);
+        FatChainFree(SectorCache& cache, DirectTransfers& transfers, FatVolumeState& volume, FatTableWriter& writer, FatFreeSpaceScan& freeSpace, bool discard);
         FatChainFree(const FatChainFree& other) = delete;
         FatChainFree& operator=(const FatChainFree& other) = delete;
         ~FatChainFree();
@@ -36,6 +37,7 @@ namespace fs
         DirectTransfers& transfers;
         FatVolumeState& volume;
         FatTableWriter& writer;
+        FatFreeSpaceScan& freeSpace;
         FatTableReader table;
         bool discard;
         uint32_t current{ 0 };

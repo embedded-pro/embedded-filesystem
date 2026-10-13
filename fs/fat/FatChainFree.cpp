@@ -2,10 +2,11 @@
 
 namespace fs
 {
-    FatChainFree::FatChainFree(SectorCache& cache, DirectTransfers& transfers, FatVolumeState& volume, FatTableWriter& writer, bool discard)
+    FatChainFree::FatChainFree(SectorCache& cache, DirectTransfers& transfers, FatVolumeState& volume, FatTableWriter& writer, FatFreeSpaceScan& freeSpace, bool discard)
         : transfers(transfers)
         , volume(volume)
         , writer(writer)
+        , freeSpace(freeSpace)
         , table(cache, volume.geometry)
         , discard(discard)
     {}
@@ -53,9 +54,7 @@ namespace fs
 
         ++run.count;
         volume.tableChanged = true;
-
-        if (volume.freeClusters.has_value())
-            ++*volume.freeClusters;
+        freeSpace.Freed(current);
 
         if (next == current + 1)
         {

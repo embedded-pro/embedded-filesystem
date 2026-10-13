@@ -56,6 +56,8 @@ target_sources(fs.fat PRIVATE
     FatFormatLayout.hpp
     FatFormatter.cpp
     FatFormatter.hpp
+    FatFreeRuns.cpp
+    FatFreeRuns.hpp
     FatFreeSpaceScan.cpp
     FatFreeSpaceScan.hpp
     FatFsInfo.cpp

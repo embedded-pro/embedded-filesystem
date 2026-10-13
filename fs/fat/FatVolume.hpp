@@ -100,6 +100,7 @@ namespace fs
         DeferredCompletions& deferred;
         infra::ByteRange nameBuffer;
         infra::MemoryRange<FatClosedFile> closedFiles;
+        infra::MemoryRange<FatReservation> freeRuns;
         uint32_t cacheSectors;
     };
 
@@ -167,6 +168,7 @@ namespace fs
         FatPathWalk walk;
         FatChainWalk chain;
         FatRunLocator locator;
+        FatFreeSpaceScan freeSpace;
         FatTableWriter tableWriter;
         FatAllocator allocator;
         FatEntryUpdate entryUpdate;
@@ -174,7 +176,6 @@ namespace fs
         FatClosedFiles closedFiles;
         infra::IntrusiveList<FatFile> openFiles;
         infra::IntrusiveList<FatDirectory> openDirectories;
-        FatFreeSpaceScan freeSpace;
         OperationQueue queue;
         FatBackgroundScan background;
         FatOperation operation;

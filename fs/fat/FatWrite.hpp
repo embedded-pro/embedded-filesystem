@@ -7,6 +7,7 @@
 #include "infra/util/ByteRange.hpp"
 #include "infra/util/Function.hpp"
 #include <cstdint>
+#include <optional>
 
 namespace fs
 {
@@ -25,6 +26,7 @@ namespace fs
     private:
         void Step();
         void Grow();
+        void GrowFirst();
         void GrowAfter(std::optional<uint32_t> last);
         void OnGrown(Result result, uint32_t first, uint32_t allocated);
         void Transfer(const FatExtent& run);
@@ -33,6 +35,8 @@ namespace fs
         void Transferred(Result result, uint32_t bytes);
         uint32_t SectorSize() const;
         uint32_t ClusterBytes() const;
+        uint32_t Needed() const;
+        std::optional<uint32_t> LogStart() const;
 
     private:
         FatVolume& volume;

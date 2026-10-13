@@ -2,6 +2,7 @@
 #define FS_FAT_FAT_ALLOCATOR_HPP
 
 #include "fs/common/SectorCache.hpp"
+#include "fs/fat/FatFreeSpaceScan.hpp"
 #include "fs/fat/FatReservation.hpp"
 #include "fs/fat/FatTableWriter.hpp"
 #include "fs/fat/FatVolumeState.hpp"
@@ -17,7 +18,7 @@ namespace fs
     class FatAllocator
     {
     public:
-        FatAllocator(SectorCache& cache, FatVolumeState& volume, FatTableWriter& writer, const FatReservations& reservations);
+        FatAllocator(SectorCache& cache, FatVolumeState& volume, FatTableWriter& writer, const FatReservations& reservations, FatFreeSpaceScan& freeSpace);
         FatAllocator(const FatAllocator& other) = delete;
         FatAllocator& operator=(const FatAllocator& other) = delete;
         ~FatAllocator();
@@ -27,11 +28,12 @@ namespace fs
         uint32_t Contiguous() const;
         void Grow(std::optional<uint32_t> last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
         void Grow(std::optional<uint32_t> last, uint32_t clusters, FatReservation& reservation, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
+        void GrowAt(uint32_t start, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
         void Take(uint32_t last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
         void Link(const infra::Function<void(Result result)>& onDone);
 
     private:
-        void Start(std::optional<uint32_t> last, uint32_t clusters, bool link, FatReservation* reservation, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
+        void Start(std::optional<uint32_t> last, uint32_t start, uint32_t clusters, bool link, FatReservation* reservation, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
         void Next();
         void ReadCandidateSector();
         void OnSector(Result result, infra::ConstByteRange contents);
@@ -53,9 +55,11 @@ namespace fs
         FatVolumeState& volume;
         FatTableWriter& writer;
         const FatReservations& reservations;
+        FatFreeSpaceScan& freeSpace;
         FatReservation* own{ nullptr };
         uint32_t cursor{ 2 };
         std::optional<uint32_t> last;
+        uint32_t start{ 0 };
         uint32_t wanted{ 0 };
         uint32_t allocated{ 0 };
         uint32_t first{ 0 };
