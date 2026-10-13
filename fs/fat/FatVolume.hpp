@@ -2,20 +2,32 @@
 #define FS_FAT_FAT_VOLUME_HPP
 
 #include "fs/common/DeferredCompletions.hpp"
+#include "fs/common/DirectTransfers.hpp"
+#include "fs/common/FlushBarrier.hpp"
 #include "fs/common/OperationQueue.hpp"
 #include "fs/common/Path.hpp"
 #include "fs/common/SectorCache.hpp"
+#include "fs/fat/FatChainWalk.hpp"
+#include "fs/fat/FatClosedFiles.hpp"
 #include "fs/fat/FatConfig.hpp"
 #include "fs/fat/FatDirectoryReader.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
+#include "fs/fat/FatMount.hpp"
+#include "fs/fat/FatOpen.hpp"
+#include "fs/fat/FatOpenDirectory.hpp"
 #include "fs/fat/FatPathWalk.hpp"
+#include "fs/fat/FatRead.hpp"
+#include "fs/fat/FatStat.hpp"
 #include "fs/fat/FatVolumeState.hpp"
 #include "fs/interfaces/FileSystem.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/ByteRange.hpp"
 #include "infra/util/Function.hpp"
+#include "infra/util/MemoryRange.hpp"
+#include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <variant>
 
 namespace fs
 {
@@ -50,14 +62,23 @@ namespace fs
         {
             onDone(result, std::nullopt);
         }
+
+        inline void Deliver(const infra::Function<void(Result result, std::size_t bytesRead)>& onDone, Result result)
+        {
+            onDone(result, 0);
+        }
     }
+
+    using FatOperation = std::variant<std::monostate, FatMount, FatStat, FatOpenDirectory, FatOpen, FatRead>;
 
     struct FatVolumeParts
     {
         hal::BlockDevice& device;
+        FlushBarrier& barrier;
         SectorCache& cache;
         DeferredCompletions& deferred;
         infra::ByteRange nameBuffer;
+        infra::MemoryRange<FatClosedFile> closedFiles;
     };
 
     class FatVolume
@@ -70,11 +91,16 @@ namespace fs
 
         hal::BlockDevice& Device() const;
         SectorCache& Cache() const;
+        DirectTransfers& Transfers();
         PathLimits Limits() const;
         FatVolumeState& State();
+        const FatGeometry& Geometry() const;
         FatDirectoryReader& Reader();
         FatPathWalk& Walk();
+        FatChainWalk& Chain();
+        FatClosedFiles& ClosedFiles();
         OperationQueue& Queue();
+        FatOperation& Operation();
 
         uint32_t Generation() const;
         bool Available() const;
@@ -82,10 +108,10 @@ namespace fs
         Result Unavailable() const;
         void MarkMounted();
         void MarkUnmounted(Result reason);
-        void Report(Result result);
+        void Report(Result result) const;
 
         template<class Callback>
-        void Reject(const Callback& onDone, Result result);
+        void Defer(const Callback& onDone, Result result);
 
     private:
         hal::BlockDevice& device;
@@ -93,18 +119,22 @@ namespace fs
         DeferredCompletions& deferred;
         PathLimits limits;
         infra::Function<void()> onMediaRemoved;
+        DirectTransfers transfers;
         FatVolumeState state;
         FatEntryAssembler assembler;
         FatDirectoryReader reader;
         FatPathWalk walk;
+        FatChainWalk chain;
+        FatClosedFiles closedFiles;
         OperationQueue queue;
+        FatOperation operation;
         uint32_t generation{ 0 };
         bool mounted{ false };
         Result unavailable{ Result::notMounted };
     };
 
     template<class Callback>
-    void FatVolume::Reject(const Callback& onDone, Result result)
+    void FatVolume::Defer(const Callback& onDone, Result result)
     {
         deferred.Defer([onDone, result]
             {

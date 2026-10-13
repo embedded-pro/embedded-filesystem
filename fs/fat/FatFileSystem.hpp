@@ -7,13 +7,12 @@
 #include "fs/common/OperationQueue.hpp"
 #include "fs/common/Path.hpp"
 #include "fs/common/SectorCache.hpp"
+#include "fs/fat/FatClosedFiles.hpp"
 #include "fs/fat/FatConfig.hpp"
 #include "fs/fat/FatDirectory.hpp"
+#include "fs/fat/FatFile.hpp"
 #include "fs/fat/FatLifecycle.hpp"
-#include "fs/fat/FatMount.hpp"
-#include "fs/fat/FatOpenDirectory.hpp"
 #include "fs/fat/FatPathSlot.hpp"
-#include "fs/fat/FatStat.hpp"
 #include "fs/fat/FatVolume.hpp"
 #include "fs/interfaces/FileSystem.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
@@ -61,6 +60,7 @@ namespace fs
 
     private:
         virtual infra::SharedPtr<FatDirectory> AllocateDirectory() = 0;
+        virtual infra::SharedPtr<FatFile> AllocateFile() = 0;
 
         Result Unavailable() const;
         bool IsMounted() const;
@@ -75,7 +75,7 @@ namespace fs
 
         template<class Call>
         void StartPathCall(infra::BoundedConstString path, Call&& call);
-        FatPathSlot* FreePathSlot();
+        FatPathSlot* FreePathSlot() const;
         void RunPathCall(FatPathSlot& slot);
         void RunOperation(FatPathSlot& slot, FatPathCall& call);
 
@@ -88,12 +88,11 @@ namespace fs
         infra::Function<void(Result result)> onUnmountDone;
         infra::Function<void(Result result)> lifecycleDone;
         Result lifecycleResult{ Result::success };
-        std::variant<std::monostate, FatMount, FatStat, FatOpenDirectory> operation;
     };
 
     namespace detail
     {
-        template<std::size_t CacheSectors, std::size_t Completions, std::size_t NameBytes>
+        template<std::size_t CacheSectors, std::size_t Completions, std::size_t NameBytes, std::size_t ClosedFiles>
         struct FatVolumeStorage
         {
             explicit FatVolumeStorage(hal::BlockDevice& device)
@@ -105,22 +104,23 @@ namespace fs
             SectorCache::WithStorage<CacheSectors> cacheStorage;
             DeferredCompletions::WithMaxSize<Completions> deferredStorage;
             std::array<uint8_t, NameBytes> nameStorage{};
+            std::array<FatClosedFile, ClosedFiles> closedStorage{};
         };
     }
 
     template<std::size_t Files, std::size_t CacheSectors, FatLimits Limits>
     class FatFileSystem::WithStorage
-        : private detail::FatVolumeStorage<CacheSectors, Files + Limits.directories + Limits.pathOperations + 2, Limits.maxNameBytes>
+        : private detail::FatVolumeStorage<CacheSectors, Files + Limits.directories + Limits.pathOperations + 2, Limits.maxNameBytes, Limits.closedFiles>
         , public FatFileSystem
     {
-        static_assert(Files > 0 && CacheSectors > 2 && Limits.directories > 0 && Limits.pathOperations > 0);
+        static_assert(Files > 0 && CacheSectors > 2 && Limits.directories > 0 && Limits.pathOperations > 0 && Limits.extentsPerFile > 0);
 
-        using Storage = detail::FatVolumeStorage<CacheSectors, Files + Limits.directories + Limits.pathOperations + 2, Limits.maxNameBytes>;
+        using Storage = detail::FatVolumeStorage<CacheSectors, Files + Limits.directories + Limits.pathOperations + 2, Limits.maxNameBytes, Limits.closedFiles>;
 
     public:
         explicit WithStorage(hal::BlockDevice& device, const FatConfig& config = {})
             : Storage(device)
-            , FatFileSystem(FatVolumeParts{ device, this->cacheStorage, this->deferredStorage, infra::MakeRange(this->nameStorage) }, config)
+            , FatFileSystem(FatVolumeParts{ device, this->barrierStorage, this->cacheStorage, this->deferredStorage, infra::MakeRange(this->nameStorage), infra::MakeRange(this->closedStorage) }, config)
         {
             for (std::size_t index = 0; index != Limits.pathOperations; ++index)
                 pathSlots.emplace_back(Volume().Queue());
@@ -134,9 +134,15 @@ namespace fs
             return directories.Allocate();
         }
 
+        infra::SharedPtr<FatFile> AllocateFile() override
+        {
+            return files.Allocate();
+        }
+
     private:
         typename infra::BoundedVector<FatPathSlot>::template WithMaxSize<Limits.pathOperations> pathSlots;
         HandlePool<FatDirectory, Limits.directories> directories{ Volume() };
+        HandlePool<FatFile::WithExtents<Limits.extentsPerFile>, Files> files{ Volume() };
     };
 
     constexpr std::array<FatFileSystem::Machine::Transition, 7> FatFileSystem::Rows()

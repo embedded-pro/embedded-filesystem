@@ -12,10 +12,10 @@ namespace fs
 {
     struct FatEntryPosition
     {
-        uint32_t cluster{ 0 };
-        uint32_t index{ 0 };
+        uint32_t cluster;
+        uint32_t index;
 
-        bool operator==(const FatEntryPosition& other) const = default;
+        bool operator==(const FatEntryPosition& other) const;
     };
 
     struct FatScannedEntry
@@ -23,8 +23,8 @@ namespace fs
         ShortEntry entry;
         infra::BoundedConstString name;
         bool longName{ false };
-        FatEntryPosition first;
-        FatEntryPosition shortEntry;
+        FatEntryPosition first{};
+        FatEntryPosition shortEntry{};
         uint8_t slots{ 1 };
     };
 

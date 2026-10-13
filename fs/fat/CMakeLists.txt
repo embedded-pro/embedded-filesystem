@@ -17,6 +17,10 @@ target_sources(fs.fat PRIVATE
     FatBootSector.hpp
     FatBytes.cpp
     FatBytes.hpp
+    FatChainWalk.cpp
+    FatChainWalk.hpp
+    FatClosedFiles.cpp
+    FatClosedFiles.hpp
     FatConfig.hpp
     FatDirectory.cpp
     FatDirectory.hpp
@@ -26,6 +30,10 @@ target_sources(fs.fat PRIVATE
     FatDirectoryReader.hpp
     FatEntryAssembler.cpp
     FatEntryAssembler.hpp
+    FatExtentCache.cpp
+    FatExtentCache.hpp
+    FatFile.cpp
+    FatFile.hpp
     FatFileSystem.cpp
     FatFileSystem.hpp
     FatFormatLayout.cpp
@@ -41,14 +49,19 @@ target_sources(fs.fat PRIVATE
     FatMount.hpp
     FatName.cpp
     FatName.hpp
+    FatOpen.cpp
+    FatOpen.hpp
     FatOpenDirectory.cpp
     FatOpenDirectory.hpp
+    FatOpenFile.hpp
     FatPartitionTable.cpp
     FatPartitionTable.hpp
     FatPathSlot.cpp
     FatPathSlot.hpp
     FatPathWalk.cpp
     FatPathWalk.hpp
+    FatRead.cpp
+    FatRead.hpp
     FatShortName.cpp
     FatShortName.hpp
     FatStat.cpp
