@@ -97,7 +97,9 @@ namespace fs
 
     void FatWrite::GrowAfter(std::optional<uint32_t> last)
     {
-        volume.Allocator().Grow(last, Needed(), file.reservation, [this](Result result, uint32_t first, uint32_t allocated)
+        auto chain = file.committedFirstCluster != 0 ? FatChain::referenced : FatChain::unreferenced;
+
+        volume.Allocator().Grow(last, Needed(), file.reservation, chain, [this](Result result, uint32_t first, uint32_t allocated)
             {
                 OnGrown(result, first, allocated);
             });

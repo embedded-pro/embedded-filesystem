@@ -53,9 +53,9 @@ namespace
             ExecuteAllActions();
         }
 
-        void ExpectGrowWithReservation(std::optional<uint32_t> last, uint32_t clusters, fs::Result result, uint32_t first, uint32_t allocated)
+        void ExpectGrowWithReservation(std::optional<uint32_t> last, uint32_t clusters, fs::Result result, uint32_t first, uint32_t allocated, fs::FatChain chain = fs::FatChain::referenced)
         {
-            allocator.Grow(last, clusters, reservations.reservation, [this](fs::Result result, uint32_t first, uint32_t allocated)
+            allocator.Grow(last, clusters, reservations.reservation, chain, [this](fs::Result result, uint32_t first, uint32_t allocated)
                 {
                     grown.callback(result, first, allocated);
                 });
@@ -289,6 +289,34 @@ TEST_F(FatAllocatorTest, link_in_another_fat_sector_flushes_the_new_entries_firs
     EXPECT_EQ(std::make_pair(Request::write, firstCopy), requests[3]);
     EXPECT_EQ(std::make_pair(Request::write, secondCopy), requests[4]);
     EXPECT_EQ(std::make_pair(Request::flush, 0u), requests[5]);
+    EXPECT_EQ(300u, builder->FatEntry(last));
+}
+
+TEST_F(FatAllocatorTest, link_of_a_referenced_chain_with_a_reservation_flushes_first)
+{
+    auto last = builder->AllocateChain(1);
+    builder->AllocateChain(1);
+    StartAt(300);
+    auto flushes = device.FlushRequests();
+
+    ExpectGrowWithReservation(last, 1, fs::Result::success, 300, 1);
+
+    EXPECT_EQ(flushes + 1, device.FlushRequests());
+}
+
+TEST_F(FatAllocatorTest, link_of_a_chain_that_no_entry_references_needs_no_flush)
+{
+    auto last = builder->AllocateChain(1);
+    builder->AllocateChain(1);
+    StartAt(300);
+    auto writes = device.WriteRequests();
+    auto flushes = device.FlushRequests();
+
+    ExpectGrowWithReservation(last, 1, fs::Result::success, 300, 1, fs::FatChain::unreferenced);
+
+    EXPECT_EQ(writes, device.WriteRequests());
+    EXPECT_EQ(flushes, device.FlushRequests());
+    Flush();
     EXPECT_EQ(300u, builder->FatEntry(last));
 }
 

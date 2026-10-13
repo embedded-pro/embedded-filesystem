@@ -72,6 +72,15 @@ namespace
             EXPECT_TRUE(std::equal(expected.begin(), expected.end(), read.begin()));
         }
 
+        void LeaveOneFreeClusterInTheFirstFatSector()
+        {
+            ASSERT_EQ(fs::FatType::fat16, builder->Geometry().type);
+            ExpectUnmount();
+            builder->AllocateChain(entriesPerFatSector - 5);
+            ExpectMount();
+        }
+
+        static constexpr uint32_t entriesPerFatSector = 256;
         std::array<uint8_t, 700> original{ Pattern<700>(1) };
     };
 }
@@ -136,6 +145,41 @@ TEST_F(FatWriteTest, first_write_to_an_empty_file_gives_it_a_chain)
     file = nullptr;
     Remount();
     ExpectContents("/empty.txt", added);
+}
+
+TEST_F(FatWriteTest, chain_that_no_entry_references_grows_into_another_fat_sector_without_a_flush)
+{
+    LeaveOneFreeClusterInTheFirstFatSector();
+    auto file = ExpectOpen("/empty.txt", fs::OpenMode::append);
+    auto first = Pattern<512>(2);
+    auto second = Pattern<512>(3);
+    ExpectWrite(*file, infra::MakeRange(first));
+    auto flushes = device.FlushRequests();
+
+    ExpectWrite(*file, infra::MakeRange(second));
+
+    EXPECT_EQ(flushes, device.FlushRequests());
+    ExpectSync(*file);
+    file = nullptr;
+    Remount();
+    std::array<uint8_t, 1024> expected;
+    std::copy(first.begin(), first.end(), expected.begin());
+    std::copy(second.begin(), second.end(), expected.begin() + 512);
+    ExpectContents("/empty.txt", expected);
+}
+
+TEST_F(FatWriteTest, committed_chain_grows_into_another_fat_sector_after_a_flush)
+{
+    LeaveOneFreeClusterInTheFirstFatSector();
+    auto file = ExpectOpen("/empty.txt", fs::OpenMode::append);
+    auto data = Pattern<512>(2);
+    ExpectWrite(*file, infra::MakeRange(data));
+    ExpectSync(*file);
+    auto flushes = device.FlushRequests();
+
+    ExpectWrite(*file, infra::MakeRange(data));
+
+    EXPECT_EQ(flushes + 1, device.FlushRequests());
 }
 
 TEST_F(FatWriteTest, read_after_a_write_sees_the_new_data_before_sync)

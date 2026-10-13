@@ -182,6 +182,7 @@ The order of writes is fixed so that a power loss never leaves a directory entry
 
 The ranks of the sector cache enforce the order of data, FAT and directory entries.
 Within the FAT, sectors are written in ascending order, so when the entries of the new clusters are in another FAT sector than the link of step 3, the operation flushes the cache between steps 2 and 3.
+A file whose directory entry does not refer to a cluster yet, such as a new file before its first `Sync`, needs no such flush: no entry refers to its chain until step 4, which the ranks write after a flush, so a power loss leaves at most clusters allocated but unused.
 `Sync` writes back every modified sector in this order and flushes the device.
 The directory entry is written only when its contents changed, so an overwrite inside a file that keeps its size and timestamps costs no write of the directory.
 
