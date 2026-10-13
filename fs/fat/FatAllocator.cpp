@@ -75,7 +75,7 @@ namespace fs
             return;
         }
 
-        if (auto found = FreeInSector(contents))
+        if (auto found = FreeInSector(contents); found.has_value())
             Take(*found);
         else if (preferredOnly)
         {
