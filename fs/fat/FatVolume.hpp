@@ -7,17 +7,20 @@
 #include "fs/common/OperationQueue.hpp"
 #include "fs/common/Path.hpp"
 #include "fs/common/SectorCache.hpp"
+#include "fs/fat/FatBackgroundScan.hpp"
 #include "fs/fat/FatChainWalk.hpp"
 #include "fs/fat/FatClosedFiles.hpp"
 #include "fs/fat/FatConfig.hpp"
 #include "fs/fat/FatDirectoryReader.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
+#include "fs/fat/FatFreeSpaceScan.hpp"
 #include "fs/fat/FatMount.hpp"
 #include "fs/fat/FatOpen.hpp"
 #include "fs/fat/FatOpenDirectory.hpp"
 #include "fs/fat/FatPathWalk.hpp"
 #include "fs/fat/FatRead.hpp"
 #include "fs/fat/FatStat.hpp"
+#include "fs/fat/FatUsage.hpp"
 #include "fs/fat/FatVolumeState.hpp"
 #include "fs/interfaces/FileSystem.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
@@ -69,7 +72,7 @@ namespace fs
         }
     }
 
-    using FatOperation = std::variant<std::monostate, FatMount, FatStat, FatOpenDirectory, FatOpen, FatRead>;
+    using FatOperation = std::variant<std::monostate, FatMount, FatStat, FatOpenDirectory, FatOpen, FatRead, FatUsage>;
 
     struct FatVolumeParts
     {
@@ -99,6 +102,7 @@ namespace fs
         FatPathWalk& Walk();
         FatChainWalk& Chain();
         FatClosedFiles& ClosedFiles();
+        FatFreeSpaceScan& FreeSpace();
         OperationQueue& Queue();
         FatOperation& Operation();
 
@@ -126,7 +130,9 @@ namespace fs
         FatPathWalk walk;
         FatChainWalk chain;
         FatClosedFiles closedFiles;
+        FatFreeSpaceScan freeSpace;
         OperationQueue queue;
+        FatBackgroundScan background;
         FatOperation operation;
         uint32_t generation{ 0 };
         bool mounted{ false };

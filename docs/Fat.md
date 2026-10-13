@@ -137,6 +137,8 @@ Opening one of them again, with the same first cluster and size, starts with tha
 Free clusters are found through a cursor, initialised from the FSINFO next-free hint, and through a cache of `FatLimits::freeRuns` free runs, 8 by default.
 When the volume is idle, a background scan of the FAT fills the cache of free runs and counts the free clusters, so that a foreground allocation rarely needs to read the FAT.
 The scan checks before every device request whether a foreground operation is waiting, and yields to it.
+`Usage` reports the free clusters counted by this scan; when the scan has not finished, the first `Usage` completes it, and from then on the count is kept in RAM until `Unmount`.
+On a clean FAT32 volume, the free count of FSINFO is used instead, so neither the scan nor `Usage` reads the FAT to count.
 Clusters are allocated in this order:
 
 1. A file with a reservation takes its clusters from the reservation.

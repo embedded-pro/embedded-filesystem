@@ -3,6 +3,7 @@
 
 #include "fs/fat/FatFsInfo.hpp"
 #include "fs/fat/FatGeometry.hpp"
+#include <cstdint>
 #include <optional>
 
 namespace fs
@@ -12,6 +13,7 @@ namespace fs
         FatGeometry geometry;
         std::optional<FsInfo> fsInfo;
         std::optional<bool> cleanAtMount;
+        std::optional<uint32_t> freeClusters;
     };
 }
 

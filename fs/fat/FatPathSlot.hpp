@@ -5,6 +5,7 @@
 #include "fs/interfaces/Directory.hpp"
 #include "fs/interfaces/EntryInfo.hpp"
 #include "fs/interfaces/File.hpp"
+#include "fs/interfaces/FileSystem.hpp"
 #include "fs/interfaces/OpenMode.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -34,7 +35,12 @@ namespace fs
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<File> file)> onDone;
     };
 
-    using FatPathCall = std::variant<FatStatCall, FatOpenDirectoryCall, FatOpenCall>;
+    struct FatUsageCall
+    {
+        infra::AutoResetFunction<void(Result result, VolumeUsage usage)> onDone;
+    };
+
+    using FatPathCall = std::variant<FatStatCall, FatOpenDirectoryCall, FatOpenCall, FatUsageCall>;
 
     struct FatPathSlot
     {

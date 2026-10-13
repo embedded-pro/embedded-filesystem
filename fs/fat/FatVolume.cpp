@@ -14,7 +14,15 @@ namespace fs
         , walk(reader, state.geometry)
         , chain(parts.cache, state.geometry)
         , closedFiles(parts.closedFiles)
-        , queue(config.idleDelay, [] {})
+        , freeSpace(parts.cache, state)
+        , queue(config.idleDelay, [this]
+              {
+                  background.Idle();
+              })
+        , background(queue, freeSpace, [this](Result result)
+              {
+                  Report(result);
+              })
     {}
 
     FatVolume::~FatVolume() = default;
@@ -69,6 +77,11 @@ namespace fs
         return closedFiles;
     }
 
+    FatFreeSpaceScan& FatVolume::FreeSpace()
+    {
+        return freeSpace;
+    }
+
     OperationQueue& FatVolume::Queue()
     {
         return queue;
@@ -102,13 +115,16 @@ namespace fs
     void FatVolume::MarkMounted()
     {
         closedFiles.Clear();
+        freeSpace.Restart();
         ++generation;
         mounted = true;
+        background.Start();
     }
 
     void FatVolume::MarkUnmounted(Result reason)
     {
         mounted = false;
+        background.Stop();
         unavailable = reason == Result::mediaRemoved ? Result::mediaRemoved : Result::notMounted;
     }
 
