@@ -207,7 +207,7 @@ Discard can be disabled with `FatConfig::discard` for devices that implement it 
 
 The clean-shutdown bit of the second FAT entry is cleared before the first change to the metadata of a mount is written, and set again by a clean `Unmount`, so that a PC checks the volume after a power loss.
 The first operation of a mount that changes the volume clears the bit in every FAT copy and flushes before it writes anything else, which costs one write per copy and one flush per mount.
-These operations are a write, a `Sync` or `Close` with something to commit, an `Open` that creates or truncates, `MakeDirectory`, `Remove`, `Rename` and `Truncate`.
+These operations are a write, an `Open` that creates or truncates, `MakeDirectory`, `Remove`, `Rename` and `Truncate`; a `Sync` or `Close` only commits what one of them changed.
 `Unmount` sets the bit at rank 4, so it is written only after everything else has been flushed.
 FAT12 has no such bit.
 A volume that was not clean at mount stays marked as not clean, and its FSINFO is not trusted.
