@@ -136,6 +136,14 @@ namespace metrics
             });
     }
 
+    fs::Result SweepVolume::Truncate(fs::File& file)
+    {
+        return Run([&file](const infra::Function<void(fs::Result)>& onDone)
+            {
+                file.Truncate(onDone);
+            });
+    }
+
     fs::Result SweepVolume::Sync(fs::File& file)
     {
         return Run([&file](const infra::Function<void(fs::Result)>& onDone)
@@ -165,6 +173,14 @@ namespace metrics
         return Run([this, &path](const infra::Function<void(fs::Result)>& onDone)
             {
                 fileSystem.MakeDirectory(infra::BoundedConstString(path.data(), path.size()), onDone);
+            });
+    }
+
+    fs::Result SweepVolume::Rename(const std::string& from, const std::string& to)
+    {
+        return Run([this, &from, &to](const infra::Function<void(fs::Result)>& onDone)
+            {
+                fileSystem.Rename(infra::BoundedConstString(from.data(), from.size()), infra::BoundedConstString(to.data(), to.size()), onDone);
             });
     }
 

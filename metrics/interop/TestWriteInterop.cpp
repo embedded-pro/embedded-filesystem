@@ -12,6 +12,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -331,6 +332,117 @@ TEST_P(WriteInterop, made_directories_and_removed_entries_pass_fsck)
     std::ifstream back{ directory / "back.bin", std::ios::binary };
     std::vector<uint8_t> read{ std::istreambuf_iterator<char>(back), std::istreambuf_iterator<char>() };
     EXPECT_EQ(original, read);
+}
+
+TEST_P(WriteInterop, renamed_and_truncated_entries_pass_fsck)
+{
+    auto original = Pattern(20000, 4);
+    std::ofstream{ directory / "an old long name.txt", std::ios::binary }.write(reinterpret_cast<const char*>(original.data()), 5000);
+    std::ofstream{ directory / "kept.txt", std::ios::binary }.write(reinterpret_cast<const char*>(original.data()), 5000);
+    std::ofstream{ directory / "big.bin", std::ios::binary }.write(reinterpret_cast<const char*>(original.data()), static_cast<std::streamsize>(original.size()));
+    ASSERT_EQ(0, Run("mkfs.fat -C " + GetParam().options + " " + image + " " + std::to_string(GetParam().kibibytes)).exitCode);
+    ASSERT_EQ(0, Run("mmd -i " + image + " ::/old ::/old/inner").exitCode);
+    ASSERT_EQ(0, Run("mcopy -i " + image + " '" + (directory / "an old long name.txt").string() + "' '" + (directory / "kept.txt").string() + "' '" + (directory / "big.bin").string() + "' ::/").exitCode);
+    ASSERT_EQ(0, Run("mcopy -i " + image + " '" + (directory / "kept.txt").string() + "' ::/old/inner/").exitCode);
+
+    metrics::ImageBlockDevice device{ metrics::BlocksInImage(image) };
+    device.LoadFrom(image);
+    fs::FatFileSystem::WithStorage<1, 8> volume{ device };
+    auto call = [this](const auto& start)
+    {
+        return Wait(start);
+    };
+    ASSERT_EQ(fs::Result::success, call([&volume](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           volume.Mount(onDone);
+                                       }));
+
+    for (const auto& [from, to] : std::vector<std::pair<const char*, const char*>>{ { "/an old long name.txt", "/a new long name.txt" }, { "/old/inner", "/inner moved" }, { "/kept.txt", "/old/KEPT.TXT" } })
+        EXPECT_EQ(fs::Result::success, call([&volume, from, to](const infra::Function<void(fs::Result)>& onDone)
+                                           {
+                                               volume.Rename(from, to, onDone);
+                                           }))
+            << from;
+
+    auto open = [this, &volume](const char* path, fs::OpenMode mode)
+    {
+        infra::SharedPtr<fs::File> file;
+        volume.Open(path, mode, [&file](fs::Result result, infra::SharedPtr<fs::File> opened)
+            {
+                EXPECT_EQ(fs::Result::success, result);
+                file = opened;
+            });
+        ExecuteAllActions();
+        return file;
+    };
+
+    auto big = open("/big.bin", fs::OpenMode::readWrite);
+    ASSERT_NE(nullptr, big);
+    big->Seek(7000);
+    EXPECT_EQ(fs::Result::success, call([&big](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           big->Truncate(onDone);
+                                       }));
+    EXPECT_EQ(fs::Result::success, call([&big](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           big->Close(onDone);
+                                       }));
+    big = nullptr;
+
+    auto rewritten = Pattern(300, 9);
+    auto kept = open("/old/KEPT.TXT", fs::OpenMode::write);
+    ASSERT_NE(nullptr, kept);
+    EXPECT_EQ(fs::Result::success, call([&kept, &rewritten](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           kept->Write(infra::MakeRange(rewritten), onDone);
+                                       }));
+    EXPECT_EQ(fs::Result::success, call([&kept](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           kept->Close(onDone);
+                                       }));
+    kept = nullptr;
+
+    EXPECT_EQ(fs::Result::success, call([&volume](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           volume.Unmount(onDone);
+                                       }));
+    device.Save(image);
+
+    auto fsck = Run("fsck.fat -n " + image);
+    EXPECT_EQ(0, fsck.exitCode) << fsck.output;
+
+    std::ifstream stream{ image, std::ios::binary };
+    auto check = metrics::CheckFatImage([&stream](uint32_t sector)
+        {
+            std::vector<uint8_t> contents(512);
+            stream.seekg(std::streamoff{ sector } * 512);
+            stream.read(reinterpret_cast<char*>(contents.data()), 512);
+            return contents;
+        },
+        metrics::FatCheckMode::strict);
+    EXPECT_EQ(std::nullopt, check.problem);
+    EXPECT_EQ(0u, check.orphanedLongNames);
+
+    auto listing = Run("mdir -b -/ -i " + image + " ::/");
+    ASSERT_EQ(0, listing.exitCode) << listing.output;
+    std::set<std::string> listed;
+    std::istringstream lines{ listing.output };
+    for (std::string line; std::getline(lines, line);)
+        if (line.starts_with("::"))
+            listed.insert(line.substr(2));
+    EXPECT_EQ((std::set<std::string>{ "/a new long name.txt", "/big.bin", "/inner moved/", "/inner moved/kept.txt", "/old/", "/old/KEPT.TXT" }), listed);
+
+    auto readBack = [this](const std::string& path)
+    {
+        std::filesystem::remove(directory / "back.bin");
+        EXPECT_EQ(0, Run("mcopy -n -i " + image + " '::" + path + "' '" + (directory / "back.bin").string() + "'").exitCode) << path;
+        std::ifstream back{ directory / "back.bin", std::ios::binary };
+        return std::vector<uint8_t>{ std::istreambuf_iterator<char>(back), std::istreambuf_iterator<char>() };
+    };
+    EXPECT_EQ(std::vector<uint8_t>(original.begin(), original.begin() + 7000), readBack("/big.bin"));
+    EXPECT_EQ(std::vector<uint8_t>(original.begin(), original.begin() + 5000), readBack("/a new long name.txt"));
+    EXPECT_EQ(std::vector<uint8_t>(original.begin(), original.begin() + 5000), readBack("/inner moved/kept.txt"));
+    EXPECT_EQ(rewritten, readBack("/old/KEPT.TXT"));
 }
 
 INSTANTIATE_TEST_SUITE_P(Images, WriteInterop,
