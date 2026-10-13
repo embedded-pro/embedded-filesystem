@@ -1,5 +1,6 @@
 #include "fs/fat/FatFileSystem.hpp"
 #include "infra/timer/test_helper/ClockFixture.hpp"
+#include "metrics/fat/FatChecker.hpp"
 #include "metrics/interop/InteropTools.hpp"
 #include "gtest/gtest.h"
 #include <cstdint>
@@ -136,6 +137,23 @@ TEST_P(ReadInterop, files_written_by_mtools_read_back)
     Copy("between.bin", cluster);
     Delete("gap.bin");
     Copy("fragmented.bin", 7 * cluster + 300);
+
+    std::ifstream stream{ image, std::ios::binary };
+    metrics::SectorReader reader = [&stream](uint32_t sector)
+    {
+        std::vector<uint8_t> contents(512);
+        stream.seekg(std::streamoff{ sector } * 512);
+        stream.read(reinterpret_cast<char*>(contents.data()), 512);
+        return contents;
+    };
+    auto check = metrics::CheckFatImage(reader, metrics::FatCheckMode::strict);
+    EXPECT_EQ(std::nullopt, check.problem);
+
+    for (const auto& [name, contents] : expected)
+        if (const auto* entry = check.Find("/" + name); entry != nullptr)
+            EXPECT_EQ(contents, metrics::ReadContents(reader, check, *entry)) << name;
+        else
+            ADD_FAILURE() << "the checker does not find " << name;
 
     metrics::ImageBlockDevice device{ metrics::BlocksInImage(image) };
     device.LoadFrom(image);

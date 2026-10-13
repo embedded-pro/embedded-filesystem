@@ -81,6 +81,7 @@ On FAT volumes, the sweep runs in `metrics/fat` on small volumes of each FAT typ
 
 Chains longer than their file, lost clusters, orphaned long name entries and copies of the FAT that lag behind the first one are allowed after a cut, as described in [Fat.md](Fat.md#behaviour-on-power-loss), and the one exception to clusters in two chains is the old and the new name of an interrupted `Rename`.
 The run without a cut must pass the checker in its strict mode, which allows none of these.
+The checker is itself checked against the images that the interoperability tests write with `mtools`: it must accept them in its strict mode and read back every file they hold.
 
 ## Interoperability tests for FAT
 
