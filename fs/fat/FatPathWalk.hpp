@@ -5,12 +5,10 @@
 #include "fs/fat/FatDirectoryReader.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatGeometry.hpp"
-#include "fs/fat/FatShortName.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/Function.hpp"
-#include <array>
 #include <cstdint>
 #include <optional>
 
@@ -38,7 +36,6 @@ namespace fs
 
         void NextComponent();
         void OnScanned(Result result);
-        bool Matches(const FatScannedEntry& entry);
 
     private:
         FatDirectoryReader& reader;
@@ -47,7 +44,6 @@ namespace fs
         infra::BoundedConstString component;
         FatDirectoryCursor cursor;
         std::optional<FatScannedEntry> found;
-        std::array<uint8_t, ShortName::maxUtf8Bytes> shortName{};
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }

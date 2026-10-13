@@ -63,10 +63,9 @@ TEST_F(FatOpenTest, existing_file_opens_for_reading_and_writing_at_its_start)
     EXPECT_EQ(0u, file->Position());
 }
 
-TEST_F(FatOpenTest, modes_that_create_or_truncate_are_not_supported_yet)
+TEST_F(FatOpenTest, truncating_an_existing_file_is_not_supported_yet)
 {
     ExpectOpen("/notes.txt", fs::OpenMode::write, fs::Result::unsupported);
-    ExpectOpen("/missing.txt", fs::OpenMode::readWrite, fs::Result::unsupported);
     ExpectOpen("/documents", fs::OpenMode::write, fs::Result::isADirectory);
 }
 

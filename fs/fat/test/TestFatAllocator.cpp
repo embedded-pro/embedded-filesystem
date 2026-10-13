@@ -8,6 +8,19 @@
 
 namespace
 {
+    class RangeReservations
+        : public fs::FatReservations
+    {
+    public:
+        bool Reserved(uint32_t cluster) const override
+        {
+            return reservation.Contains(cluster) || other.Contains(cluster);
+        }
+
+        fs::FatReservation reservation;
+        fs::FatReservation other;
+    };
+
     class FatAllocatorTest
         : public FatVolumeFixture
     {
@@ -27,6 +40,36 @@ namespace
                     grown.callback(result, first, allocated);
                 });
             EXPECT_CALL(grown, callback(result, first, allocated));
+            ExecuteAllActions();
+        }
+
+        void ExpectGrowWithReservation(std::optional<uint32_t> last, uint32_t clusters, fs::Result result, uint32_t first, uint32_t allocated)
+        {
+            allocator.Grow(last, clusters, reservations.reservation, [this](fs::Result result, uint32_t first, uint32_t allocated)
+                {
+                    grown.callback(result, first, allocated);
+                });
+            EXPECT_CALL(grown, callback(result, first, allocated));
+            ExecuteAllActions();
+        }
+
+        void ExpectTake(uint32_t last, fs::Result result, uint32_t first)
+        {
+            allocator.Take(last, 1, [this](fs::Result result, uint32_t first, uint32_t allocated)
+                {
+                    grown.callback(result, first, allocated);
+                });
+            EXPECT_CALL(grown, callback(result, first, result == fs::Result::success ? 1 : 0));
+            ExecuteAllActions();
+        }
+
+        void ExpectLink(fs::Result result)
+        {
+            allocator.Link([this](fs::Result result)
+                {
+                    linked.callback(result);
+                });
+            EXPECT_CALL(linked, callback(result));
             ExecuteAllActions();
         }
 
@@ -54,9 +97,11 @@ namespace
 
         fs::FatVolumeState state;
         fs::FatTableWriter writer{ cache, state.geometry };
-        fs::FatAllocator allocator{ cache, state, writer };
+        RangeReservations reservations;
+        fs::FatAllocator allocator{ cache, state, writer, reservations };
         testing::StrictMock<infra::MockCallback<void(fs::Result, uint32_t, uint32_t)>> grown;
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> flushed;
+        testing::StrictMock<infra::MockCallback<void(fs::Result)>> linked;
     };
 
     class FatAllocatorOnFat12Test
@@ -241,6 +286,97 @@ TEST_F(FatAllocatorTest, failure_to_read_back_an_evicted_fat_sector_is_reported)
     device.FailNextOperationWith(hal::BlockDevice::Result::timeout, 6);
 
     ExpectGrow(std::nullopt, 2, fs::Result::deviceError, 2, 1);
+}
+
+TEST_F(FatAllocatorTest, file_takes_its_clusters_from_its_reservation)
+{
+    auto last = builder->AllocateChain(1);
+    reservations.reservation = fs::FatReservation{ 200, 10 };
+
+    ExpectGrowWithReservation(last, 3, fs::Result::success, 200, 3);
+    Flush();
+
+    EXPECT_EQ(200u, builder->FatEntry(last));
+    EXPECT_EQ(3u, allocator.Contiguous());
+    EXPECT_EQ((fs::FatReservation{ 203, 7 }), reservations.reservation);
+}
+
+TEST_F(FatAllocatorTest, growth_beyond_the_reservation_continues_after_it)
+{
+    reservations.reservation = fs::FatReservation{ 200, 2 };
+
+    ExpectGrowWithReservation(std::nullopt, 3, fs::Result::success, 200, 3);
+    Flush();
+
+    EXPECT_EQ(202u, builder->FatEntry(201));
+    EXPECT_EQ((fs::FatReservation{ 202, 0 }), reservations.reservation);
+}
+
+TEST_F(FatAllocatorTest, clusters_reserved_by_other_files_are_skipped)
+{
+    reservations.other = fs::FatReservation{ 2, 5 };
+
+    ExpectGrow(std::nullopt, 1, fs::Result::success, 7, 1);
+}
+
+TEST_F(FatAllocatorTest, reservation_whose_first_cluster_is_in_use_is_dropped)
+{
+    builder->SetFatEntry(200, EndOfChain());
+    reservations.reservation = fs::FatReservation{ 200, 10 };
+
+    ExpectGrowWithReservation(std::nullopt, 1, fs::Result::success, 2, 1);
+
+    EXPECT_EQ((fs::FatReservation{ 0, 0 }), reservations.reservation);
+}
+
+TEST_F(FatAllocatorTest, taken_cluster_is_not_linked)
+{
+    auto last = builder->AllocateChain(1);
+
+    ExpectTake(last, fs::Result::success, last + 1);
+    Flush();
+
+    EXPECT_EQ(EndOfChain(), builder->FatEntry(last));
+    EXPECT_EQ(EndOfChain(), builder->FatEntry(last + 1));
+}
+
+TEST_F(FatAllocatorTest, link_appends_the_taken_cluster)
+{
+    auto last = builder->AllocateChain(1);
+    ExpectTake(last, fs::Result::success, last + 1);
+    auto flushes = device.FlushRequests();
+
+    ExpectLink(fs::Result::success);
+    Flush();
+
+    EXPECT_EQ(flushes + 1, device.FlushRequests());
+    EXPECT_EQ(last + 1, builder->FatEntry(last));
+}
+
+TEST_F(FatAllocatorTest, link_of_a_taken_cluster_in_another_fat_sector_flushes_first)
+{
+    auto last = builder->AllocateChain(1);
+    builder->AllocateChain(1);
+    StartAt(300);
+    ExpectTake(last, fs::Result::success, 300);
+    auto flushes = device.FlushRequests();
+
+    ExpectLink(fs::Result::success);
+
+    EXPECT_EQ(flushes + 1, device.FlushRequests());
+    EXPECT_EQ(EndOfChain(), builder->FatEntry(300));
+    EXPECT_EQ(EndOfChain(), builder->FatEntry(last));
+}
+
+TEST_F(FatAllocatorTest, failed_flush_before_linking_a_taken_cluster_is_reported)
+{
+    auto last = builder->AllocateChain(1);
+    builder->AllocateChain(1);
+    StartAt(300);
+    ExpectTake(last, fs::Result::success, 300);
+    device.FailNextOperationWith(hal::BlockDevice::Result::timeout, 2);
+
+    ExpectLink(fs::Result::deviceError);
 }
 
 TEST_F(FatAllocatorTest, device_error_while_searching_is_reported)

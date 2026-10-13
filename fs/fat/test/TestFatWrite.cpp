@@ -482,14 +482,12 @@ TEST_F(FatWriteTest, released_file_writes_back_an_overwrite)
     EXPECT_TRUE(std::equal(update.begin(), update.end(), sector.begin()));
 }
 
-TEST_F(FatWriteTest, truncate_and_expect_size_are_not_supported_yet)
+TEST_F(FatWriteTest, truncate_is_not_supported_yet)
 {
     auto file = ExpectOpen("/notes.txt", fs::OpenMode::readWrite);
 
     file->Truncate(Done());
-    file->ExpectSize(1000, Done());
-    EXPECT_CALL(done, callback(fs::Result::unsupported)).Times(2);
-    ExecuteAllActions();
+    ExpectDone(fs::Result::unsupported);
 }
 
 TEST_F(FatWriteTest, append_after_a_reopen_does_not_walk_the_chain)

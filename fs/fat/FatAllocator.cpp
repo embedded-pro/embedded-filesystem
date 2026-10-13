@@ -4,10 +4,11 @@
 
 namespace fs
 {
-    FatAllocator::FatAllocator(SectorCache& cache, FatVolumeState& volume, FatTableWriter& writer)
+    FatAllocator::FatAllocator(SectorCache& cache, FatVolumeState& volume, FatTableWriter& writer, const FatReservations& reservations)
         : cache(cache)
         , volume(volume)
         , writer(writer)
+        , reservations(reservations)
     {}
 
     FatAllocator::~FatAllocator() = default;
@@ -32,10 +33,35 @@ namespace fs
 
     void FatAllocator::Grow(std::optional<uint32_t> last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
     {
+        Start(last, clusters, true, nullptr, onDone);
+    }
+
+    void FatAllocator::Grow(std::optional<uint32_t> last, uint32_t clusters, FatReservation& reservation, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
+    {
+        Start(last, clusters, true, &reservation, onDone);
+    }
+
+    void FatAllocator::Take(uint32_t last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
+    {
+        Start(last, clusters, false, nullptr, onDone);
+    }
+
+    void FatAllocator::Link(const infra::Function<void(Result result)>& onDone)
+    {
+        really_assert(last.has_value() && allocated != 0);
+
+        onLinked = onDone;
+        LinkAfterBarrier();
+    }
+
+    void FatAllocator::Start(std::optional<uint32_t> last, uint32_t clusters, bool link, FatReservation* reservation, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone)
+    {
         really_assert(clusters != 0);
 
         this->last = last;
+        own = reservation;
         this->onDone = onDone;
+        linkWhenTaken = link;
         wanted = clusters;
         allocated = 0;
         first = 0;
@@ -48,7 +74,7 @@ namespace fs
     {
         if (allocated == wanted)
         {
-            Link(Result::success);
+            Finish(Result::success);
             return;
         }
 
@@ -71,7 +97,7 @@ namespace fs
     {
         if (result != Result::success)
         {
-            Link(result);
+            Finish(result);
             return;
         }
 
@@ -79,13 +105,16 @@ namespace fs
             Take(*found);
         else if (preferredOnly)
         {
+            if (own != nullptr)
+                *own = FatReservation{};
+
             preferredOnly = false;
             candidate = cursor;
             examined = 0;
             ReadCandidateSector();
         }
         else if (examined >= volume.geometry.clusterCount)
-            Link(Result::noSpace);
+            Finish(Result::noSpace);
         else
             ReadCandidateSector();
     }
@@ -102,7 +131,7 @@ namespace fs
             candidate = After(cluster) != 0 ? After(cluster) : 2;
             ++examined;
 
-            if (!location.straddles && ReadEntry(geometry.type, cluster, contents, infra::ConstByteRange()) == 0)
+            if (!location.straddles && ReadEntry(geometry.type, cluster, contents, infra::ConstByteRange()) == 0 && Available(cluster))
                 return cluster;
 
             if (preferredOnly)
@@ -130,12 +159,18 @@ namespace fs
     {
         if (result != Result::success)
         {
-            Link(result);
+            Finish(result);
             return;
         }
 
         if (allocated == 0)
             first = cluster;
+
+        if (own != nullptr && own->count != 0 && own->first == cluster)
+        {
+            ++own->first;
+            --own->count;
+        }
 
         if (contiguous == allocated && cluster == first + allocated)
             ++contiguous;
@@ -152,37 +187,50 @@ namespace fs
         Next();
     }
 
-    void FatAllocator::Link(Result result)
+    void FatAllocator::Finish(Result result)
     {
         if (result != Result::success && result != Result::noSpace)
             Done(result);
         else if (allocated == 0)
             Done(Result::noSpace);
         else
-            LinkAllocated(result);
+            FinishAllocated(result);
     }
 
-    void FatAllocator::LinkAllocated(Result result)
+    void FatAllocator::FinishAllocated(Result result)
     {
-        if (!last.has_value())
+        if (!last.has_value() || !linkWhenTaken)
             Done(result);
-        else if (barrier)
-            cache.Flush([this, result](Result flushed)
+        else
+        {
+            takeResult = result;
+            onLinked = [this](Result linked)
+            {
+                Done(linked != Result::success ? linked : takeResult);
+            };
+            LinkAfterBarrier();
+        }
+    }
+
+    void FatAllocator::LinkAfterBarrier()
+    {
+        if (barrier)
+            cache.Flush([this](Result flushed)
                 {
                     if (flushed != Result::success)
-                        Done(flushed);
+                        onLinked(flushed);
                     else
-                        LinkLast(result);
+                        LinkLast();
                 });
         else
-            LinkLast(result);
+            LinkLast();
     }
 
-    void FatAllocator::LinkLast(Result result)
+    void FatAllocator::LinkLast()
     {
-        writer.Write(*last, first, [this, result](Result written)
+        writer.Write(*last, first, [this](Result written)
             {
-                Done(written != Result::success ? written : result);
+                onLinked(written);
             });
     }
 
@@ -196,6 +244,9 @@ namespace fs
         if (allocated != 0)
             return After(previous);
 
+        if (own != nullptr && own->count != 0)
+            return own->first;
+
         if (last.has_value())
             return After(*last);
 
@@ -205,6 +256,11 @@ namespace fs
     bool FatAllocator::IsCluster(uint32_t cluster) const
     {
         return volume.geometry.IsCluster(cluster);
+    }
+
+    bool FatAllocator::Available(uint32_t cluster) const
+    {
+        return !reservations.Reserved(cluster) || (own != nullptr && own->Contains(cluster));
     }
 
     uint32_t FatAllocator::After(uint32_t cluster) const

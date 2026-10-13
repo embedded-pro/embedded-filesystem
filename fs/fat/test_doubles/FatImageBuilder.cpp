@@ -13,12 +13,24 @@ namespace fs
     {
         constexpr uint32_t sectorBytes = 512;
         constexpr uint32_t entriesPerSector = sectorBytes / directoryEntryBytes;
+        constexpr uint16_t firstOf1980 = (1 << 5) | 1;
 
         ShortName ShortNameOf(const char (&name)[12])
         {
             ShortName shortName;
             std::copy_n(name, shortName.bytes.size(), shortName.bytes.begin());
             return shortName;
+        }
+
+        ShortEntry EntryOf(const char (&name)[12], uint8_t attributes)
+        {
+            ShortEntry entry;
+            entry.name = ShortNameOf(name);
+            entry.attributes = attributes;
+            entry.createDate = firstOf1980;
+            entry.accessDate = firstOf1980;
+            entry.writeDate = firstOf1980;
+            return entry;
         }
     }
 
@@ -57,9 +69,7 @@ namespace fs
 
     uint32_t FatImageBuilder::AddFile(uint32_t parent, infra::BoundedConstString longName, const char (&shortName)[12], infra::ConstByteRange contents, bool fragmented)
     {
-        ShortEntry entry;
-        entry.name = ShortNameOf(shortName);
-        entry.attributes = FatAttributes::archive;
+        auto entry = EntryOf(shortName, FatAttributes::archive);
         entry.size = static_cast<uint32_t>(contents.size());
 
         if (!contents.empty())
@@ -74,15 +84,11 @@ namespace fs
 
     uint32_t FatImageBuilder::AddDirectory(uint32_t parent, infra::BoundedConstString longName, const char (&shortName)[12])
     {
-        ShortEntry entry;
-        entry.name = ShortNameOf(shortName);
-        entry.attributes = FatAttributes::directory;
+        auto entry = EntryOf(shortName, FatAttributes::directory);
         entry.firstCluster = AllocateChain(1);
         ZeroCluster(entry.firstCluster);
 
-        ShortEntry dot;
-        dot.name = ShortNameOf(".          ");
-        dot.attributes = FatAttributes::directory;
+        auto dot = EntryOf(".          ", FatAttributes::directory);
         dot.firstCluster = entry.firstCluster;
         ShortEntry dotDot = dot;
         dotDot.name = ShortNameOf("..         ");

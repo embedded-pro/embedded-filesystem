@@ -15,6 +15,7 @@
 #include "fs/fat/FatDirectoryReader.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatEntryUpdate.hpp"
+#include "fs/fat/FatExpectSize.hpp"
 #include "fs/fat/FatFreeSpaceScan.hpp"
 #include "fs/fat/FatMount.hpp"
 #include "fs/fat/FatOpen.hpp"
@@ -25,6 +26,7 @@
 #include "fs/fat/FatStat.hpp"
 #include "fs/fat/FatSync.hpp"
 #include "fs/fat/FatTableWriter.hpp"
+#include "fs/fat/FatTimestamp.hpp"
 #include "fs/fat/FatUnmount.hpp"
 #include "fs/fat/FatUsage.hpp"
 #include "fs/fat/FatVolumeState.hpp"
@@ -82,7 +84,7 @@ namespace fs
 
     class FatFile;
 
-    using FatOperation = std::variant<std::monostate, FatMount, FatUnmount, FatStat, FatOpenDirectory, FatOpen, FatRead, FatWrite, FatSync, FatUsage>;
+    using FatOperation = std::variant<std::monostate, FatMount, FatUnmount, FatStat, FatOpenDirectory, FatOpen, FatRead, FatWrite, FatSync, FatExpectSize, FatUsage>;
 
     struct FatVolumeParts
     {
@@ -96,6 +98,7 @@ namespace fs
     };
 
     class FatVolume
+        : private FatReservations
     {
     public:
         FatVolume(const FatVolumeParts& parts, const FatConfig& config, const infra::Function<void()>& onMediaRemoved);
@@ -120,6 +123,8 @@ namespace fs
         infra::IntrusiveList<FatFile>& OpenFiles();
         OperationQueue& Queue();
         FatOperation& Operation();
+        const FatReservations& Reservations() const;
+        FatDateTime Timestamp() const;
 
         uint32_t Generation() const;
         bool Available() const;
@@ -133,10 +138,15 @@ namespace fs
         void Defer(const Callback& onDone, Result result);
 
     private:
+        bool Reserved(uint32_t cluster) const override;
+
+    private:
         hal::BlockDevice& device;
         SectorCache& cache;
         DeferredCompletions& deferred;
         uint32_t cacheSectors;
+        uint32_t timerServiceId;
+        uint32_t blocksPerAllocationUnit;
         PathLimits limits;
         infra::Function<void()> onMediaRemoved;
         DirectTransfers transfers;

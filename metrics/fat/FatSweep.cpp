@@ -128,6 +128,14 @@ namespace metrics
             });
     }
 
+    fs::Result SweepVolume::ExpectSize(fs::File& file, uint32_t size)
+    {
+        return Run([&file, size](const infra::Function<void(fs::Result)>& onDone)
+            {
+                file.ExpectSize(size, onDone);
+            });
+    }
+
     fs::Result SweepVolume::Sync(fs::File& file)
     {
         return Run([&file](const infra::Function<void(fs::Result)>& onDone)

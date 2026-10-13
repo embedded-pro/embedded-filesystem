@@ -7,6 +7,7 @@
 #include "metrics/suite/MetricRecorder.hpp"
 #include "gtest/gtest.h"
 #include <algorithm>
+#include <iterator>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -31,6 +32,7 @@ namespace
         std::vector<SweepWrite> writes;
         bool closeAtEnd;
         bool atFatSectorEdge;
+        uint32_t expectedSize{ 0 };
     };
 
     struct SweepMode
@@ -168,6 +170,9 @@ public:
         if (file == nullptr)
             return;
 
+        if (sweepCase.expectedSize != 0)
+            volume.ExpectSize(*file, sweepCase.expectedSize);
+
         uint8_t seed = 100;
         for (const auto& write : sweepCase.writes)
         {
@@ -255,5 +260,165 @@ INSTANTIATE_TEST_SUITE_P(Fat, FatPowerCut,
             SweepCase{ "append_across_cluster", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 0 } }, false, false },
             SweepCase{ "append_across_fat_sector", 1, -100, true, fs::OpenMode::append, { { std::nullopt, 200 } }, false, true },
             SweepCase{ "overwrite_three_sectors", 1, 4 * 512, true, fs::OpenMode::readWrite, { { 512, 3 * 512 } }, false, false },
-            SweepCase{ "close_after_writes", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 300 }, { std::nullopt, 300 }, { std::nullopt, 300 } }, true, false })),
+            SweepCase{ "close_after_writes", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 300 }, { std::nullopt, 300 }, { std::nullopt, 300 } }, true, false },
+            SweepCase{ "expect_size_write_close", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 2000 }, { std::nullopt, 2000 } }, true, false, 8000 })),
     ParameterName);
+
+namespace
+{
+    struct CreateCase
+    {
+        std::string name;
+        bool inDirectory;
+        int32_t fillersBeforeClusterEnd;
+        uint32_t bytes;
+        bool closeAtEnd;
+    };
+
+    using CreateParameter = std::tuple<const metrics::BlockDeviceModel*, CreateCase>;
+
+    std::string CreateParameterName(const testing::TestParamInfo<CreateParameter>& info)
+    {
+        auto name = std::string(std::get<0>(info.param)->name) + "_" + std::get<1>(info.param).name;
+        std::replace(name.begin(), name.end(), '-', '_');
+        return name;
+    }
+
+    void AddFillers(fs::FatImageBuilder& builder, uint32_t directory, uint32_t count)
+    {
+        for (uint32_t index = 0; index != count; ++index)
+        {
+            char name[12] = "F0000000TXT";
+            auto number = std::to_string(index);
+            std::copy(number.rbegin(), number.rend(), std::reverse_iterator<char*>(name + 8));
+            builder.AddFile(directory, "", name, infra::ConstByteRange());
+        }
+    }
+}
+
+class FatCreatePowerCut
+    : public testing::TestWithParam<CreateParameter>
+{
+public:
+    const metrics::BlockDeviceModel& model{ *std::get<0>(GetParam()) };
+    const CreateCase& createCase{ std::get<1>(GetParam()) };
+    uint32_t clusterBytes{ ClusterBytesOf(model) };
+    std::string path{ std::string(createCase.inDirectory ? "/Directory" : "") + "/Created Long Name.txt" };
+    std::vector<uint8_t> data{ Pattern(createCase.bytes, 7) };
+    std::size_t originalEntries{ 0 };
+
+    void SetUpVolume(metrics::SweepContext<hal::BlockDevice>& context)
+    {
+        ASSERT_EQ(fs::Result::success, metrics::Format(context, metrics::SweepFormat(model)));
+        metrics::SweepImage image{ context };
+        fs::FatImageBuilder builder{ image };
+        builder.AddFile(0, "", "FIRST   TXT", infra::ConstByteRange());
+
+        uint32_t parent = builder.RootCluster();
+        if (createCase.inDirectory)
+        {
+            parent = builder.AddDirectory(parent, "Directory", "DIRECT~1   ");
+            std::vector<uint8_t> stale(model.blockSize, 0x41);
+            for (uint32_t sector = 0; sector != builder.Geometry().sectorsPerCluster; ++sector)
+                image.WriteBlock(builder.Geometry().SectorOfCluster(parent + 1) + sector, infra::MakeRange(stale));
+        }
+
+        auto entriesPerCluster = clusterBytes / fs::directoryEntryBytes;
+        auto reserved = createCase.inDirectory ? 2 : 1;
+        AddFillers(builder, parent, static_cast<uint32_t>(createCase.fillersBeforeClusterEnd < 0 ? static_cast<int32_t>(entriesPerCluster) - reserved + createCase.fillersBeforeClusterEnd : createCase.fillersBeforeClusterEnd));
+
+        originalEntries = metrics::CheckFatImage(metrics::ReaderOf(context), metrics::FatCheckMode::strict).entries.size();
+    }
+
+    void Operate(metrics::SweepContext<hal::BlockDevice>& context)
+    {
+        metrics::SweepVolume volume{ context };
+        volume.Mount();
+        auto file = volume.Open(path, fs::OpenMode::write);
+        if (file == nullptr)
+            return;
+
+        if (!data.empty())
+            volume.Write(*file, infra::MakeRange(data));
+
+        if (createCase.closeAtEnd)
+            volume.Close(*file);
+        else
+            volume.Sync(*file);
+    }
+
+    std::optional<std::string> Verify(metrics::SweepContext<hal::BlockDevice>& context, metrics::FatCheckMode mode)
+    {
+        auto reader = metrics::ReaderOf(context);
+        auto check = metrics::CheckFatImage(reader, mode);
+        if (check.problem)
+            return check.problem;
+
+        const auto* created = check.Find(path);
+        auto expectedEntries = originalEntries + (created != nullptr ? 1 : 0);
+        if (check.entries.size() != expectedEntries)
+            return std::to_string(check.entries.size()) + " entries instead of " + std::to_string(expectedEntries);
+
+        if (created == nullptr && mode == metrics::FatCheckMode::strict)
+            return "the new file is missing";
+
+        if (created != nullptr)
+            if (auto difference = Compare(metrics::ReadContents(reader, check, *created), {}, data))
+                return difference;
+
+        metrics::SweepVolume volume{ context };
+        if (volume.Mount() != fs::Result::success)
+            return "the volume does not mount";
+
+        return std::nullopt;
+    }
+
+    metrics::SweepResult Sweep(const SweepMode& mode)
+    {
+        metrics::BlockPowerCutSweep sweep{ model, { mode.cut } };
+        if (model.numberOfBlocks > metrics::fatSweep16.numberOfBlocks)
+            sweep.LimitCutPoints(256);
+
+        bool uncut = true;
+        return sweep.Run([this](auto& context)
+            {
+                SetUpVolume(context);
+            },
+            [this](auto& context)
+            {
+                Operate(context);
+            },
+            [this, &uncut](auto& context)
+            {
+                auto mode = std::exchange(uncut, false) ? metrics::FatCheckMode::strict : metrics::FatCheckMode::afterCut;
+                return Verify(context, mode);
+            });
+    }
+};
+
+TEST_P(FatCreatePowerCut, every_cut_leaves_the_new_file_absent_or_complete)
+{
+    metrics::MetricRecorder recorder{ metrics::GlobalReport(), "embedded-filesystem/fat", model.name, sizeof(fs::FatFileSystem::WithStorage<1, 8>) };
+
+    for (const auto& mode : modes)
+    {
+        auto result = Sweep(mode);
+        recorder.Record("P-1", createCase.name + " " + mode.name, "ratio", metrics::Better::higher, result.ConsistentShare());
+
+        if (mode.mustHold)
+        {
+            EXPECT_TRUE(result.failures.empty()) << mode.name << ": " << result.failures.size() << " failures, the first at step "
+                                                 << (result.failures.empty() || !result.failures.front().step ? std::string("uncut") : std::to_string(*result.failures.front().step))
+                                                 << ": " << (result.failures.empty() ? std::string() : result.failures.front().reason);
+            EXPECT_NE(0u, result.writeSteps) << mode.name;
+        }
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(Fat, FatCreatePowerCut,
+    testing::Combine(testing::Values(&metrics::fatSweep12, &metrics::fatSweep16, &metrics::fatSweep32),
+        testing::Values(CreateCase{ "create_and_sync", false, 0, 0, false },
+            CreateCase{ "create_spanning_sectors", false, 14, 0, false },
+            CreateCase{ "create_with_directory_growth", true, -1, 0, false },
+            CreateCase{ "create_write_and_close", false, 0, 1000, true })),
+    CreateParameterName);

@@ -9,6 +9,8 @@
 #include <iterator>
 #include <optional>
 #include <ostream>
+#include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -150,6 +152,95 @@ TEST_P(WriteInterop, appended_file_passes_fsck_and_reads_back_with_mtools)
     std::ifstream back{ directory / "back.bin", std::ios::binary };
     std::vector<uint8_t> read{ std::istreambuf_iterator<char>(back), std::istreambuf_iterator<char>() };
     EXPECT_EQ(expected, read);
+}
+
+TEST_P(WriteInterop, created_files_list_in_mtools_and_pass_fsck)
+{
+    ASSERT_EQ(0, Run("mkfs.fat -C " + GetParam().options + " " + image + " " + std::to_string(GetParam().kibibytes)).exitCode);
+    ASSERT_EQ(0, Run("mmd -i " + image + " ::/dir").exitCode);
+
+    metrics::ImageBlockDevice device{ metrics::BlocksInImage(image) };
+    device.LoadFrom(image);
+    fs::FatFileSystem::WithStorage<1, 8> volume{ device };
+    ASSERT_EQ(fs::Result::success, Wait([&volume](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           volume.Mount(onDone);
+                                       }));
+
+    std::vector<std::string> names{ "/readme.txt", "/Long File Name.txt", "/Long File Name 2.txt", "/\xc3\x9c"
+                                                                                                   "n"
+                                                                                                   "\xc3\xaf"
+                                                                                                   "c"
+                                                                                                   "\xc3\xb6"
+                                                                                                   "d"
+                                                                                                   "\xc3\xa9"
+                                                                                                   " name.txt",
+        "/a+b,c;d.txt", "/MixedCase.Txt", "/.hidden name", "/" + std::string(200, 'x') + ".txt" };
+    for (uint32_t index = 0; index != 40; ++index)
+        names.push_back("/dir/file " + std::to_string(index) + ".dat");
+
+    auto contents = Pattern(2000, 3);
+    for (const auto& name : names)
+    {
+        infra::SharedPtr<fs::File> file;
+        volume.Open(infra::BoundedConstString(name.data(), name.size()), fs::OpenMode::write, [&file](fs::Result result, infra::SharedPtr<fs::File> opened)
+            {
+                EXPECT_EQ(fs::Result::success, result);
+                file = opened;
+            });
+        ExecuteAllActions();
+        ASSERT_NE(nullptr, file) << name;
+
+        if (name == "/Long File Name.txt")
+            EXPECT_EQ(fs::Result::success, Wait([&file, &contents](const infra::Function<void(fs::Result)>& onDone)
+                                               {
+                                                   file->Write(infra::MakeRange(contents), onDone);
+                                               }));
+
+        EXPECT_EQ(fs::Result::success, Wait([&file](const infra::Function<void(fs::Result)>& onDone)
+                                           {
+                                               file->Close(onDone);
+                                           }));
+    }
+
+    EXPECT_EQ(fs::Result::success, Wait([&volume](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           volume.Unmount(onDone);
+                                       }));
+    device.Save(image);
+
+    auto fsck = Run("fsck.fat -n " + image);
+    EXPECT_EQ(0, fsck.exitCode) << fsck.output;
+
+    std::ifstream stream{ image, std::ios::binary };
+    auto check = metrics::CheckFatImage([&stream](uint32_t sector)
+        {
+            std::vector<uint8_t> contents(512);
+            stream.seekg(std::streamoff{ sector } * 512);
+            stream.read(reinterpret_cast<char*>(contents.data()), 512);
+            return contents;
+        },
+        metrics::FatCheckMode::strict);
+    EXPECT_EQ(std::nullopt, check.problem);
+
+    auto listing = Run("mdir -b -/ -i " + image + " ::/");
+    ASSERT_EQ(0, listing.exitCode) << listing.output;
+    std::set<std::string> listed;
+    std::istringstream lines{ listing.output };
+    for (std::string line; std::getline(lines, line);)
+        if (line.starts_with("::") && !line.ends_with("/"))
+            listed.insert(line.substr(2));
+    EXPECT_EQ(std::set<std::string>(names.begin(), names.end()), listed);
+
+    auto aliases = Run("mdir -i " + image + " ::/");
+    EXPECT_NE(std::string::npos, aliases.output.find("LONGFI~1 TXT")) << aliases.output;
+    EXPECT_NE(std::string::npos, aliases.output.find("LONGFI~2 TXT")) << aliases.output;
+    EXPECT_NE(std::string::npos, aliases.output.find("readme   txt")) << aliases.output;
+
+    ASSERT_EQ(0, Run("mcopy -n -i " + image + " '::/Long File Name.txt' '" + (directory / "back.bin").string() + "'").exitCode);
+    std::ifstream back{ directory / "back.bin", std::ios::binary };
+    std::vector<uint8_t> read{ std::istreambuf_iterator<char>(back), std::istreambuf_iterator<char>() };
+    EXPECT_EQ(contents, read);
 }
 
 INSTANTIATE_TEST_SUITE_P(Images, WriteInterop,

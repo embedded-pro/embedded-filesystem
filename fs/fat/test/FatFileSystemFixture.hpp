@@ -25,8 +25,9 @@ class FatFileSystemFixture
     , public infra::ClockFixture
 {
 public:
-    explicit FatFileSystemFixture(uint32_t blocks = 16384, const fs::FatFormatConfig& config = ClusterSize(1))
+    explicit FatFileSystemFixture(uint32_t blocks = 16384, const fs::FatFormatConfig& config = ClusterSize(1), const fs::FatConfig& volumeConfig = {})
         : device(blocks)
+        , volume(device, volumeConfig)
     {
         std::optional<fs::Result> formatted;
         formatter.Format(config, [&formatted](fs::Result result)
@@ -147,7 +148,7 @@ public:
     fs::SparseBlockDevice::WithStorage<160> device;
     fs::FatFormatter::WithStorage<8> formatter{ device };
     std::optional<fs::FatImageBuilder> builder;
-    fs::FatFileSystem::WithStorage<2, 4> volume{ device };
+    fs::FatFileSystem::WithStorage<2, 4> volume;
     testing::StrictMock<infra::MockCallback<void(fs::Result)>> lifecycleDone;
     testing::StrictMock<infra::MockCallback<void(fs::Result, const fs::EntryInfo&)>> statDone;
     testing::StrictMock<infra::MockCallback<void(fs::Result)>> openDone;

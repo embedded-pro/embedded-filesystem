@@ -34,7 +34,7 @@ Every other name is stored in long name entries, followed by a short alias:
 1. The basis of the alias is the name in upper case, without spaces and leading dots; every character that a short name cannot hold, including `+`, `,`, `;`, `=`, `[`, `]` and every non-ASCII character, becomes `_`.
 2. Its base is the part before the last dot, cut to 8 characters, and its extension the part after the last dot, cut to 3.
 3. A numeric tail `~1` to `~32` replaces the end of the base; the lowest tail that neither a short nor a long name in the directory uses is taken, found while the directory is scanned for the name.
-4. If every tail is in use, the base becomes the first 2 characters of the basis followed by 4 hexadecimal digits of the CRC-16 of the name, and the directory is scanned once more; if that alias is in use too, the operation completes with `noSpace`.
+4. If every tail is in use, the base becomes the first 2 characters of the basis, 4 hexadecimal digits of the CRC-16/CCITT-FALSE of the name and `~1`, and the directory is scanned once more; if that alias is in use too, the operation completes with `noSpace`.
 
 Short names are read with the lower-case flags applied, and their bytes from 0x80 upwards are decoded as code page 437.
 They are never generated with such bytes.
@@ -56,7 +56,11 @@ Volume labels and the `.` and `..` entries are skipped by listing and lookup.
 | Archive   | Set when an entry is created and when a file is written                                   |
 
 The fixed root directory of FAT12 and FAT16 holds the number of entries given in its boot sector, and any other directory at most 65536 entries; an operation that needs more completes with `noSpace`, and every scan is bounded by the same limits.
-A directory that needs more slots gets a new cluster, which is written as zeros at rank 0 and linked at rank 1, before the new entries are written in it at rank 2.
+A new entry set takes the first run of free slots that is long enough and lies in one cluster, or in the fixed root; the free slots at the end of a directory count as part of that run.
+When no run is long enough, the set starts at the entry that ends the directory and continues into the clusters that follow it, which hold only free entries, and then into new clusters.
+It does not start in free slots before that entry, so that the directory still ends before the new clusters until every sector of the set in front of them is written.
+A new cluster is written as zeros at rank 0, together with the entries of the set that fall into it, and is linked to the directory at rank 1 only after that.
+The entries of the set in existing sectors are written at rank 2.
 
 ## Timestamps
 
@@ -156,7 +160,9 @@ When the volume is full, writes complete with `noSpace`.
 ## ExpectSize
 
 `ExpectSize` reserves a contiguous run of free clusters for the expected size, following the allocation rules above, and the writes of the file then take their clusters from it.
+It reads the FAT from the cluster after the last cluster of the file, and otherwise from the cursor, until it finds such a run; other files skip the reserved clusters.
 The reservation is kept in RAM only: nothing is written for it, and `Close` returns what was not used.
+A later `ExpectSize` replaces the reservation, and one for a size that the clusters of the file already hold drops it.
 When no run of that length is free, it reserves the longest run it finds; it never completes with `noSpace`.
 
 ## Writing
@@ -179,7 +185,7 @@ An operation that needs another order flushes the cache between its steps:
 | Operation       | Order                                                                                                                                                      |
 |-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Write, `Sync`   | Data, FAT entries of the new clusters, flush if needed, the link, the directory entry                                                                      |
-| Create          | Growth of the directory if needed, then the entry set at rank 2, with its short entry at rank 3 when the set spans two sectors                             |
+| Create          | New directory clusters with their entries, their FAT entries, then the rest of the set at rank 2, with its short entry at rank 3 when it spans two sectors |
 | `MakeDirectory` | The new cluster with `.` and `..`, its FAT entry, then the entry set in the parent                                                                         |
 | `Remove`        | The entry set marked free, flush, the FAT entries of the chain freed, then the discard of the freed clusters                                               |
 | `Truncate`      | The directory entry with the new size, flush, the end of chain at the new last cluster, flush, the FAT entries of the cut clusters freed, then the discard |
@@ -207,6 +213,7 @@ A write-protected card mounts and can be read; operations that write complete wi
 | Writing the FAT             | The file has its previous size; some clusters may be allocated but unused, which a PC check reclaims              |
 | Writing the directory entry | The file has either its previous or its new size and first cluster                                                |
 | An overwrite inside a file  | Every sector holds either its previous or its new contents                                                        |
+| Creating a file             | The file exists, with what its first `Sync` committed, or not at all; a new directory cluster may stay unused     |
 | `Remove`                    | The file exists or not; its clusters may stay allocated but unused                                                |
 | `Rename`                    | The entry exists under its old name, its new name or both; in the last case both names refer to the same clusters |
 | Between `Sync` calls        | Data written after the last completed `Sync` may be lost                                                          |

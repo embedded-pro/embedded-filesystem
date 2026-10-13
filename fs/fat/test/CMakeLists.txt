@@ -15,15 +15,19 @@ target_link_libraries(fs.fat_test PUBLIC
 target_sources(fs.fat_test PRIVATE
     FatFileSystemFixture.hpp
     FatVolumeFixture.hpp
+    TestFatAllocationUnits.cpp
     TestFatAllocator.cpp
     TestFatBackgroundScan.cpp
     TestFatBootSector.cpp
     TestFatChainWalk.cpp
     TestFatClosedFiles.cpp
+    TestFatCreate.cpp
     TestFatDirectory.cpp
     TestFatDirectoryEntry.cpp
     TestFatDirectoryReader.cpp
     TestFatEntryAssembler.cpp
+    TestFatEntrySetWriter.cpp
+    TestFatExpectSize.cpp
     TestFatExtentCache.cpp
     TestFatFileSystem.cpp
     TestFatFormatLayout.cpp
@@ -33,13 +37,17 @@ target_sources(fs.fat_test PRIVATE
     TestFatGeometry.cpp
     TestFatLookup.cpp
     TestFatName.cpp
+    TestFatNameScan.cpp
     TestFatOpen.cpp
     TestFatPartitionTable.cpp
     TestFatRead.cpp
+    TestFatRunSearch.cpp
     TestFatShortName.cpp
+    TestFatShortNameGeneration.cpp
     TestFatTable.cpp
     TestFatTableReader.cpp
     TestFatTableWriter.cpp
+    TestFatTimestamp.cpp
     TestFatUsage.cpp
     TestFatWrite.cpp
     TestSparseBlockDevice.cpp

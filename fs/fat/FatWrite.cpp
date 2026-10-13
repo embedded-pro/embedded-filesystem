@@ -79,7 +79,7 @@ namespace fs
     {
         auto needed = (uint64_t{ file.position } + data.size() + ClusterBytes() - 1) / ClusterBytes() - file.clusters;
 
-        volume.Allocator().Grow(last, static_cast<uint32_t>(needed), [this](Result result, uint32_t first, uint32_t allocated)
+        volume.Allocator().Grow(last, static_cast<uint32_t>(needed), file.reservation, [this](Result result, uint32_t first, uint32_t allocated)
             {
                 OnGrown(result, first, allocated);
             });
