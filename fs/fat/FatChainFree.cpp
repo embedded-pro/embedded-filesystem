@@ -54,7 +54,7 @@ namespace fs
         ++run.count;
         volume.tableChanged = true;
 
-        if (volume.freeClusters)
+        if (volume.freeClusters.has_value())
             ++*volume.freeClusters;
 
         if (next == current + 1)
@@ -83,7 +83,7 @@ namespace fs
 
     void FatChainFree::OnDiscarded(Result result)
     {
-        if (result != Result::success || !next)
+        if (result != Result::success || !next.has_value())
             onDone(result);
         else
         {

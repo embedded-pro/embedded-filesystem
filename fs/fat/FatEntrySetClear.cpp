@@ -41,7 +41,7 @@ namespace fs
 
     void FatEntrySetClear::OnMiddle(Result result, std::optional<uint32_t> next)
     {
-        if (result != Result::success || !next)
+        if (result != Result::success || !next.has_value())
         {
             onDone(result != Result::success ? result : Result::corrupted);
             return;
