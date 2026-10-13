@@ -68,11 +68,9 @@ namespace fs
 
     void FatEntryAssembler::FeedLongEntry(const std::optional<LongEntry>& entry, FatEntryPosition position)
     {
-        if (!entry)
-            Reset();
-        else if (entry->last)
+        if (entry.has_value() && entry->last)
             StartSet(*entry, position);
-        else if (expectedOrdinal && entry->ordinal + 1 == *expectedOrdinal && entry->checksum == checksum)
+        else if (entry.has_value() && expectedOrdinal.has_value() && entry->ordinal + 1 == *expectedOrdinal && entry->checksum == checksum)
         {
             expectedOrdinal = entry->ordinal;
             ++scanned.slots;
@@ -109,11 +107,11 @@ namespace fs
 
             inName = true;
 
-            if (IsLowSurrogate(*unit) && !pendingLowSurrogate)
+            if (IsLowSurrogate(*unit) && !pendingLowSurrogate.has_value())
                 pendingLowSurrogate = *unit;
-            else if (IsHighSurrogate(*unit) && pendingLowSurrogate)
+            else if (IsHighSurrogate(*unit) && pendingLowSurrogate.has_value())
                 PrependCodePoint(CombineSurrogates(*unit, *std::exchange(pendingLowSurrogate, std::nullopt)));
-            else if (IsLowSurrogate(*unit) || IsHighSurrogate(*unit) || pendingLowSurrogate || *unit == terminator)
+            else if (IsLowSurrogate(*unit) || IsHighSurrogate(*unit) || pendingLowSurrogate.has_value() || *unit == terminator)
                 invalid = true;
             else
                 PrependCodePoint(*unit);
@@ -158,6 +156,6 @@ namespace fs
 
     bool FatEntryAssembler::LongNameCompletes(const ShortEntry& entry) const
     {
-        return expectedOrdinal == 1 && !invalid && !pendingLowSurrogate && nameBegin != nameBuffer.size() && LongNameChecksum(entry.name.bytes) == checksum;
+        return expectedOrdinal == 1 && !invalid && !pendingLowSurrogate.has_value() && nameBegin != nameBuffer.size() && LongNameChecksum(entry.name.bytes) == checksum;
     }
 }

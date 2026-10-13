@@ -87,7 +87,7 @@ namespace fs
 
         if (volume.geometry.type != FatType::fat32)
             Done(Result::success);
-        else if (volume.geometry.fsInfoSector)
+        else if (volume.geometry.fsInfoSector.has_value())
             ReadFsInfo();
         else
             ReadFatHeader();
