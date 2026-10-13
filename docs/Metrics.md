@@ -184,11 +184,11 @@ For SD cards and eMMC, wear leveling is done by the card, and the device metrics
 
 ## Device metrics for SD cards and eMMC
 
-| Id  | Metric                   | Definition                                                                                                              | Workloads  | Target                                      |
-|-----|--------------------------|-------------------------------------------------------------------------------------------------------------------------|------------|---------------------------------------------|
-| M-1 | Blocks per write request | Mean number of blocks per write request                                                                                 | L1, L2, L4 | At least FatFs                              |
-| M-2 | Aligned writes           | Share of the written blocks that start an allocation unit or follow the block written just before them                  | L1, L2, L4 | At least FatFs on L1; reported on L2 and L4 |
-| M-3 | Allocation units touched | Distinct allocation units written per MiB of user data                                                                  | L1, L2, L4 | At most FatFs                               |
+| Id  | Metric                   | Definition                                                                                             | Workloads  | Target                                      |
+|-----|--------------------------|--------------------------------------------------------------------------------------------------------|------------|---------------------------------------------|
+| M-1 | Blocks per write request | Mean number of blocks per write request                                                                | L1, L2, L4 | At least FatFs                              |
+| M-2 | Aligned writes           | Share of the written blocks that start an allocation unit or follow the block written just before them | L1, L2, L4 | At least FatFs on L1; reported on L2 and L4 |
+| M-3 | Allocation units touched | Distinct allocation units written per MiB of user data                                                 | L1, L2, L4 | At most FatFs                               |
 
 ## Robustness metrics
 
