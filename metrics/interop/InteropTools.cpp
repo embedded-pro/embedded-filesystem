@@ -39,6 +39,11 @@ namespace metrics
         return (std::filesystem::path(testing::TempDir()) / ("emfs-" + name + ".img")).string();
     }
 
+    uint32_t BlocksInImage(const std::string& path, uint32_t blockSize)
+    {
+        return static_cast<uint32_t>(std::filesystem::file_size(path) / blockSize);
+    }
+
     ImageBlockDevice::ImageBlockDevice(uint32_t numberOfBlocks, uint32_t blockSize)
         : numberOfBlocks(numberOfBlocks)
         , blockSize(blockSize)
@@ -96,6 +101,19 @@ namespace metrics
     void ImageBlockDevice::Flush(const infra::Function<void(Result)>& onDone)
     {
         Complete(onDone, Result::success);
+    }
+
+    void ImageBlockDevice::LoadFrom(const std::string& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        std::vector<uint8_t> contents(blockSize);
+
+        for (uint32_t block = 0; block != numberOfBlocks && file.read(reinterpret_cast<char*>(contents.data()), blockSize); ++block)
+            if (std::ranges::any_of(contents, [](uint8_t byte)
+                    {
+                        return byte != 0;
+                    }))
+                blocks[block] = contents;
     }
 
     void ImageBlockDevice::Fill(uint32_t beginBlock, uint32_t endBlock, uint8_t value)

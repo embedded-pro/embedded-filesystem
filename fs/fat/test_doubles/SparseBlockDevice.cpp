@@ -77,9 +77,10 @@ namespace fs
             Complete(Result::success);
     }
 
-    void SparseBlockDevice::FailNextOperationWith(Result result)
+    void SparseBlockDevice::FailNextOperationWith(Result result, uint32_t succeedingFirst)
     {
         injectedFailure = result;
+        succeedBeforeFailure = succeedingFirst;
     }
 
     void SparseBlockDevice::ReadBlock(uint32_t block, infra::ByteRange out) const
@@ -154,7 +155,9 @@ namespace fs
             return false;
         }
 
-        if (injectedFailure)
+        if (injectedFailure && succeedBeforeFailure != 0)
+            --succeedBeforeFailure;
+        else if (injectedFailure)
         {
             Complete(*std::exchange(injectedFailure, std::nullopt));
             return false;

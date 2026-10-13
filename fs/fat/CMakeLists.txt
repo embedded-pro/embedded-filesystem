@@ -5,7 +5,9 @@ target_link_libraries(fs.fat PUBLIC
     fs.interfaces
     hal.interfaces
     infra.event
+    infra.timer
     infra.util
+    services.fsm
 )
 
 target_sources(fs.fat PRIVATE
@@ -15,8 +17,11 @@ target_sources(fs.fat PRIVATE
     FatBootSector.hpp
     FatBytes.cpp
     FatBytes.hpp
+    FatConfig.hpp
     FatDirectoryEntry.cpp
     FatDirectoryEntry.hpp
+    FatFileSystem.cpp
+    FatFileSystem.hpp
     FatFormatLayout.cpp
     FatFormatLayout.hpp
     FatFormatter.cpp
@@ -25,14 +30,20 @@ target_sources(fs.fat PRIVATE
     FatFsInfo.hpp
     FatGeometry.cpp
     FatGeometry.hpp
+    FatLifecycle.hpp
+    FatMount.cpp
+    FatMount.hpp
     FatName.cpp
     FatName.hpp
     FatPartitionTable.cpp
     FatPartitionTable.hpp
+    FatPathSlot.cpp
+    FatPathSlot.hpp
     FatShortName.cpp
     FatShortName.hpp
     FatTable.cpp
     FatTable.hpp
+    FatVolumeState.hpp
     Utf8.cpp
     Utf8.hpp
 )
