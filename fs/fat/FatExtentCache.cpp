@@ -48,6 +48,19 @@ namespace fs
             Replace(extent);
     }
 
+    void FatExtentCache::Truncate(uint32_t clusters)
+    {
+        auto extents = InUse();
+        auto kept = std::remove_if(extents.begin(), extents.end(), [clusters](const FatExtent& extent)
+            {
+                return extent.index >= clusters;
+            });
+        count = static_cast<std::size_t>(kept - extents.begin());
+
+        for (auto& extent : InUse())
+            extent.length = std::min(extent.length, clusters - extent.index);
+    }
+
     std::optional<FatExtent> FatExtentCache::Covering(uint32_t index)
     {
         auto extents = InUse();

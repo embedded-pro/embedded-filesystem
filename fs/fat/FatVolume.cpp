@@ -103,6 +103,11 @@ namespace fs
         return chainFree;
     }
 
+    FatTableWriter& FatVolume::TableWriter()
+    {
+        return tableWriter;
+    }
+
     FatClosedFiles& FatVolume::ClosedFiles()
     {
         return closedFiles;

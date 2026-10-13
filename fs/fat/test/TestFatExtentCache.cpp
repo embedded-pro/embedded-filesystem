@@ -113,6 +113,45 @@ TEST_F(FatExtentCacheTest, clear_forgets_every_extent)
     EXPECT_EQ(std::nullopt, extents.Covering(0));
 }
 
+TEST_F(FatExtentCacheTest, truncate_drops_the_extents_after_the_kept_clusters_and_shortens_the_last)
+{
+    extents.Add(fs::FatExtent{ 0, 10, 2 });
+    extents.Add(fs::FatExtent{ 2, 50, 3 });
+    extents.Add(fs::FatExtent{ 5, 80, 2 });
+
+    extents.Truncate(3);
+
+    EXPECT_EQ((fs::FatExtent{ 0, 10, 2 }), extents.Covering(0));
+    EXPECT_EQ((fs::FatExtent{ 2, 50, 1 }), extents.Covering(2));
+    EXPECT_EQ(std::nullopt, extents.Covering(3));
+    EXPECT_EQ(std::nullopt, extents.Covering(5));
+    EXPECT_EQ((fs::FatExtent{ 2, 50, 1 }), extents.Last());
+}
+
+TEST_F(FatExtentCacheTest, truncate_to_no_clusters_forgets_every_extent)
+{
+    extents.Add(fs::FatExtent{ 0, 10, 2 });
+
+    extents.Truncate(0);
+
+    EXPECT_EQ(std::nullopt, extents.Last());
+}
+
+TEST_F(FatExtentCacheTest, truncate_keeps_room_for_new_extents)
+{
+    extents.Add(fs::FatExtent{ 0, 10, 1 });
+    extents.Add(fs::FatExtent{ 2, 30, 1 });
+    extents.Add(fs::FatExtent{ 4, 50, 1 });
+    extents.Truncate(1);
+
+    extents.Add(fs::FatExtent{ 1, 70, 1 });
+    extents.Add(fs::FatExtent{ 3, 90, 1 });
+
+    EXPECT_EQ((fs::FatExtent{ 0, 10, 1 }), extents.Covering(0));
+    EXPECT_EQ((fs::FatExtent{ 1, 70, 1 }), extents.Covering(1));
+    EXPECT_EQ((fs::FatExtent{ 3, 90, 1 }), extents.Covering(3));
+}
+
 TEST(FatExtentCacheOfOneTest, single_extent_is_kept)
 {
     fs::FatExtentCache::WithStorage<1> extents;

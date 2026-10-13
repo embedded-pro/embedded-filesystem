@@ -52,6 +52,7 @@ target_sources(fs.fat_test PRIVATE
     TestFatTableReader.cpp
     TestFatTableWriter.cpp
     TestFatTimestamp.cpp
+    TestFatTruncate.cpp
     TestFatUsage.cpp
     TestFatWrite.cpp
     TestSparseBlockDevice.cpp

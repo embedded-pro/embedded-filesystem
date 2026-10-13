@@ -12,6 +12,7 @@ namespace fs
         , allocate(allocate)
         , onFinished(onFinished)
         , parent(volume)
+        , truncation(volume)
     {}
 
     FatOpen::~FatOpen() = default;
@@ -49,19 +50,25 @@ namespace fs
         if (result == Result::success)
             file = allocate();
 
-        if (file != nullptr)
-            file->Open(found, call.mode);
-        else if (result == Result::success)
-            result = Result::tooManyOpenFiles;
+        if (file == nullptr)
+        {
+            Finish(result == Result::success ? Result::tooManyOpenFiles : result);
+            return;
+        }
 
-        Finish(result);
+        file->Open(found, call.mode);
+
+        if (call.mode == OpenMode::write)
+            truncation.Truncate(file->State(), file->Extents(), [this](Result result)
+                {
+                    OnTruncated(result);
+                });
+        else
+            Finish(Result::success);
     }
 
     Result FatOpen::VerifyFile(const FatScannedEntry& found) const
     {
-        if (call.mode == OpenMode::write)
-            return Result::unsupported;
-
         if (call.mode != OpenMode::read && (found.entry.attributes & FatAttributes::readOnly) != 0)
             return Result::readOnly;
 
@@ -73,6 +80,14 @@ namespace fs
                 return Result::busy;
 
         return Result::success;
+    }
+
+    void FatOpen::OnTruncated(Result result)
+    {
+        if (result != Result::success)
+            file->Detach();
+
+        Finish(result);
     }
 
     void FatOpen::Create()

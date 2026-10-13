@@ -35,6 +35,7 @@ namespace fs
 
         void Clear();
         void Add(const FatExtent& extent);
+        void Truncate(uint32_t clusters);
         std::optional<FatExtent> Covering(uint32_t index);
         std::optional<FatExtent> NearestBefore(uint32_t index) const;
         std::optional<FatExtent> Last() const;

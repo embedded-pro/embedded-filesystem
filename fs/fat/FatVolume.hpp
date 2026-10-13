@@ -30,6 +30,7 @@
 #include "fs/fat/FatSync.hpp"
 #include "fs/fat/FatTableWriter.hpp"
 #include "fs/fat/FatTimestamp.hpp"
+#include "fs/fat/FatTruncation.hpp"
 #include "fs/fat/FatUnmount.hpp"
 #include "fs/fat/FatUsage.hpp"
 #include "fs/fat/FatVolumeState.hpp"
@@ -88,7 +89,7 @@ namespace fs
     class FatDirectory;
     class FatFile;
 
-    using FatOperation = std::variant<std::monostate, FatMount, FatUnmount, FatStat, FatOpenDirectory, FatOpen, FatMakeDirectory, FatRemove, FatRead, FatWrite, FatSync, FatExpectSize, FatUsage>;
+    using FatOperation = std::variant<std::monostate, FatMount, FatUnmount, FatStat, FatOpenDirectory, FatOpen, FatMakeDirectory, FatRemove, FatRead, FatWrite, FatSync, FatExpectSize, FatTruncation, FatUsage>;
 
     struct FatVolumeParts
     {
@@ -123,6 +124,7 @@ namespace fs
         FatAllocator& Allocator();
         FatEntryUpdate& EntryUpdate();
         FatChainFree& ChainFree();
+        FatTableWriter& TableWriter();
         FatClosedFiles& ClosedFiles();
         FatFreeSpaceScan& FreeSpace();
         infra::IntrusiveList<FatFile>& OpenFiles();

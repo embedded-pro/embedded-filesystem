@@ -4,6 +4,7 @@
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatParentDirectory.hpp"
 #include "fs/fat/FatPathSlot.hpp"
+#include "fs/fat/FatTruncation.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/Function.hpp"
 #include "infra/util/SharedPtr.hpp"
@@ -29,6 +30,7 @@ namespace fs
         void OnFound(Result result);
         void OpenExisting(const FatScannedEntry& found);
         Result VerifyFile(const FatScannedEntry& found) const;
+        void OnTruncated(Result result);
         void Create();
         void OnPrepared(Result result);
         void OnCreated(Result result);
@@ -40,6 +42,7 @@ namespace fs
         Allocate allocate;
         infra::Function<void(Result result)> onFinished;
         FatParentDirectory parent;
+        FatTruncation truncation;
         infra::SharedPtr<FatFile> file;
     };
 }
