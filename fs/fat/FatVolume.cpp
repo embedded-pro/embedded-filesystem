@@ -128,7 +128,7 @@ namespace fs
         unavailable = reason == Result::mediaRemoved ? Result::mediaRemoved : Result::notMounted;
     }
 
-    void FatVolume::Report(Result result)
+    void FatVolume::Report(Result result) const
     {
         if (result == Result::mediaRemoved)
             onMediaRemoved();
