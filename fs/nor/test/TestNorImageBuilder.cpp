@@ -314,3 +314,46 @@ TEST_F(NorImageBuilderTest, commit_fills_as_many_node_blocks_as_the_maps_need)
     EXPECT_EQ(2, Builder().InodeTable().height);
     EXPECT_EQ(fs::NorImageBuilder::rootInode, Builder().RecordOf(31).value_or(fs::NorInodeRecord{}).parent);
 }
+
+TEST_F(NorImageBuilderTest, a_file_of_more_than_the_inline_area_gets_data_blocks_and_a_tail)
+{
+    std::array<uint8_t, 4096> contents{};
+    for (std::size_t index = 0; index != contents.size(); ++index)
+        contents[index] = static_cast<uint8_t>(index * 7 + index / 256);
+
+    auto file = Builder().AddFile(fs::NorImageBuilder::rootInode, "big", infra::MakeRange(contents));
+    Builder().Commit();
+
+    auto record = Builder().RecordOf(file);
+    ASSERT_TRUE(record.has_value());
+    EXPECT_EQ(4096u, record->size);
+    EXPECT_EQ(1, record->mapHeight);
+    EXPECT_TRUE(infra::ContentsEqual(infra::DiscardHead(infra::MakeRange(contents), 4060), record->inlineBytes));
+    EXPECT_EQ(fs::NorBlockType::data, Header(4).allocation->type);
+    EXPECT_EQ((fs::NorBlockOwner{ file, 0 }), Header(4).allocation->owner);
+    std::array<uint8_t, 4060> stored{};
+    image.Read(4 * blockSize + headerSize, infra::MakeRange(stored));
+    EXPECT_TRUE(infra::ContentsEqual(infra::Head(infra::MakeRange(contents), 4060), infra::MakeRange(stored)));
+    ASSERT_TRUE(CheckpointIn(Builder().CheckpointBlock()).has_value());
+    EXPECT_TRUE(fs::IsNorBlockInUse(infra::MakeRange(checkpointBytes), 4));
+}
+
+TEST_F(NorImageBuilderTest, a_last_block_beyond_the_inline_area_gets_its_own_data_block)
+{
+    std::array<uint8_t, 5000> contents{};
+    contents.fill(0x5a);
+
+    auto file = Builder().AddFile(fs::NorImageBuilder::rootInode, "big", infra::MakeRange(contents));
+
+    EXPECT_EQ(0u, Builder().RecordOf(file).value_or(fs::NorInodeRecord{}).inlineBytes.size());
+    EXPECT_EQ((fs::NorBlockOwner{ file, 1 }), Header(5).allocation->owner);
+}
+
+TEST_F(NorImageBuilderTest, map_block_maps_a_logical_block_as_given)
+{
+    auto file = Builder().AddFile(fs::NorImageBuilder::rootInode, "f", {});
+
+    Builder().MapBlock(file, 3, 20);
+
+    EXPECT_EQ(1, Builder().MapOf(file).height);
+}

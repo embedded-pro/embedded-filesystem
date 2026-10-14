@@ -5,6 +5,7 @@
 #include "fs/nor/NorDirectoryKey.hpp"
 #include "fs/nor/NorLayout.hpp"
 #include "fs/nor/NorNodeWriteBack.hpp"
+#include "fs/nor/NorRadixTree.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 #include <optional>
@@ -160,9 +161,9 @@ namespace fs
 
     uint32_t NorImageBuilder::AddFile(uint32_t parent, infra::BoundedConstString name, infra::ConstByteRange contents)
     {
-        really_assert(contents.size() <= config.inlineBytes);
-
-        return AddInode(parent, name, NorInodeRecord{ parent, NorInodeType::file, 0, static_cast<uint32_t>(contents.size()), 0, contents, infra::StringAsByteRange(name) });
+        NorMapRoot map;
+        auto tail = WriteData(nextInode, contents, map);
+        return AddInode(parent, name, NorInodeRecord{ parent, NorInodeType::file, map.height, static_cast<uint32_t>(contents.size()), map.address, tail, infra::StringAsByteRange(name) });
     }
 
     void NorImageBuilder::AddRecord(uint32_t inode, const NorInodeRecord& record)
@@ -180,6 +181,15 @@ namespace fs
         Fetch(NorMapId{ NorMap::directory, directory, directoryValueBytes }, map, key);
         StoreLittle32(NorBTree(cache, NorMapId{ NorMap::directory, directory, directoryValueBytes }).Insert(map, key), 0, inode);
         SetMapOf(directory, map);
+        cache.UnpinAll();
+    }
+
+    void NorImageBuilder::MapBlock(uint32_t file, uint32_t index, uint32_t block)
+    {
+        auto map = MapOf(file);
+        Fetch(NorMapId{ NorMap::fileData, file, 4 }, map, index);
+        NorRadixTree(cache, file).Set(map, index, block);
+        SetMapOf(file, map);
         cache.UnpinAll();
     }
 
@@ -206,7 +216,9 @@ namespace fs
         checkpoint.inodeTableHeight = inodeTable.height;
         checkpoint.nextInode = nextInode;
         checkpoint.liveNodes = liveNodes;
-        MoveCheckpoint(FreeBlock(), checkpoint, infra::MakeRange(nodeBlocks));
+        blocksToCommit.insert(blocksToCommit.end(), nodeBlocks.begin(), nodeBlocks.end());
+        MoveCheckpoint(FreeBlock(), checkpoint, infra::MakeRange(blocksToCommit));
+        blocksToCommit.clear();
     }
 
     const NorMapRoot& NorImageBuilder::InodeTable() const
@@ -249,6 +261,34 @@ namespace fs
         AddRecord(inode, record);
         AddEntry(parent, FreeKey(parent, name), inode);
         return inode;
+    }
+
+    infra::ConstByteRange NorImageBuilder::WriteData(uint32_t file, infra::ConstByteRange contents, NorMapRoot& map)
+    {
+        if (contents.empty())
+            return contents;
+
+        auto payload = geometry.PayloadSize();
+        auto lastIndex = static_cast<uint32_t>((contents.size() - 1) / payload);
+        for (uint32_t index = 0; index != lastIndex; ++index)
+            WriteDataBlock(file, index, infra::Head(infra::DiscardHead(contents, index * payload), payload), map);
+
+        auto last = infra::DiscardHead(contents, lastIndex * payload);
+        if (last.size() <= config.inlineBytes)
+            return last;
+
+        auto programmed = last.size() / geometry.programUnit * geometry.programUnit;
+        WriteDataBlock(file, lastIndex, infra::Head(last, programmed), map);
+        return infra::DiscardHead(last, programmed);
+    }
+
+    void NorImageBuilder::WriteDataBlock(uint32_t file, uint32_t index, infra::ConstByteRange bytes, NorMapRoot& map)
+    {
+        auto block = FreeBlock();
+        Allocate(block, NorBlockType::data, NorBlockOwner{ file, index });
+        Program(geometry.AddressOfBlock(block) + geometry.HeaderSize(), bytes);
+        blocksToCommit.push_back(block);
+        NorRadixTree(cache, file).Set(map, index, block);
     }
 
     uint32_t NorImageBuilder::FreeKey(uint32_t directory, infra::BoundedConstString name)
