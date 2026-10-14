@@ -73,6 +73,8 @@ ctest --preset host
 
 Metrics: `cmake --preset metrics && cmake --build --preset metrics && ctest --preset metrics` (Linux host only). Options use the `EMFS_` prefix (`EMFS_BUILD_TESTS`, `EMFS_BUILD_METRICS`).
 
+Before pushing, run `tools/verify.sh`: the checks of CI that can run locally, and scans for what CI reported on earlier pull requests (`tools/README.md`).
+
 ## Dependency: EMIL (embedded-infra-lib)
 
 Pulled via `FetchContent` in the top-level `CMakeLists.txt` under the name `emil`, pinned to a full commit SHA (`GIT_TAG <sha> # Unreleased`), auto-bumped by `.github/workflows/update-emil-git-tag.yml`.
