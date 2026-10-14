@@ -347,6 +347,7 @@ So at most one move happens per interval, and its overhead is bounded by the con
 
 Every block of the new volume except the superblocks, the first checkpoint block and its node block is in the pre-erased pool.
 A power loss before step 5 leaves a device that completes `Mount` with `corrupted`, and `Format` can be started again.
+`Format` completes with `busy` while the volume is mounted, mounting, unmounting or formatting, and leaves it unmounted.
 
 ## Mount
 

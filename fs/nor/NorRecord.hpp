@@ -2,7 +2,9 @@
 #define FS_NOR_NOR_RECORD_HPP
 
 #include "fs/common/CrcRecord.hpp"
+#include "fs/nor/NorLayout.hpp"
 #include "infra/util/ByteRange.hpp"
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -89,6 +91,14 @@ namespace fs
     constexpr std::size_t norSizeEntryFixedBytes = 11;
     constexpr std::size_t norInodePutFixedBytes = 5;
     constexpr std::size_t norInodeRemoveBytes = 5;
+    constexpr std::size_t norUncommittedBlockEntries = 8;
+
+    constexpr std::size_t NorLargestRecordBytes(uint32_t inlineBytes, uint32_t maxNameBytes)
+    {
+        auto rename = norDirectoryEntryRemoveBytes + norDirectoryEntryPutBytes + norInodePutFixedBytes + NorInodeRecordBytes(inlineBytes, maxNameBytes);
+        auto commit = norUncommittedBlockEntries * norBlockSetEntryBytes + norSizeEntryFixedBytes + inlineBytes;
+        return CrcRecord::overhead + norLinkEntryBytes + std::max<std::size_t>(rename, commit);
+    }
 
     std::size_t NorEntrySize(const NorEntry& entry);
     void AddNorEntry(CrcRecord& record, const NorEntry& entry);

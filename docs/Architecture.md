@@ -96,6 +96,7 @@ Unmounted --Mount--> Mounting --Mounted--> Mounted --Unmount--> Unmounting --Unm
 ```
 
 A volume that cannot be mounted, because the device fails or the volume is corrupted, ends in `Fault`, and so does a volume whose medium is removed; `Mount` starts again from `Fault`.
+A NOR volume has one more state, `Formatting`, which `fs::NorFileSystem::Format` enters from `Unmounted` or `Fault` and leaves for `Unmounted`; NOR flash is not removable, so it has no `MediaRemoved`.
 A FAT volume reports the corruption that an operation finds to that operation and stays mounted, so that other files remain accessible, as described in [Fat.md](Fat.md#corruption).
 Background work has its own machine, for instance `Stopped`, `Waiting`, `Claiming` and `Working` on NOR volumes, where each unit of work is a checkpoint, a sector erase or a block move.
 Device completions are passed to the machine through `Completion<Ev>()`, so a completion that arrives after the machine has left the state that started it, for instance after the card was removed, is discarded instead of corrupting the volume.

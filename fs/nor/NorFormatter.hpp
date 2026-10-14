@@ -30,7 +30,7 @@ namespace fs
         NorFormatter(hal::Flash& flash, const NorConfig& config, infra::ByteRange buffer);
         NorFormatter(const NorFormatter& other) = delete;
         NorFormatter& operator=(const NorFormatter& other) = delete;
-        ~NorFormatter() = default;
+        ~NorFormatter();
 
         void Format(const infra::Function<void(Result result)>& onDone);
 

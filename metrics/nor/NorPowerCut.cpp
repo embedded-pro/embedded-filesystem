@@ -113,13 +113,13 @@ public:
     {
         auto check = metrics::CheckImage(context, model);
         if (!check.superblock.has_value())
-            return uncut ? std::optional<std::string>("the formatted device has no valid superblock") : std::nullopt;
+            return uncut ? std::optional<std::string>("the formatted device has no valid superblock") : ExpectMount(context, config, fs::Result::corrupted);
 
         if (check.problem.has_value())
             return check.problem;
 
         if (*check.superblock == metrics::SuperblockOf(model, previous))
-            return uncut ? std::optional<std::string>("the device still holds the previous volume") : std::nullopt;
+            return uncut ? std::optional<std::string>("the device still holds the previous volume") : ExpectMount(context, previous, fs::Result::success);
 
         if (*check.superblock != metrics::SuperblockOf(model, config))
             return "the device holds a volume of other parameters";
@@ -127,7 +127,20 @@ public:
         if (uncut && check.validSuperblocks != 2)
             return "the formatted volume lacks a superblock";
 
-        return VerifyNewVolume(check);
+        if (auto problem = VerifyNewVolume(check))
+            return problem;
+
+        return ExpectMount(context, config, fs::Result::success);
+    }
+
+    static std::optional<std::string> ExpectMount(Context& context, const fs::NorConfig& mountConfig, fs::Result expected)
+    {
+        metrics::NorSweepVolume volume{ context, mountConfig };
+        auto result = volume.Mount();
+        if (result != expected)
+            return "the mount completes with result " + std::to_string(static_cast<int>(result)) + " instead of " + std::to_string(static_cast<int>(expected));
+
+        return std::nullopt;
     }
 
     std::optional<std::string> VerifyNewVolume(const metrics::NorCheck& check) const
@@ -171,17 +184,12 @@ public:
 
         return known != 0 ? static_cast<uint32_t>(sum / known) : 0;
     }
-
-    std::size_t RamBytes() const
-    {
-        return sizeof(fs::NorFormatter) + fs::NorFormatter::BufferBytes(config);
-    }
 };
 
 TEST_P(NorFormatPowerCut, every_cut_leaves_the_previous_volume_no_volume_or_the_new_empty_volume)
 {
     SweepEveryMode(
-        model, "format", RamBytes(), [this](Context& context)
+        model, "format", metrics::SweepRamBytes(model), [this](Context& context)
         {
             SetUpVolume(context);
         },

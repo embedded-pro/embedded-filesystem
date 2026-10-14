@@ -46,6 +46,13 @@ TEST(NorCheckpointTest, opens_a_sealed_checkpoint)
     EXPECT_EQ(checkpoint, fs::OpenNorCheckpoint(infra::MakeRange(bytes)));
 }
 
+TEST(NorCheckpointTest, parses_the_fields_before_the_bitmap)
+{
+    auto bytes = Sealed();
+
+    EXPECT_EQ(checkpoint, fs::ParseNorCheckpointFixedPart(infra::Head(infra::MakeRange(bytes), 28)));
+}
+
 TEST(NorCheckpointTest, tells_which_blocks_are_in_use)
 {
     auto bytes = Sealed();

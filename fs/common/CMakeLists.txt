@@ -15,6 +15,7 @@ target_sources(fs.common PRIVATE
     CrcRecord.hpp
     DeferredCompletions.cpp
     DeferredCompletions.hpp
+    Deliver.hpp
     DirectTransfers.cpp
     DirectTransfers.hpp
     FlushBarrier.cpp
