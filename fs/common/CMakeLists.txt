@@ -19,6 +19,8 @@ target_sources(fs.common PRIVATE
     FlushBarrier.hpp
     HandlePool.cpp
     HandlePool.hpp
+    LittleEndian.cpp
+    LittleEndian.hpp
     OperationQueue.cpp
     OperationQueue.hpp
     Path.cpp

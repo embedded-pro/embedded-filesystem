@@ -17,6 +17,7 @@ target_sources(fs.common_test PRIVATE
     TestDirectTransfers.cpp
     TestFlushBarrier.cpp
     TestHandlePool.cpp
+    TestLittleEndian.cpp
     TestOperationQueue.cpp
     TestPath.cpp
     TestSectorCache.cpp
