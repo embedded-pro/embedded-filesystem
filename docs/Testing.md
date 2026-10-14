@@ -94,6 +94,7 @@ After each cut, the sweep checks that:
 
 * the library mounts the volume;
 * an independent checker, which parses the image without the code of `fs/nor`, finds valid superblocks, a checkpoint with a valid CRC, a journal whose records replay without a mismatch, every node of every map with a valid CRC and reachable once, every block that the state uses marked in use with a header of the right type and owner, and no block used twice;
+* every block marked in use is used, except node blocks whose nodes were all replaced, which stay in use until garbage collection passes them;
 * the checker also finds every free block that holds only its part A erased;
 * no program unit was programmed twice since its last erase, as counted by `metrics::MeteredFlash`, which takes every unit that does not read erased when the operation starts as programmed;
 * every file holds, byte by byte, either its contents before the interrupted operation or its contents after it;

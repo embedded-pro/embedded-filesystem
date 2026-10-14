@@ -5,6 +5,7 @@
 #include "fs/nor/NorCheckpoint.hpp"
 #include "fs/nor/NorEraseCounts.hpp"
 #include "fs/nor/NorGeometry.hpp"
+#include "fs/nor/NorNode.hpp"
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
 #include <optional>
@@ -28,6 +29,7 @@ namespace fs
         NorBlockStates blocks;
         NorEraseCounts eraseCounts;
         NorCheckpoint checkpoint;
+        NorMapRoot inodeTable;
         uint32_t checkpointBlock{ 0 };
         NorJournal journal;
         uint64_t nextSequence{ 0 };

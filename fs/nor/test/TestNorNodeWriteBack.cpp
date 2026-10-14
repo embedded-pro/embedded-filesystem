@@ -1,7 +1,7 @@
 #include "fs/nor/test/NorMapsFixture.hpp"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <utility>
-#include <vector>
 
 namespace
 {
@@ -131,10 +131,10 @@ TEST_F(NorNodeWriteBackTest, a_second_write_back_writes_only_the_nodes_modified_
     AddEntries(1, 15, 15);
     auto written = WriteBack();
 
-    std::vector<fs::NorMap> maps;
+    infra::BoundedVector<fs::NorMap>::WithMaxSize<8> maps;
     for (const auto& header : written)
         maps.push_back(header.map);
-    EXPECT_EQ((std::vector<fs::NorMap>{ fs::NorMap::directory, fs::NorMap::directory, fs::NorMap::directory, fs::NorMap::inodeTable, fs::NorMap::inodeTable }), maps);
+    EXPECT_THAT(maps, testing::ElementsAre(fs::NorMap::directory, fs::NorMap::directory, fs::NorMap::directory, fs::NorMap::inodeTable, fs::NorMap::inodeTable));
     EXPECT_EQ(16u, fs::LoadLittle32(fs::NorBTree(cache, DirectoryMap(1)).Find(MapRootOf(1), 15).value_or(infra::ConstByteRange()), 0));
 }
 

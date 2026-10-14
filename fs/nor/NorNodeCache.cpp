@@ -21,6 +21,8 @@ namespace fs
         , nodeSize(NodeSizeOf(slots, buffers))
     {}
 
+    NorNodeCache::~NorNodeCache() = default;
+
     std::size_t NorNodeCache::Capacity() const
     {
         return slots.size();

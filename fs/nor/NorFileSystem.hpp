@@ -2,15 +2,21 @@
 #define FS_NOR_NOR_FILE_SYSTEM_HPP
 
 #include "fs/common/DeferredCompletions.hpp"
+#include "fs/common/HandlePool.hpp"
 #include "fs/common/OperationQueue.hpp"
 #include "fs/interfaces/FileSystem.hpp"
 #include "fs/nor/NorBlockStates.hpp"
 #include "fs/nor/NorConfig.hpp"
+#include "fs/nor/NorDirectory.hpp"
 #include "fs/nor/NorFormatter.hpp"
 #include "fs/nor/NorLifecycle.hpp"
+#include "fs/nor/NorNodeCache.hpp"
+#include "fs/nor/NorPathSlot.hpp"
 #include "fs/nor/NorRecord.hpp"
 #include "fs/nor/NorVolume.hpp"
 #include "hal/interfaces/Flash.hpp"
+#include "infra/util/BoundedVector.hpp"
+#include "infra/util/MemoryRange.hpp"
 #include "services/fsm/StateMachineDefinition.hpp"
 #include "services/fsm/TableStateMachine.hpp"
 #include <array>
@@ -53,10 +59,20 @@ namespace fs
         NorFileSystem& operator=(const NorFileSystem& other) = delete;
         ~NorFileSystem();
 
+        NorVolume& Volume();
+        void AttachPathSlots(infra::MemoryRange<NorPathSlot> slots);
+
     private:
+        virtual infra::SharedPtr<NorDirectory> AllocateDirectory() = 0;
+
         bool IsMounted() const;
         template<class Callback>
         void Refuse(const Callback& onDone);
+        template<class Call>
+        void StartPathCall(infra::BoundedConstString path, Call&& call);
+        NorPathSlot* FreePathSlot() const;
+        void RunPathCall(NorPathSlot& slot);
+        void RunOperation(NorPathSlot& slot, NorPathCall& call);
 
         void BeginFormat();
         void StartFormat();
@@ -70,6 +86,7 @@ namespace fs
     private:
         NorVolume volume;
         OperationQueue::Claimer lifecycleClaimer;
+        infra::MemoryRange<NorPathSlot> pathSlots;
         Machine::WithStorage<2> lifecycle;
         infra::Function<void(Result result)> onFormatDone;
         infra::Function<void(Result result)> onMountDone;
@@ -87,6 +104,7 @@ namespace fs
             std::array<uint8_t, Config.maxBlocks> eraseCountStorage{};
             std::array<uint8_t, RoundUpTo(static_cast<uint32_t>(NorLargestRecordBytes(Config.inlineBytes, Config.maxNameBytes)), Config.programUnit)> journalStorage{};
             std::array<uint8_t, Config.cachedNodes * Config.nodeSize> nodeStorage{};
+            std::array<NorNodeCache::Slot, Config.cachedNodes> nodeSlotStorage{};
             DeferredCompletions::WithMaxSize<Completions> deferredStorage;
         };
     }
@@ -97,15 +115,30 @@ namespace fs
         , public NorFileSystem
     {
         static_assert(IsValidNorConfig(Config));
-        static_assert(Files > 0);
+        static_assert(Files > 0 && Config.directories > 0);
         static_assert(NorFormatter::BufferBytes(Config) <= Config.cachedNodes * Config.nodeSize);
 
         using Storage = detail::NorVolumeStorage<Config, Files + Config.directories + Config.pathOperations + 3>;
 
     public:
         explicit WithStorage(hal::Flash& flash, infra::Duration idleDelay = defaultIdleDelay)
-            : NorFileSystem(NorVolumeParts{ flash, this->deferredStorage, infra::MakeRange(this->blockStateStorage), infra::MakeRange(this->eraseCountStorage), infra::MakeRange(this->journalStorage), infra::MakeRange(this->nodeStorage) }, Config, idleDelay)
-        {}
+            : NorFileSystem(NorVolumeParts{ flash, this->deferredStorage, infra::MakeRange(this->blockStateStorage), infra::MakeRange(this->eraseCountStorage), infra::MakeRange(this->journalStorage), infra::MakeRange(this->nodeStorage), infra::MakeRange(this->nodeSlotStorage) }, Config, idleDelay)
+        {
+            for (std::size_t index = 0; index != Config.pathOperations; ++index)
+                pathSlots.emplace_back(Volume().Queue());
+
+            AttachPathSlots(infra::MakeRange(pathSlots));
+        }
+
+    private:
+        infra::SharedPtr<NorDirectory> AllocateDirectory() override
+        {
+            return directories.Allocate();
+        }
+
+    private:
+        typename infra::BoundedVector<NorPathSlot>::template WithMaxSize<Config.pathOperations> pathSlots;
+        HandlePool<NorDirectory, Config.directories> directories{ Volume() };
     };
 
     constexpr std::array<NorFileSystem::Machine::Transition, 9> NorFileSystem::Rows()

@@ -5,12 +5,14 @@ emil_add_test(metrics.nor_test)
 target_link_libraries(metrics.nor_test PUBLIC
     gmock_main
     metrics.nor
+    fs.nor_test_doubles
     hal.interfaces_test_doubles
     infra.event_test_helper
     infra.timer_test_helper
 )
 
 target_sources(metrics.nor_test PRIVATE
+    TestNorBuiltImages.cpp
     TestNorChecker.cpp
     TestNorSweep.cpp
     TestNorTargets.cpp

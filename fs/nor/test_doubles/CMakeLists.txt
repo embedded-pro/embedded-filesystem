@@ -13,4 +13,6 @@ target_sources(fs.nor_test_doubles PRIVATE
     NorImage.hpp
     NorImageBuilder.cpp
     NorImageBuilder.hpp
+    NorImageFlash.cpp
+    NorImageFlash.hpp
 )

@@ -58,15 +58,10 @@ namespace
             ExecuteAllActions();
         }
 
-        void ExpectEveryCallCompletesWith(fs::Result result)
+        void ExpectLookupsCompleteWith(fs::Result result)
         {
             testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
-            volume.Open("/a", fs::OpenMode::read, [&done](fs::Result opened, infra::SharedPtr<fs::File> file)
-                {
-                    EXPECT_EQ(nullptr, file);
-                    done.callback(opened);
-                });
-            volume.OpenDirectory("/", [&done](fs::Result opened, infra::SharedPtr<fs::Directory> directory)
+            volume.OpenDirectory("/a", [&done](fs::Result opened, infra::SharedPtr<fs::Directory> directory)
                 {
                     EXPECT_EQ(nullptr, directory);
                     done.callback(opened);
@@ -74,6 +69,19 @@ namespace
             volume.Stat("/a", [&done](fs::Result found, const fs::EntryInfo&)
                 {
                     done.callback(found);
+                });
+
+            EXPECT_CALL(done, callback(result)).Times(2);
+            ExecuteAllActions();
+        }
+
+        void ExpectChangesCompleteWith(fs::Result result)
+        {
+            testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
+            volume.Open("/a", fs::OpenMode::read, [&done](fs::Result opened, infra::SharedPtr<fs::File> file)
+                {
+                    EXPECT_EQ(nullptr, file);
+                    done.callback(opened);
                 });
             volume.Remove("/a", [&done](fs::Result removed)
                 {
@@ -93,7 +101,7 @@ namespace
                     done.callback(measured);
                 });
 
-            EXPECT_CALL(done, callback(result)).Times(7);
+            EXPECT_CALL(done, callback(result)).Times(5);
             ExecuteAllActions();
         }
 
@@ -228,13 +236,31 @@ TEST_F(NorFileSystemTest, format_of_a_device_that_does_not_fit_completes_with_un
 
 TEST_F(NorFileSystemTest, calls_on_an_unmounted_volume_complete_with_not_mounted)
 {
-    ExpectEveryCallCompletesWith(fs::Result::notMounted);
+    ExpectLookupsCompleteWith(fs::Result::notMounted);
+    ExpectChangesCompleteWith(fs::Result::notMounted);
 }
 
-TEST_F(NorFileSystemTest, calls_on_a_mounted_volume_are_unsupported_until_their_step)
+TEST_F(NorFileSystemTest, lookups_after_unmount_complete_with_not_mounted)
+{
+    ExpectFormat();
+    ExpectMount();
+    ExpectUnmount();
+
+    ExpectLookupsCompleteWith(fs::Result::notMounted);
+}
+
+TEST_F(NorFileSystemTest, lookups_on_a_mounted_volume_find_nothing_on_a_new_volume)
 {
     ExpectFormat();
     ExpectMount();
 
-    ExpectEveryCallCompletesWith(fs::Result::unsupported);
+    ExpectLookupsCompleteWith(fs::Result::notFound);
+}
+
+TEST_F(NorFileSystemTest, changes_on_a_mounted_volume_are_unsupported_until_their_step)
+{
+    ExpectFormat();
+    ExpectMount();
+
+    ExpectChangesCompleteWith(fs::Result::unsupported);
 }

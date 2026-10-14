@@ -181,7 +181,7 @@ Every walk from the root of the inode table in RAM therefore reaches the current
 Before an operation changes anything, it brings the paths it changes into the cache, pins them, and counts the nodes it would modify for the first time, the new nodes of splits included.
 When they do not fit next to the nodes already modified, or when the cache has no room to bring a path in, a checkpoint comes first and the operation starts again.
 The largest operation, `Rename` between two directories, modifies at most 15 nodes: 3 to remove the old entry, 5 to insert the new one with two splits, 3 for the record of the entry, and 2 more for the record of each directory, whose map gets a new root.
-Reading needs a node of the cache that is not modified, so a checkpoint also comes first when every node is modified, and `cachedNodes` must be at least 15, which `static_assert` checks.
+A lookup that only reads brings one path at a time into the cache, up to 3 nodes, so a checkpoint also comes first when fewer than 3 nodes of the cache are not modified, and `cachedNodes` must be at least 15, which `static_assert` checks.
 
 ## Inodes and directories
 
@@ -206,7 +206,8 @@ Inode numbers are given out in increasing order from the counter in the checkpoi
 Hard links are not supported, so every inode has exactly one name and one parent.
 
 The key of a directory entry is the low 24 bits of the CRC of its name, shifted left by 8, plus an index from 0 to 255 that tells apart names with the same hash.
-Lookup reads the entries of the directory whose keys share the hash and compares the name of each one's inode record byte by byte.
+Lookup reads the entries of the directory whose keys share the hash, from the lowest index, and compares the name of each one's inode record byte by byte.
+An entry whose inode has no record, or whose record names another parent, completes the operation with `corrupted`, and so does a root whose record is not a directory.
 Creating an entry takes the lowest index that its hash does not use; when all 256 are used, it completes with `noSpace`.
 `Next` returns the entries of a directory in the order of their keys, and continues after the key it returned last, so entries that are added or removed meanwhile do not disturb it.
 
@@ -490,7 +491,7 @@ Because `hal::Flash` reports no errors, a NOR volume never completes with `devic
 ## Testing
 
 The NOR filesystem is tested on `hal::FlashStub` from EmIL, which models NOR programming as a bitwise AND, and on `hal::FlashMock` where the order of device requests is the behaviour under test.
-`fs::NorImageBuilder` arranges directories and files synchronously on an image before the operation under test.
+`fs::NorImageBuilder` arranges directories and files synchronously on an image before the operation under test; it changes the maps with the trees of `fs/nor` and writes them with a checkpoint, and the independent checker of `metrics/nor` checks the images it builds.
 The metrics harness adds wrappers that count operations per block and simulate the timing of a NOR device, and a wrapper that cuts power in the middle of a program or an erase.
 The metrics W-1 to W-6, R-2, R-4, WL-1 to WL-4 and P-1 cover the behaviour described above.
 See [Testing.md](Testing.md) and [Metrics.md](Metrics.md).

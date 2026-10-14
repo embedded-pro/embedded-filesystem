@@ -8,6 +8,8 @@ namespace fs
         : cache(cache)
     {}
 
+    NorMapFetch::~NorMapFetch() = default;
+
     void NorMapFetch::Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, const infra::Function<void(NorFetchResult result)>& onFetched)
     {
         this->map = map;

@@ -28,7 +28,7 @@ namespace fs
         NorNodeCache(hal::Flash& flash, infra::MemoryRange<Slot> slots, infra::ByteRange buffers);
         NorNodeCache(const NorNodeCache& other) = delete;
         NorNodeCache& operator=(const NorNodeCache& other) = delete;
-        ~NorNodeCache() = default;
+        ~NorNodeCache();
 
         std::size_t Capacity() const;
         uint32_t NodeSize() const;

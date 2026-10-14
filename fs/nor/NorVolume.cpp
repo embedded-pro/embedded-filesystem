@@ -9,6 +9,7 @@ namespace fs
         , state(parts.blockStates, parts.eraseCounts)
         , journalBuffer(parts.journalBuffer)
         , nodeStorage(parts.nodeStorage)
+        , cache(parts.flash, parts.nodeSlots, parts.nodeStorage)
         , queue(idleDelay, [] {})
     {}
 
@@ -39,6 +40,21 @@ namespace fs
         return nodeStorage;
     }
 
+    PathLimits NorVolume::Limits() const
+    {
+        return PathLimits{ config.maxNameBytes, config.maxPathBytes };
+    }
+
+    NorPathWalk& NorVolume::Walk()
+    {
+        return walk;
+    }
+
+    NorDirectoryRead& NorVolume::DirectoryRead()
+    {
+        return directoryRead;
+    }
+
     OperationQueue& NorVolume::Queue()
     {
         return queue;
@@ -47,5 +63,27 @@ namespace fs
     NorOperation& NorVolume::Operation()
     {
         return operation;
+    }
+
+    uint32_t NorVolume::Generation() const
+    {
+        return generation;
+    }
+
+    bool NorVolume::Available(uint32_t handleGeneration) const
+    {
+        return mounted && handleGeneration == generation;
+    }
+
+    void NorVolume::MarkMounted()
+    {
+        cache.Clear();
+        ++generation;
+        mounted = true;
+    }
+
+    void NorVolume::MarkUnmounted()
+    {
+        mounted = false;
     }
 }

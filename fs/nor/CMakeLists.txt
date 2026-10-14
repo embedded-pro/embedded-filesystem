@@ -22,6 +22,14 @@ target_sources(fs.nor PRIVATE
     NorCheckpointLoad.cpp
     NorCheckpointLoad.hpp
     NorConfig.hpp
+    NorDirectoryKey.cpp
+    NorDirectoryKey.hpp
+    NorDirectory.cpp
+    NorDirectory.hpp
+    NorDirectoryRead.cpp
+    NorDirectoryRead.hpp
+    NorEntrySeek.cpp
+    NorEntrySeek.hpp
     NorEraseCounts.cpp
     NorEraseCounts.hpp
     NorFileSystem.cpp
@@ -32,6 +40,8 @@ target_sources(fs.nor PRIVATE
     NorGeometry.hpp
     NorHeaderScan.cpp
     NorHeaderScan.hpp
+    NorInodeRead.cpp
+    NorInodeRead.hpp
     NorInodeRecord.cpp
     NorInodeRecord.hpp
     NorJournalScan.cpp
@@ -42,6 +52,8 @@ target_sources(fs.nor PRIVATE
     NorMapFetch.hpp
     NorMount.cpp
     NorMount.hpp
+    NorNameLookup.cpp
+    NorNameLookup.hpp
     NorNode.cpp
     NorNode.hpp
     NorNodeCache.cpp
@@ -50,10 +62,18 @@ target_sources(fs.nor PRIVATE
     NorRecord.hpp
     NorNodeWriteBack.cpp
     NorNodeWriteBack.hpp
+    NorOpenDirectory.cpp
+    NorOpenDirectory.hpp
+    NorPathSlot.cpp
+    NorPathSlot.hpp
+    NorPathWalk.cpp
+    NorPathWalk.hpp
     NorRadixTree.cpp
     NorRadixTree.hpp
     NorRecordReader.cpp
     NorRecordReader.hpp
+    NorStat.cpp
+    NorStat.hpp
     NorSuperblock.cpp
     NorSuperblock.hpp
     NorVolume.cpp

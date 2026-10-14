@@ -4,14 +4,26 @@
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/Deliver.hpp"
 #include "fs/common/OperationQueue.hpp"
+#include "fs/common/Path.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorConfig.hpp"
+#include "fs/nor/NorDirectoryRead.hpp"
+#include "fs/nor/NorEntrySeek.hpp"
 #include "fs/nor/NorFormatter.hpp"
+#include "fs/nor/NorInodeRead.hpp"
+#include "fs/nor/NorMapFetch.hpp"
 #include "fs/nor/NorMount.hpp"
+#include "fs/nor/NorNameLookup.hpp"
+#include "fs/nor/NorNodeCache.hpp"
+#include "fs/nor/NorOpenDirectory.hpp"
+#include "fs/nor/NorPathWalk.hpp"
+#include "fs/nor/NorStat.hpp"
 #include "fs/nor/NorVolumeState.hpp"
 #include "hal/interfaces/Flash.hpp"
 #include "infra/timer/Timer.hpp"
 #include "infra/util/ByteRange.hpp"
+#include "infra/util/MemoryRange.hpp"
+#include <cstdint>
 #include <variant>
 
 namespace fs
@@ -24,9 +36,10 @@ namespace fs
         infra::ByteRange eraseCounts;
         infra::ByteRange journalBuffer;
         infra::ByteRange nodeStorage;
+        infra::MemoryRange<NorNodeCache::Slot> nodeSlots;
     };
 
-    using NorOperation = std::variant<std::monostate, NorFormatter, NorMount>;
+    using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorStat, NorOpenDirectory>;
 
     class NorVolume
     {
@@ -41,8 +54,16 @@ namespace fs
         NorVolumeState& State();
         infra::ByteRange JournalBuffer() const;
         infra::ByteRange NodeStorage() const;
+        PathLimits Limits() const;
+        NorPathWalk& Walk();
+        NorDirectoryRead& DirectoryRead();
         OperationQueue& Queue();
         NorOperation& Operation();
+
+        uint32_t Generation() const;
+        bool Available(uint32_t handleGeneration) const;
+        void MarkMounted();
+        void MarkUnmounted();
 
         template<class Callback>
         void Defer(const Callback& onDone, Result result);
@@ -54,8 +75,17 @@ namespace fs
         NorVolumeState state;
         infra::ByteRange journalBuffer;
         infra::ByteRange nodeStorage;
+        NorNodeCache cache;
+        NorMapFetch fetch{ cache };
+        NorInodeRead inodeRead{ cache, fetch, config };
+        NorEntrySeek entrySeek{ cache, fetch };
+        NorNameLookup nameLookup{ inodeRead, entrySeek };
+        NorPathWalk walk{ inodeRead, nameLookup };
+        NorDirectoryRead directoryRead{ inodeRead, entrySeek };
         OperationQueue queue;
         NorOperation operation;
+        uint32_t generation{ 0 };
+        bool mounted{ false };
     };
 
     template<class Callback>

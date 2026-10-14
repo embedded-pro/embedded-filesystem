@@ -24,7 +24,7 @@ namespace fs
         explicit NorMapFetch(NorNodeCache& cache);
         NorMapFetch(const NorMapFetch& other) = delete;
         NorMapFetch& operator=(const NorMapFetch& other) = delete;
-        ~NorMapFetch() = default;
+        ~NorMapFetch();
 
         void Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, const infra::Function<void(NorFetchResult result)>& onDone);
 
