@@ -33,6 +33,8 @@ target_sources(fs.nor PRIVATE
     NorSuperblock.hpp
 )
 
+add_subdirectory(test_doubles)
+
 if (EMFS_BUILD_TESTS)
     add_subdirectory(test)
 endif()

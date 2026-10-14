@@ -5,6 +5,7 @@ emil_add_test(fs.nor_test)
 target_link_libraries(fs.nor_test PUBLIC
     gmock_main
     fs.nor
+    fs.nor_test_doubles
     hal.interfaces_test_doubles
     infra.event_test_helper
     infra.util_test_helper
@@ -18,6 +19,7 @@ target_sources(fs.nor_test PRIVATE
     TestNorEraseCounts.cpp
     TestNorFormatter.cpp
     TestNorGeometry.cpp
+    TestNorImageBuilder.cpp
     TestNorInodeRecord.cpp
     TestNorNode.cpp
     TestNorRecord.cpp
