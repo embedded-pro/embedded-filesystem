@@ -18,6 +18,8 @@ namespace fs
 
         auto key = NorDirectoryKey(name);
         lastKey = NorLastDirectoryKey(key);
+        nextFree = key;
+        freeKey = std::nullopt;
         SeekFrom(key);
     }
 
@@ -29,6 +31,11 @@ namespace fs
     const NorInodeRecord& NorNameLookup::FoundRecord() const
     {
         return inodeRead.Record();
+    }
+
+    std::optional<uint32_t> NorNameLookup::FreeKey() const
+    {
+        return freeKey;
     }
 
     void NorNameLookup::SeekFrom(uint32_t key)
@@ -45,10 +52,13 @@ namespace fs
         if (result != Result::success)
             onDone(result);
         else if (!found.has_value() || found->key > lastKey)
-            onDone(Result::notFound);
+            NotFound();
         else
         {
             candidate = *found;
+            if (!freeKey.has_value() && candidate.key > nextFree)
+                freeKey = static_cast<uint32_t>(nextFree);
+            nextFree = uint64_t{ candidate.key } + 1;
             inodeRead.Read(inodeTable, candidate.inode, [this](Result read)
                 {
                     CandidateRead(read);
@@ -66,8 +76,16 @@ namespace fs
         else if (infra::ContentsEqual(record.name, infra::StringAsByteRange(name)))
             onDone(Result::success);
         else if (candidate.key == lastKey)
-            onDone(Result::notFound);
+            NotFound();
         else
             SeekFrom(candidate.key + 1);
+    }
+
+    void NorNameLookup::NotFound()
+    {
+        if (!freeKey.has_value() && nextFree <= lastKey)
+            freeKey = static_cast<uint32_t>(nextFree);
+
+        onDone(Result::notFound);
     }
 }

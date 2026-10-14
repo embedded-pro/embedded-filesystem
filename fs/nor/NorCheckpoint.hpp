@@ -22,6 +22,7 @@ namespace fs
     };
 
     void SerializeNorCheckpoint(const NorCheckpoint& checkpoint, infra::ByteRange bytes);
+    void SerializeNorCheckpointFixedPart(const NorCheckpoint& checkpoint, infra::ByteRange bytes);
     void MarkNorBlockInUse(infra::ByteRange checkpoint, uint32_t block);
     void SealNorCheckpoint(infra::ByteRange checkpoint);
     NorCheckpoint ParseNorCheckpointFixedPart(infra::ConstByteRange fixedPart);

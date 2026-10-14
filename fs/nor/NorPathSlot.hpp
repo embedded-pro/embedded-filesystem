@@ -34,7 +34,13 @@ namespace fs
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<File> file)> onDone;
     };
 
-    using NorPathCall = std::variant<NorStatCall, NorOpenDirectoryCall, NorOpenCall>;
+    struct NorMakeDirectoryCall
+    {
+        infra::BoundedConstString path;
+        infra::AutoResetFunction<void(Result result)> onDone;
+    };
+
+    using NorPathCall = std::variant<NorStatCall, NorOpenDirectoryCall, NorOpenCall, NorMakeDirectoryCall>;
 
     struct NorPathSlot
     {

@@ -6,11 +6,15 @@
 #include "fs/common/OperationQueue.hpp"
 #include "fs/common/Path.hpp"
 #include "fs/interfaces/Result.hpp"
+#include "fs/nor/NorBlockAllocator.hpp"
+#include "fs/nor/NorCheckpointWriter.hpp"
 #include "fs/nor/NorConfig.hpp"
 #include "fs/nor/NorDirectoryRead.hpp"
 #include "fs/nor/NorEntrySeek.hpp"
 #include "fs/nor/NorFormatter.hpp"
 #include "fs/nor/NorInodeRead.hpp"
+#include "fs/nor/NorJournalWriter.hpp"
+#include "fs/nor/NorMakeDirectory.hpp"
 #include "fs/nor/NorMapFetch.hpp"
 #include "fs/nor/NorMount.hpp"
 #include "fs/nor/NorNameLookup.hpp"
@@ -19,6 +23,8 @@
 #include "fs/nor/NorOpenDirectory.hpp"
 #include "fs/nor/NorPathWalk.hpp"
 #include "fs/nor/NorRead.hpp"
+#include "fs/nor/NorRecordApply.hpp"
+#include "fs/nor/NorReplay.hpp"
 #include "fs/nor/NorStat.hpp"
 #include "fs/nor/NorVolumeState.hpp"
 #include "hal/interfaces/Flash.hpp"
@@ -41,7 +47,7 @@ namespace fs
         infra::MemoryRange<NorNodeCache::Slot> nodeSlots;
     };
 
-    using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorStat, NorOpenDirectory, NorOpen, NorRead>;
+    using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorReplay, NorStat, NorOpenDirectory, NorOpen, NorRead, NorMakeDirectory>;
 
     class NorVolume
     {
@@ -63,6 +69,11 @@ namespace fs
         NorInodeRead& InodeRead();
         NorPathWalk& Walk();
         NorDirectoryRead& DirectoryRead();
+        NorNameLookup& NameLookup();
+        NorBlockAllocator& Allocator();
+        NorRecordApply& RecordApply();
+        NorCheckpointWriter& Checkpoints();
+        NorJournalWriter& Journal();
         OperationQueue& Queue();
         NorOperation& Operation();
 
@@ -88,6 +99,10 @@ namespace fs
         NorNameLookup nameLookup{ inodeRead, entrySeek };
         NorPathWalk walk{ inodeRead, nameLookup };
         NorDirectoryRead directoryRead{ inodeRead, entrySeek };
+        NorBlockAllocator allocator{ *this };
+        NorRecordApply recordApply{ *this };
+        NorCheckpointWriter checkpoints{ *this };
+        NorJournalWriter journal{ *this };
         OperationQueue queue;
         NorOperation operation;
         uint32_t generation{ 0 };

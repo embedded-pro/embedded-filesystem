@@ -80,6 +80,7 @@ namespace fs
         void StartFormat();
         void BeginMount();
         void StartMount();
+        void Replay();
         void BeginUnmount();
         void LifecycleOperationDone(Result result);
         void Entered(Result result);

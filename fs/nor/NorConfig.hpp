@@ -52,7 +52,7 @@ namespace fs
 
         constexpr bool IsValidNorWork(const NorConfig& config)
         {
-            return config.pathOperations != 0 && config.journalBlocks >= 2 && config.staticWearLevelingThreshold != 0 && config.staticWearLevelingThreshold <= 128 && config.staticWearLevelingInterval != 0;
+            return config.pathOperations != 0 && config.journalBlocks >= 2 && config.journalBlocks <= norMaxJournalBlocks && config.staticWearLevelingThreshold != 0 && config.staticWearLevelingThreshold <= 128 && config.staticWearLevelingInterval != 0;
         }
     }
 

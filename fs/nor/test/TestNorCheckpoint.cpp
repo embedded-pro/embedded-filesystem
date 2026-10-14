@@ -39,6 +39,17 @@ TEST(NorCheckpointTest, serializes_the_fields_and_the_bits_of_the_blocks_in_use)
     EXPECT_EQ(crc.Result(), fs::LoadLittle32(infra::MakeRange(bytes), 31));
 }
 
+TEST(NorCheckpointTest, serializes_the_fixed_part_alone)
+{
+    auto sealed = Sealed();
+    std::array<uint8_t, 28> fixedPart;
+    fixedPart.fill(0xff);
+
+    fs::SerializeNorCheckpointFixedPart(checkpoint, infra::MakeRange(fixedPart));
+
+    EXPECT_TRUE(infra::ContentsEqual(infra::Head(infra::MakeRange(sealed), 28), infra::MakeRange(fixedPart)));
+}
+
 TEST(NorCheckpointTest, opens_a_sealed_checkpoint)
 {
     auto bytes = Sealed();

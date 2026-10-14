@@ -119,7 +119,8 @@ Each entry starts with its kind:
 
 An operation writes one record with every entry it needs: creating a file puts its directory entry and its inode, `Rename` removes one entry, puts another and puts the inode with its new parent and name, and an overwrite that spans two blocks sets both blocks and the size.
 Replay checks that the previous block of a block set is the one the map holds, and a mismatch makes the mount complete with `corrupted`.
-An inode put of an inode that exists keeps its maps and ignores the roots it carries, because roots change only at checkpoints, and a checkpoint written during replay may come between a record and the roots it was written with.
+An inode put of an inode that exists keeps its maps and ignores the roots it carries, because roots change only at checkpoints, and a checkpoint written during replay may come between a record and the roots it was written with; an inode put of a new inode creates it without maps.
+An inode put of inode 0, of a record that does not parse or that changes the type of an inode, a directory entry put into a directory that does not exist, into a file or of a key that the directory holds, and a link anywhere but first in the first record of a journal block complete the mount with `corrupted` as well.
 Allocation and release need no entries of their own: they follow from block sets, from sizes and from removed inodes, and the nodes of a removed data map are found by walking it, at run time and at replay alike.
 The largest record starts with a link and holds either a `Rename` or the commit of 8 block entries of a file with its size, `8 + 9 + max(9 + 13 + 5 + inode record, 8 × 17 + 11 + inlineBytes)` bytes, 228 with the defaults; the journal buffer of the volume holds it, rounded up to the program unit.
 
@@ -127,16 +128,18 @@ The largest record starts with a link and holds either a `Rename` or the commit 
 
 Every change is first committed as a record.
 The records of an epoch start in its checkpoint block, right after the checkpoint, and continue in journal blocks.
-A new journal block is started when the record does not fit in the current block, and for the first record after every mount, so that no program unit whose programming may have been interrupted before the mount is programmed again.
+A new journal block is started when the record does not fit in the current block, and for the first record after every mount unless a checkpoint comes first, so that no program unit whose programming may have been interrupted before the mount is programmed again.
 The first record of a journal block starts with a link entry, which names the block before it and the offset where the records of that block ended.
 
 Replay starts after the checkpoint and reads records up to the end of the block, an erased length or a record that is not valid.
 The next block is the journal block with the lowest sequence above that of the current block whose link names the current block and the offset where its records ended; journal blocks that do not qualify, such as one whose link was not written before a power loss, are skipped.
 Replay ends when no block qualifies.
 So a record that was cut by a power loss is ignored, and the records written after the next mount go into a new journal block that follows the last valid record.
+The mount keeps the blocks of the epoch in a list of at most 16 blocks, and an epoch of more blocks completes the mount with `corrupted`.
 
-Run time and replay apply records through the same function, so the state after a mount is the state that the records produced at run time, and replay needs no more of the node cache than run time did.
-An epoch holds at most `journalBlocks` blocks, its checkpoint block included; a record that would need one more first makes a checkpoint.
+Run time and replay apply records through the same function: an operation programs its record and then applies the bytes it programmed, and the mount, once the scan has found the blocks of the epoch, reads their records again and applies each one.
+So the state after a mount is the state that the records produced at run time, and replay needs no more of the node cache than run time did.
+An epoch holds at most `journalBlocks` blocks, its checkpoint block included; a record that would need one more first makes a checkpoint, and then goes into the new checkpoint block when it fits there.
 
 ## Maps and nodes
 
@@ -181,7 +184,7 @@ Every walk from the root of the inode table in RAM therefore reaches the current
 Before an operation changes anything, it brings the paths it changes into the cache, pins them, and counts the nodes it would modify for the first time, the new nodes of splits included.
 When they do not fit next to the nodes already modified, or when the cache has no room to bring a path in, a checkpoint comes first and the operation starts again.
 The largest operation, `Rename` between two directories, modifies at most 15 nodes: 3 to remove the old entry, 5 to insert the new one with two splits, 3 for the record of the entry, and 2 more for the record of each directory, whose map gets a new root.
-A lookup that only reads brings one path at a time into the cache, up to 3 nodes, so a checkpoint also comes first when fewer than 3 nodes of the cache are not modified, and `cachedNodes` must be at least 15, which `static_assert` checks.
+A lookup that only reads brings one path at a time into the cache, up to 3 nodes, so an operation that leaves fewer than 3 nodes of the cache unmodified writes a checkpoint before it completes, and `cachedNodes` must be at least 15, which `static_assert` checks.
 
 ## Inodes and directories
 
@@ -277,7 +280,8 @@ It is written between operations, so it holds only committed state, and as one u
 1. A collection step for the garbage collection of node blocks, described below.
 2. Every modified node is written to node blocks, leaves before inner nodes and every other map before the inode table.
    The address of a written node replaces its address in the cache in its parent, which is written later; the address of the root of a data map or a directory map goes into the record of its inode in the inode table, and the address of the root of the inode table into the checkpoint.
-3. A new checkpoint block is allocated and programmed with the checkpoint, its CRC last.
+3. A new checkpoint block is allocated and programmed with the checkpoint, in pieces of the size of the journal buffer, the last of which holds the CRC.
+   The bitmap marks every block that is in use in RAM, except the previous checkpoint block and the blocks of its epoch.
 
 | Offset          | Size       | Field                                           |
 |-----------------|------------|-------------------------------------------------|
@@ -299,7 +303,7 @@ A checkpoint of a device with 4096 blocks takes 544 bytes, and a checkpoint alwa
 
 A checkpoint continues to fill the last node block of the previous checkpoint of the same mount; after a mount, the first checkpoint starts a new node block.
 The work of a checkpoint is bounded by the size of the node cache and of one collection step, and does not depend on the size of the files.
-A checkpoint is written when the journal is full, when the next operation would modify more nodes than the cache can hold, and in the background as described below.
+A checkpoint is written when the journal is full, when the next operation would modify more nodes than the cache can hold, when an operation leaves fewer than 3 nodes of the cache unmodified, at `Unmount` as described below, and in the background.
 
 ## Allocation and the pre-erased pool
 
@@ -385,6 +389,7 @@ Apart from that case, mounting writes nothing; the first record after it starts 
 ## Unmount
 
 `Unmount` programs the buffers of the open files and commits them, stops the background, and writes a checkpoint when the journal is more than half full, so that the next mount replays at most half a journal.
+The journal is more than half full when the blocks of its epoch before the current one, counted as full, and the records of the current block take more than half of `journalBlocks` blocks.
 
 ## Background work
 
@@ -475,7 +480,7 @@ The fields marked as format parameters are stored in the superblock, and a volum
 | `maxPathBytes`                | 255     | The longest path in UTF-8 bytes                                                                                                       |
 | `directories`                 | 1       | The open directory handles                                                                                                            |
 | `pathOperations`              | 2       | The slots for waiting operations on paths, such as `Open`                                                                             |
-| `journalBlocks`               | 2       | Blocks of an epoch, its checkpoint block included, before a checkpoint                                                                |
+| `journalBlocks`               | 2       | Blocks of an epoch, its checkpoint block included, before a checkpoint; 2 to 16                                                       |
 | `staticWearLevelingThreshold` | 64      | Erase-count difference that triggers a move                                                                                           |
 | `staticWearLevelingInterval`  | 32      | Minimum number of erases between two moves                                                                                            |
 

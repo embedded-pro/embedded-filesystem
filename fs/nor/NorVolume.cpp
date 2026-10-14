@@ -77,6 +77,31 @@ namespace fs
         return directoryRead;
     }
 
+    NorNameLookup& NorVolume::NameLookup()
+    {
+        return nameLookup;
+    }
+
+    NorBlockAllocator& NorVolume::Allocator()
+    {
+        return allocator;
+    }
+
+    NorRecordApply& NorVolume::RecordApply()
+    {
+        return recordApply;
+    }
+
+    NorCheckpointWriter& NorVolume::Checkpoints()
+    {
+        return checkpoints;
+    }
+
+    NorJournalWriter& NorVolume::Journal()
+    {
+        return journal;
+    }
+
     OperationQueue& NorVolume::Queue()
     {
         return queue;
@@ -99,7 +124,6 @@ namespace fs
 
     void NorVolume::MarkMounted()
     {
-        cache.Clear();
         ++generation;
         mounted = true;
     }

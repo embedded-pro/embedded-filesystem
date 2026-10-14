@@ -11,11 +11,14 @@ namespace fs
     constexpr uint32_t norNodeHeaderBytes = 12;
     constexpr uint32_t norNodeCrcBytes = 4;
     constexpr uint32_t norInodeRecordFixedBytes = 20;
+    constexpr uint32_t norInodeTypeOffset = 4;
+    constexpr uint32_t norInodeMapHeightOffset = 6;
     constexpr uint32_t norInodeMapRootOffset = 12;
     constexpr uint32_t norCheckpointFixedBytes = 28;
     constexpr uint32_t norCheckpointCrcBytes = 4;
     constexpr uint32_t norMaxLevels = 3;
     constexpr uint32_t norModifiedNodeTag = 0x80000000;
+    constexpr uint32_t norMaxJournalBlocks = 16;
 
     constexpr uint32_t RoundUpTo(uint32_t size, uint32_t unit)
     {

@@ -1,5 +1,6 @@
 #include "fs/nor/NorInodeRecord.hpp"
-#include "gtest/gtest.h"
+#include "fs/nor/NorRecord.hpp"
+#include "gmock/gmock.h"
 #include <array>
 #include <cstdint>
 
@@ -119,4 +120,21 @@ TEST(NorInodeRecordTest, inline_bytes_beyond_the_inline_area_are_not_a_record)
     bytes[16] = 41;
 
     EXPECT_EQ(std::nullopt, fs::ParseNorInodeRecord(infra::MakeRange(bytes), config));
+}
+
+TEST(NorInodeRecordTest, an_inode_put_carries_the_number_and_the_serialized_record)
+{
+    std::array<uint8_t, 128> buffer{};
+    fs::CrcRecord record{ infra::MakeRange(buffer) };
+
+    fs::AddNorInodePut(record, 9, file, config);
+
+    auto opened = fs::OpenRecord(record.Seal());
+    ASSERT_TRUE(opened.has_value());
+    constexpr auto recordBytes = fs::NorInodeRecordBytes(config);
+    fs::NorEntryReader reader{ *opened, recordBytes };
+    auto bytes = Serialized(file);
+    EXPECT_EQ((fs::NorEntry{ fs::NorInodePut{ 9, infra::MakeRange(bytes) } }), reader.Next());
+    EXPECT_EQ(std::nullopt, reader.Next());
+    EXPECT_FALSE(reader.Malformed());
 }

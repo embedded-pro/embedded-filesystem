@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace metrics
@@ -59,6 +60,8 @@ namespace metrics
         fs::Result Format();
         fs::Result Mount();
         fs::Result Unmount();
+        fs::Result MakeDirectory(const std::string& path);
+        std::optional<fs::EntryType> TypeOf(const std::string& path);
 
     private:
         class FileSystem

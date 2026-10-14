@@ -33,6 +33,7 @@ namespace fs
         std::size_t Capacity() const;
         uint32_t NodeSize() const;
         std::size_t ModifiedNodes() const;
+        std::size_t UnmodifiedPinnedNodes() const;
         uint32_t ReleasedNodes() const;
         void ClearReleasedNodes();
         bool HasRoom() const;

@@ -41,6 +41,14 @@ namespace fs
             }));
     }
 
+    std::size_t NorNodeCache::UnmodifiedPinnedNodes() const
+    {
+        return static_cast<std::size_t>(std::ranges::count_if(slots, [](const Slot& slot)
+            {
+                return slot.pinned && !slot.modified;
+            }));
+    }
+
     uint32_t NorNodeCache::ReleasedNodes() const
     {
         return released;

@@ -104,6 +104,14 @@ TEST_F(NorMapFetchTest, an_empty_map_or_an_index_beyond_a_data_map_fetches_nothi
     ExpectFetchAtOnce(DataMap(2), file, 144, fs::NorFetchResult::fetched);
 }
 
+TEST_F(NorMapFetchTest, a_root_without_a_height_a_height_without_a_root_or_more_than_3_levels_are_corrupted)
+{
+    ExpectFetchAtOnce(DirectoryMap(1), fs::NorMapRoot{ directory.address, 0 }, 10, fs::NorFetchResult::corrupted);
+    ExpectFetchAtOnce(DirectoryMap(1), fs::NorMapRoot{ 0, 1 }, 10, fs::NorFetchResult::corrupted);
+    ExpectFetchAtOnce(DirectoryMap(1), fs::NorMapRoot{ directory.address, 4 }, 10, fs::NorFetchResult::corrupted);
+    ExpectFetchAtOnce(DataMap(2), fs::NorMapRoot{ 0, 2 }, 0, fs::NorFetchResult::corrupted);
+}
+
 TEST_F(NorMapFetchTest, a_hole_in_a_data_map_ends_the_path)
 {
     ExpectFetch(DataMap(2), file, 30, fs::NorFetchResult::fetched);

@@ -22,15 +22,6 @@ namespace fs
         found = NorFoundInode{ rootInode };
         component = infra::BoundedConstString();
         components.emplace(path);
-
-        auto first = components->Next();
-        if (!first.has_value())
-        {
-            onDone(Result::success);
-            return;
-        }
-
-        component = *first;
         inodeRead.Read(inodeTable, rootInode, [this](Result result)
             {
                 RootRead(result);
@@ -56,16 +47,25 @@ namespace fs
         else
         {
             found = FoundOf(rootInode, inodeRead.Record());
-            LookUp();
+            Descend();
         }
     }
 
-    void NorPathWalk::LookUp()
+    void NorPathWalk::Descend()
     {
-        nameLookup.Find(inodeTable, found.inode, found.map, component, [this](Result result)
-            {
-                LookedUp(result);
-            });
+        auto next = components->Next();
+        if (!next.has_value())
+            onDone(Result::success);
+        else if (found.type != NorInodeType::directory)
+            onDone(Result::notADirectory);
+        else
+        {
+            component = *next;
+            nameLookup.Find(inodeTable, found.inode, found.map, component, [this](Result result)
+                {
+                    LookedUp(result);
+                });
+        }
     }
 
     void NorPathWalk::LookedUp(Result result)
@@ -77,16 +77,6 @@ namespace fs
         }
 
         found = FoundOf(nameLookup.FoundInode(), nameLookup.FoundRecord());
-
-        auto next = components->Next();
-        if (!next.has_value())
-            onDone(Result::success);
-        else if (found.type != NorInodeType::directory)
-            onDone(Result::notADirectory);
-        else
-        {
-            component = *next;
-            LookUp();
-        }
+        Descend();
     }
 }

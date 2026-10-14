@@ -5,7 +5,7 @@
 #include "fs/nor/test_doubles/NorImageBuilder.hpp"
 #include "hal/interfaces/test_doubles/FlashStub.hpp"
 #include "infra/event/test_helper/EventDispatcherFixture.hpp"
-#include "gtest/gtest.h"
+#include "gmock/gmock.h"
 #include <array>
 #include <functional>
 #include <optional>
@@ -121,6 +121,19 @@ TEST_F(NorMountTest, mounts_a_formatted_volume)
     EXPECT_EQ(3, volume.checkpointBlock);
     EXPECT_EQ((fs::NorJournal{ 3, firstRecord, 1 }), volume.journal);
     EXPECT_EQ(3, volume.nextSequence);
+}
+
+TEST_F(NorMountTest, takes_the_next_inode_and_the_live_nodes_from_the_checkpoint_and_starts_the_journal_and_the_nodes_in_new_blocks)
+{
+    volume.nodeBlock = 9;
+
+    Mount();
+
+    EXPECT_EQ(2, volume.nextInode);
+    EXPECT_EQ(1, volume.liveNodes);
+    EXPECT_TRUE(volume.startNewJournalBlock);
+    EXPECT_EQ(std::nullopt, volume.nodeBlock);
+    EXPECT_THAT(volume.epoch, testing::ElementsAre(3));
 }
 
 TEST_F(NorMountTest, marks_the_superblocks_and_the_blocks_of_the_checkpoint_in_use_and_every_other_block_free_and_erased)
@@ -503,8 +516,32 @@ TEST_F(NorMountTest, follows_the_journal_into_linked_journal_blocks)
 
     EXPECT_EQ(fs::Result::success, Mount());
     EXPECT_EQ((fs::NorJournal{ 4, Builder().JournalEnd(), 3 }), volume.journal);
+    EXPECT_THAT(volume.epoch, testing::ElementsAre(3, 8, 4));
     EXPECT_EQ(State::inUse, StateOf(8));
     EXPECT_EQ(State::inUse, StateOf(4));
+}
+
+TEST_F(NorMountTest, an_epoch_of_16_blocks_mounts)
+{
+    for (uint32_t block = 8; block != 23; ++block)
+    {
+        Builder().StartJournalBlock(block);
+        Builder().AppendRecord({});
+    }
+
+    EXPECT_EQ(fs::Result::success, Mount());
+    EXPECT_EQ(16, volume.journal.blocks);
+}
+
+TEST_F(NorMountTest, an_epoch_of_more_than_16_blocks_is_corrupted)
+{
+    for (uint32_t block = 8; block != 24; ++block)
+    {
+        Builder().StartJournalBlock(block);
+        Builder().AppendRecord({});
+    }
+
+    EXPECT_EQ(fs::Result::corrupted, Mount());
 }
 
 TEST_F(NorMountTest, skips_a_journal_block_whose_link_names_another_end)
