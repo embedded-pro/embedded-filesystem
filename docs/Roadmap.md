@@ -71,13 +71,25 @@ The formatter comes early, because every later test and the metrics need formatt
 
 ## Phase 7: NOR
 
-1. Format, block headers and the mount scan.
-2. Journal, checkpoints and CRC-protected records.
-3. The copy-on-write map and the node cache.
-4. Inodes, files and directories, with inline data.
-5. Background erase, the pre-erased pool and garbage collection of node blocks.
-6. Dynamic wear leveling, then static wear leveling.
-7. Exhaustive power-cut sweep.
+The design is settled in [NorFilesystem.md](NorFilesystem.md) first.
+As for FAT, the formatter and an independent checker come early, and every step that adds a write path adds its cases to the power-cut sweep in `metrics/nor`, which holds at 100 % with the interrupted program or erase not started, partial and completed.
+
+1. On-flash structures: the geometry and the checks of `fs::NorConfig`, the superblock, the block header, the node header and the records, with `fs::CrcRecord` in `fs/common`.
+2. `fs::NorFileSystem::Format`.
+3. The independent checker of NOR images, the small device models of the sweep, and the sweep of `Format`.
+4. `fs::NorImageBuilder`, and mount and unmount with the lifecycle of a volume: the scan of the headers, the erase counts, the checkpoint, the journal chain and the states of the blocks.
+5. The copy-on-write B+-tree and radix tree over the node cache.
+6. Lookup by path, `Stat`, `OpenDirectory` and `Next`.
+7. Reading files, through the data map and the inline area.
+8. Writing records and checkpoints, with replay through the same path, and `MakeDirectory` as the first operation in the sweep.
+9. Creating files and appending in place, with the buffer of a page, the inline area, `Sync` and `Close`.
+10. Overwriting by copy-on-write, `Truncate` and `Remove`.
+11. `Rename`, and the NOR subject of the metrics, reported without targets.
+12. Background work: the pre-erased pool and its watermark, dynamic wear leveling, the background checkpoint, `Usage` and the reserve.
+13. Garbage collection of node blocks.
+14. Static wear leveling with its foreground fallback, the counters of the volume, and WL-4.
+15. The targets of the NOR subject: `metrics::NorTargets`, the W-6 bound, the charge of erases, the W-2 periods, the ratio of R-2, the wear metrics on the lifetime run, the factor and the ratio in `merge_report.py`, and `littlefs/ram-matched` sized to the NOR subject.
+16. The exhaustive sweep of every operation and background step, and P-1.
 
 ## Phase 8: on target
 

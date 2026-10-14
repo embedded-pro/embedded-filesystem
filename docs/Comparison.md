@@ -15,7 +15,7 @@ Metric identifiers such as W-2 refer to [Metrics.md](Metrics.md).
 |----------------------------|--------------------------------------------------------|---------------------------------------------------------------|-----------------------------------------------------------------------------------|
 | Execution model            | Blocking `disk_read`/`disk_write` calls                | Blocking `read`/`prog`/`erase` callbacks                      | Asynchronous, completions through `infra::EventDispatcher`, no RTOS thread needed |
 | Memory                     | Static objects, optional heap for long file names      | Static buffers or `malloc`                                    | Static only, sized at compile time                                                |
-| Free space on NOR          | Not applicable                                         | Walks the filesystem whenever the lookahead window is used up | Bitmap in RAM, built once at mount, O(1) allocation                               |
+| Free space on NOR          | Not applicable                                         | Walks the filesystem whenever the lookahead window is used up | Block states in RAM, built once at mount; allocation without flash access         |
 | Writing inside large files | Cluster chain walked from the start on reopen and seek | A write before the end rewrites every block up to the end     | NOR: index tree, O(depth). FAT: extent cache kept per open file                   |
 | Wear leveling              | None, left to the card                                 | Dynamic only                                                  | NOR: dynamic and static. FAT: left to the card                                    |
 | Erase latency              | Not applicable                                         | Erases inline, inside the write that needs the block          | Pre-erased pool, refilled in the background                                       |
@@ -42,9 +42,9 @@ Recent versions offer `lfs_fs_gc` to do part of this work ahead of time, but it 
 littlefs stores file data as a backwards-linked skip-list (a CTZ skip-list).
 Appending to the end is cheap, but writing anywhere before the end rewrites every block from that point up to the end of the file, so the cost of the write grows with the size of the file.
 
-embedded-filesystem keeps a free-block bitmap in RAM, built once at mount and kept up to date by the journal, so allocation never traverses the volume.
+embedded-filesystem keeps the state of every block in RAM, built once at mount and kept up to date by the journal, so allocation never traverses the volume.
 File data is reached through a shallow index tree that is updated copy-on-write along a single path, so an overwrite costs the same in a small file and in a large one.
-Small appends are recorded in the journal with their data, so an append followed by a sync costs a constant amount of flash work.
+Small appends are programmed in place at the end of the last block of the file and committed by a small journal record, so an append followed by a sync costs a constant amount of flash work.
 Measured by W-2 (append cost against file size), W-3 (append cost against fill level), W-5 (overwrite cost against file size) and R-2 (read cost against file size).
 
 ## Wear leveling on NOR flash
@@ -88,13 +88,13 @@ littlefs mounts quickly, because it reads only its superblock and root directory
 embedded-filesystem reads the header of every block at mount to build its free-block bitmap and erase counts, which takes longer on large devices; this cost is paid once per mount instead of during writes, and is measured by R-4.
 
 littlefs needs less RAM.
-A littlefs configuration with caches of a few hundred bytes is common, while embedded-filesystem keeps two bits and one byte per erase block plus a node cache, about 7 KiB for a 16 MiB device with 4 KiB blocks, or under 3 KiB with 64 KiB blocks; see [NorFilesystem.md](NorFilesystem.md#ram-use).
+A littlefs configuration with caches of a few hundred bytes is common, while embedded-filesystem keeps two bits and one byte per block plus a node cache of 8 KiB by default, about 14 KiB for a 16 MiB device with 4 KiB blocks, or about 9 KiB with 64 KiB blocks; see [NorFilesystem.md](NorFilesystem.md#ram-use).
 This is the price of allocation without traversal and of wear leveling based on actual erase counts.
 
 On SD cards, FatFs needs less RAM as well: about 1.7 KiB with one open file, against about 5.8 KiB for `fs::FatFileSystem::WithStorage<2, 8>` on a 32-bit target.
 Most of that is the sector cache that collects small writes into multi-block requests; a smaller cache needs less RAM and coalesces fewer writes.
 
 littlefs stores small files inline in their metadata, which uses flash space efficiently for many tiny files.
-embedded-filesystem allocates file data in whole blocks in its first version, so many very small files use more space.
+embedded-filesystem keeps only files of up to 64 bytes in the record of their inode, and allocates larger files in whole blocks in its first version, so many small files use more space.
 
 The code size of the two libraries is well known and small; the code size of embedded-filesystem is measured by F-1 and compared with both.

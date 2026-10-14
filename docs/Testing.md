@@ -52,6 +52,7 @@ Time-dependent behaviour, such as the idle delay before background work, is test
 | `metrics::NorPowerCutSweep`, `metrics::BlockPowerCutSweep` | This repository                        | Running an operation once per cut point and mode, and verifying the image after each cut                                                                                                                                           |
 | `fs::SparseBlockDevice`                                    | This repository, `fs/fat/test_doubles` | Block device that stores only blocks that are not all zeros, so that FAT32 volumes of tens of megabytes fit in a few kilobytes                                                                                                     |
 | `fs::FatImageBuilder`                                      | This repository, `fs/fat/test_doubles` | Arranging directories, files, fragmented chains and raw entries synchronously on a volume, before the operation under test                                                                                                         |
+| `fs::NorImageBuilder`                                      | This repository, `fs/nor/test_doubles` | Arranging directories, files and raw blocks, records and nodes synchronously on a NOR image, before the operation under test                                                                                                       |
 
 ## Power-cut sweep
 
@@ -86,6 +87,21 @@ Chains longer than their file, lost clusters, orphaned long name entries and cop
 The run without a cut must pass the checker in its strict mode, which allows none of these.
 A volume that is marked clean after a cut must also pass the strict mode, because a PC does not check it, and the run without a cut of a case that ends with `Unmount` must leave it marked clean.
 The checker is itself checked against the images that the interoperability tests write with `mtools`: it must accept them in its strict mode and read back every file they hold.
+
+On NOR volumes, the sweep runs in `metrics/nor` on small device models: one with a program unit of 1 byte, one with a program unit of 16 bytes, and one with two sectors per block.
+Every cut is made with the interrupted program or erase not started, partial and completed, and every mode must hold in every cut; a NOR device has no write cache, so there is no loss or reordering of earlier writes to model.
+After each cut, the sweep checks that:
+
+* the library mounts the volume;
+* an independent checker, which parses the image without the code of `fs/nor`, finds valid superblocks, a checkpoint with a valid CRC, a journal whose records replay without a mismatch, every node of every map with a valid CRC and reachable once, every block that the state uses marked in use with a header of the right type and owner, and no block used twice;
+* no program unit was programmed twice since its last erase, as counted by `metrics::MeteredFlash`;
+* every file holds, byte by byte, either its contents before the interrupted operation or its contents after it;
+* a file or directory that was being created or removed exists with its previous contents or not at all, one that was being renamed exists under exactly one of its old and new names with its contents, and no other entry appeared or disappeared.
+
+The cases cover every operation that writes, the start of a new journal block after a mount, checkpoints, the background work of erasing, collecting node blocks and moving blocks, and chains of a cut, a mount, an append and another cut.
+`Format` is swept too: after a cut, the mount either completes with `corrupted` or finds the new, empty volume.
+Small configurations, with a few cached nodes and a short journal, make the sweep cross journal blocks and checkpoints within a few operations.
+Unlike FAT, a NOR volume allows nothing extra after a cut: blocks that an interrupted operation allocated are free, because no committed state refers to them, so the run without a cut and the runs with a cut pass the same checks.
 
 ## Interoperability tests for FAT
 

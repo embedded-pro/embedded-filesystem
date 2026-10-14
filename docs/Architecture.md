@@ -81,7 +81,7 @@ A queue must outlive the claims on it, so its claimers are declared after it; a 
 Background work, such as erasing obsolete NOR blocks or scanning the FAT for free clusters, runs only when the queue is empty and after a configurable idle delay.
 The idle delay starts when a foreground operation releases the queue and no other operation is waiting, so a volume without work never wakes the processor.
 Background work claims the queue like an operation, and checks before every device request whether a foreground operation is waiting; if one is, it releases the queue and continues after the next idle delay.
-A foreground operation that arrives while background work is running therefore waits for at most one device request, for instance one sector erase; W-6 in [Metrics.md](Metrics.md) measures this.
+A foreground operation that arrives while background work is running therefore waits for at most one device request, for instance one sector erase, or on a NOR volume for one checkpoint or one block move, which run as one unit; W-6 in [Metrics.md](Metrics.md) measures this.
 
 ### Lifecycle state machines
 
@@ -97,7 +97,7 @@ Unmounted --Mount--> Mounting --Mounted--> Mounted --Unmount--> Unmounting --Unm
 
 A volume that cannot be mounted, because the device fails or the volume is corrupted, ends in `Fault`, and so does a volume whose medium is removed; `Mount` starts again from `Fault`.
 A FAT volume reports the corruption that an operation finds to that operation and stays mounted, so that other files remain accessible, as described in [Fat.md](Fat.md#corruption).
-Background work has its own machine, for instance `Idle`, `Collecting` and `Erasing` on NOR volumes.
+Background work has its own machine, for instance `Stopped`, `Waiting`, `Claiming` and `Working` on NOR volumes, where each unit of work is a checkpoint, a sector erase or a block move.
 Device completions are passed to the machine through `Completion<Ev>()`, so a completion that arrives after the machine has left the state that started it, for instance after the card was removed, is discarded instead of corrupting the volume.
 The completions of `Mount` and `Unmount` are delivered through the deferred completions, so a callback that mounts or unmounts again does not re-enter the machine while it is still dispatching.
 
@@ -302,6 +302,7 @@ Each one is sized at compile time:
 | `fs::SectorCache::WithStorage<Sectors, SectorSize>` | Sectors buffers of SectorSize bytes, 512 by default; see [Fat.md](Fat.md) | Sectors buffers and their entries                    |
 | `fs::FlushBarrier`                                  | One per block device, in front of it                                      | The lowest rank written since the last flush         |
 | `fs::DirectTransfers`                               | One per volume, next to its sector cache                                  | One transfer in flight                               |
+| `fs::CrcRecord`                                     | The buffer of the caller                                                  | None: it frames and checks records in place          |
 
 ### Paths
 
@@ -324,6 +325,10 @@ Every write of a FAT volume carries the rank of the sector cache described in [F
 `SectorCache::Flush` writes back every modified sector in rank order and then flushes the device, which is what `Sync` and the barriers between the steps of an operation use.
 `fs::DirectTransfers` moves whole sectors between a buffer and the device: a read is overlaid with the sectors the cache holds, and a write or a discard first drops them from the cache.
 
+### Records
+
+`fs::CrcRecord` frames a record in a buffer as its length, its number of entries, the entries and a CRC, and checks a record that was read back, as described in [NorFilesystem.md](NorFilesystem.md#records); the entries themselves belong to the filesystem that writes them.
+
 ### Device results
 
 The results of `hal::BlockDevice` are mapped onto `fs::Result` by `fs::ToResult`:
@@ -335,6 +340,8 @@ The results of `hal::BlockDevice` are mapped onto `fs::Result` by `fs::ToResult`
 | `writeProtected`                   | `readOnly`     | The card is locked                                     |
 | `outOfRange`                       | `corrupted`    | The volume points outside the device                   |
 | `timeout`, `crcError` and `failed` | `deviceError`  | The device failed; the medium itself may still be good |
+
+The completions of `hal::Flash` carry no result, so a NOR volume never completes with `deviceError`; a header, record or node whose CRC does not match completes the operation with `corrupted`.
 
 ## Configuration
 
@@ -348,8 +355,7 @@ constexpr fs::NorConfig norConfig{
     .maxBlocks = 4096,
     .sectorsPerBlock = 1,
     .programUnit = 1,
-    .reserveBlocks = 8,
-    .staticWearLevelingThreshold = 64,
+    .pageSize = 256,
 };
 
 hal::Flash& norFlash = ...;
@@ -357,8 +363,8 @@ fs::NorFileSystem::WithStorage<norConfig, 4> norVolume{ norFlash };
 ```
 
 For FAT, the template arguments are the number of open files and the number of sectors in the cache, followed by an optional `fs::FatLimits` with the other sizes; `fs::FatConfig` holds the settings that need no storage, such as the allocation unit of the card and the timer service that gives the time of timestamps, as described in [Fat.md](Fat.md#configuration).
-For NOR, they are the configuration and the number of open files.
-The free-block bitmap and the erase-count table are sized by `maxBlocks`, the largest number of erase blocks the volume may span, as described in [NorFilesystem.md](NorFilesystem.md); mounting a device with more blocks fails with `Result::unsupported`.
+For NOR, they are the configuration and the number of open files; the constructor takes the device and an optional idle delay, as described in [NorFilesystem.md](NorFilesystem.md#configuration).
+The block states and the erase-count table are sized by `maxBlocks`, the largest number of blocks the volume may span; mounting a device with more blocks fails with `Result::unsupported`.
 
 ## Testing
 

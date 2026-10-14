@@ -63,28 +63,39 @@ The shim exists only in the metrics harness; it is the blocking adapter that an 
 | Subject                | Version                               | Configuration                                                                                                                                                                                             |
 |------------------------|---------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `littlefs/default`     | v2.11.3                               | The example of the littlefs README: read and program size 16 B, cache 16 B, lookahead 16 B, 500 block cycles                                                                                              |
-| `littlefs/ram-matched` | v2.11.3                               | Read and program size 16 B, cache 2048 B and lookahead 1536 B, which is 7680 B of buffers with one open file, 500 block cycles, and `lfs_fs_gc` when the volume is idle                                   |
+| `littlefs/ram-matched` | v2.11.3                               | Read and program size 16 B, cache and lookahead sized so that its buffers with one open file use the RAM of `embedded-filesystem/nor`, 500 block cycles, and `lfs_fs_gc` when the volume is idle          |
 | `fatfs/default`        | R0.16, from the `abbrev/fatfs` mirror | The `ffconf.h` of FatFs, with what the workloads need: formatting, long file names in a static buffer, code page 437 and no real-time clock                                                               |
 | `fatfs/tuned`          | R0.16, from the `abbrev/fatfs` mirror | As `fatfs/default`, with fast seek on files opened for reading (a link map of 64 entries), `f_expand` for `ExpectSize`, trim mapped to a discard, and `f_mkfs` aligned to the allocation unit of the card |
 
-littlefs runs on `nor-qspi-16m` and `internal-flash`, and on `nor-qspi-1m` for the lifetime metric WL-3; both FatFs variants run on `sd-card-256m`.
+littlefs runs on `nor-qspi-16m` and `internal-flash`, and on `nor-qspi-1m` for the lifetime run of L5; both FatFs variants run on `sd-card-256m`.
 On `internal-flash`, the file sizes of the workloads are divided by 64, so that they fit on 512 KiB.
 FatFs symbols are global and its options are compile-time, so every FatFs variant is built from its own copy of the sources next to an `ffconf.h` generated from the upstream one, and runs in its own executable.
 The RAM reported for a subject is the size of its state and buffers with one open file, which is what every workload needs.
 
 ### Subjects of embedded-filesystem
 
-| Subject                   | Device         | Configuration                                                                                                                                                                                                  |
-|---------------------------|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `embedded-filesystem/fat` | `sd-card-256m` | `fs::FatFileSystem::WithStorage<2, 8>` with the allocation unit of the model and the default timer service, on a volume formatted by `fs::FatFormatter` with its defaults and the allocation unit of the model |
+| Subject                   | Device                                                                         | Configuration                                                                                                                                                                                                  |
+|---------------------------|--------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `embedded-filesystem/fat` | `sd-card-256m`                                                                 | `fs::FatFileSystem::WithStorage<2, 8>` with the allocation unit of the model and the default timer service, on a volume formatted by `fs::FatFormatter` with its defaults and the allocation unit of the model |
+| `embedded-filesystem/nor` | `nor-qspi-16m`, `internal-flash`, and `nor-qspi-1m` for the lifetime run of L5 | `fs::NorFileSystem::WithStorage<config, 2>` with the defaults of `fs::NorConfig` and the program unit and page size of the model, on a volume formatted by `fs::NorFileSystem::Format`                         |
 
 The subjects of embedded-filesystem measure the defaults a product gets, such as the 2 copies of the FAT that the formatter writes, not a configuration chosen to match a baseline.
+On `internal-flash`, the NOR subject divides the file sizes of the workloads by 64, as littlefs does.
 P-1 is recorded from the power-cut sweep of each filesystem, on the small device models of the sweep.
+
+### Erases on NOR
+
+`fs::NorFileSystem::Format` leaves every block erased, and the NOR filesystem erases free blocks in the background, so how many erases a phase of a workload performs depends on how much of the pre-erased pool the phases before it left, and not only on the phase itself.
+On `nor-qspi-16m`, the 4 KiB writes of L1 find a pre-erased pool and run several times faster than any erase-bound filesystem could, while on `internal-flash` the pool runs out during the largest file of L3, so that only that phase pays foreground erases.
+So W-1, W-2, W-3 and W-5 charge the NOR subject one typical erase of a whole block for every block it allocated during the phase, instead of the erases it performed during the phase.
+The volume counts the blocks it allocates, and the subject reports the count with every call.
+The charge measures what sustained work costs: every block that is written was erased once, wherever that erase happened.
 
 ### Baseline results
 
 These are the first results of the baselines, on the typical timings of the device models above, except W-6, which uses the maximum timings.
 The metrics workflow measures them again on every pull request, and the full report is its `metrics.md`.
+The results of `littlefs/ram-matched` were measured with a cache of 2048 B and a lookahead of 1536 B, 7680 B of buffers with one open file, before it was sized to the RAM of `embedded-filesystem/nor`.
 
 On `nor-qspi-16m`, with the littlefs configurations of the [baselines](#baselines):
 
@@ -150,39 +161,55 @@ The volume is filled until the usage reported by the filesystem reaches the fill
 
 ## Write metrics
 
-| Id  | Metric                      | Definition                                                                                              | Workloads | Target                                                                                                                                          |
-|-----|-----------------------------|---------------------------------------------------------------------------------------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| W-1 | Sequential write throughput | User bytes written divided by total device time                                                         | L1        | At least the best baseline                                                                                                                      |
-| W-2 | Append scaling              | Device time of one append and `Sync` when the file holds 4 MiB, divided by the same when it holds 4 KiB | L2        | At most 1.1, for NOR and FAT                                                                                                                    |
-| W-3 | Fill scaling                | Device time of one append and `Sync` on a 90 % full volume, divided by the same on a 10 % full volume   | L2        | At most 1.2                                                                                                                                     |
-| W-4 | Write amplification         | Bytes programmed on the device divided by user bytes written                                            | L1, L2    | At most 1.1 for L1; reported for L2                                                                                                             |
-| W-5 | Overwrite scaling           | Device time of one overwrite in a 4 MiB file, divided by the same in a 64 KiB file                      | L3        | At most 1.2 on NOR                                                                                                                              |
-| W-6 | Call latency                | 99th percentile and maximum of the simulated latency of one call                                        | L2, L3    | Maximum at maximum timings, independent of file size and fill level: NOR at most one sector erase and one block program; FAT at most one commit |
+| Id  | Metric                      | Definition                                                                                              | Workloads | Target                                                                                                                    |
+|-----|-----------------------------|---------------------------------------------------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------------------------------------------|
+| W-1 | Sequential write throughput | User bytes written divided by total device time                                                         | L1        | At least the best baseline; on NOR at least 0.97 times it                                                                 |
+| W-2 | Append scaling              | Device time of one append and `Sync` when the file holds 4 MiB, divided by the same when it holds 4 KiB | L2        | At most 1.1, for NOR and FAT                                                                                              |
+| W-3 | Fill scaling                | Device time of one append and `Sync` on a 90 % full volume, divided by the same on a 10 % full volume   | L2        | At most 1.2                                                                                                               |
+| W-4 | Write amplification         | Bytes programmed on the device divided by user bytes written                                            | L1, L2    | At most 1.1 for L1; reported for L2                                                                                       |
+| W-5 | Overwrite scaling           | Device time of one overwrite in a 4 MiB file, divided by the same in a 64 KiB file                      | L3        | At most 1.2 on NOR                                                                                                        |
+| W-6 | Call latency                | 99th percentile and maximum of the simulated latency of one call                                        | L2, L3    | Maximum at maximum timings, independent of file size and fill level: at most one commit, as defined below for FAT and NOR |
 
 On FAT, one commit is 2 block writes plus one per copy of the FAT, 3 flushes and two allocation unit openings, plus the one background read that a call may wait for.
 The card keeps only its most recently written allocation units open, so the first commit after writes elsewhere opens both the unit of its data and the unit of the FAT and the directory, whichever filesystem makes it; with 2 FAT copies on `sd-card-256m` the bound is 1021.0 ms.
 
+On NOR, one commit is one sector erase, either of the background or of the call itself when the pre-erased pool is below its watermark, plus one checkpoint or one static wear leveling move, whichever takes longer, plus the copy-on-write of two blocks with their part B, one record and the start of a new journal block.
+A checkpoint is the programming of `cachedNodes` nodes, of part B of the node blocks they need, and of the checkpoint block.
+`metrics::NorTargets` computes the bound from the maximum timings of the model and the default configuration; on `nor-qspi-16m` it is about 631 ms.
+The 0.97 of W-1 on NOR allows for the header of every block, which leaves 4060 of 4096 bytes for data on `nor-qspi-16m`, where littlefs writes all of them.
+W-2 on NOR averages windows that start after a checkpoint and span 4 whole checkpoint periods, counted by the volume, instead of 64 appends: a checkpoint costs more than 64 appends of 64 bytes, so a window of 64 appends would measure whether it holds a checkpoint rather than the size of the file.
+
 ## Read metrics
 
-| Id  | Metric                     | Definition                                                                                  | Workloads | Target                                                                                                                   |
-|-----|----------------------------|---------------------------------------------------------------------------------------------|-----------|--------------------------------------------------------------------------------------------------------------------------|
-| R-1 | Sequential read throughput | User bytes read divided by total device time                                                | L6        | At least the best baseline                                                                                               |
-| R-2 | Random read cost           | Device read requests for one random 512 B read, as a function of the file size              | L6        | NOR: at most 4, with a ratio of at most 1.2 between 64 KiB and 4 MiB files. FAT: 1 once the extent cache covers the file |
-| R-3 | Lookup cost                | Device time to open a file by path, as a function of the number of entries in its directory | L6        | Reported                                                                                                                 |
-| R-4 | Mount time                 | Device time to mount, as a function of the device size and the fill level                   | L7        | Reported                                                                                                                 |
-| R-5 | Read amplification         | Bytes read from the device divided by user bytes read                                       | L6        | At most 1.1 for sequential reads                                                                                         |
+| Id  | Metric                     | Definition                                                                                  | Workloads | Target                                                                                                                  |
+|-----|----------------------------|---------------------------------------------------------------------------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------|
+| R-1 | Sequential read throughput | User bytes read divided by total device time                                                | L6        | At least the best baseline                                                                                              |
+| R-2 | Random read cost           | Device read requests for one random 512 B read, as a function of the file size              | L6        | NOR: at most 4, and a ratio of at most 1.2 between 4 MiB and 64 KiB files. FAT: 1 once the extent cache covers the file |
+| R-3 | Lookup cost                | Device time to open a file by path, as a function of the number of entries in its directory | L6        | Reported                                                                                                                |
+| R-4 | Mount time                 | Device time to mount, as a function of the device size and the fill level                   | L7        | Reported                                                                                                                |
+| R-5 | Read amplification         | Bytes read from the device divided by user bytes read                                       | L6        | At most 1.1 for sequential reads                                                                                        |
+
+The ratio of R-2 on NOR is recorded as its own result, `L6 random ratio`: the device reads of a random read in the 4 MiB file divided by those in the 64 KiB file.
+It is asserted on `nor-qspi-16m`; on `internal-flash`, where the file sizes are divided by 64, the smaller file fits in one block, so none of its reads straddles two blocks, and the ratio is only reported.
 
 ## Wear metrics
 
 These apply to the NOR filesystem.
 For SD cards and eMMC, wear leveling is done by the card, and the device metrics below measure how friendly the access pattern is to the card instead.
 
-| Id   | Metric              | Definition                                                                                                                     | Workloads | Target                          |
-|------|---------------------|--------------------------------------------------------------------------------------------------------------------------------|-----------|---------------------------------|
-| WL-1 | Erase spread        | Highest erase count divided by the mean erase count                                                                            | L4, L5    | At most 1.2 on L5               |
-| WL-2 | Leveling efficiency | Mean erase count divided by the highest erase count                                                                            | L4, L5    | At least 0.8 on L5              |
-| WL-3 | Lifetime            | User bytes written until the first block reaches its endurance, on `nor-qspi-1m` with the endurance scaled down to 1000 erases | L5        | Reported as a ratio to littlefs |
-| WL-4 | Leveling overhead   | Erases caused by static wear leveling divided by all erases                                                                    | L5        | At most 5 %                     |
+| Id   | Metric              | Definition                                                                                                                     | Workloads | Target                               |
+|------|---------------------|--------------------------------------------------------------------------------------------------------------------------------|-----------|--------------------------------------|
+| WL-1 | Erase spread        | Highest erase count divided by the mean erase count                                                                            | L4, L5    | At most 1.2 on the L5 lifetime run   |
+| WL-2 | Leveling efficiency | Mean erase count divided by the highest erase count                                                                            | L4, L5    | At least 0.8 on the L5 lifetime run  |
+| WL-3 | Lifetime            | User bytes written until the first block reaches its endurance, on `nor-qspi-1m` with the endurance scaled down to 1000 erases | L5        | Reported, with its ratio to littlefs |
+| WL-4 | Leveling overhead   | Erases caused by static wear leveling divided by all erases                                                                    | L5        | At most 5 % on the L5 lifetime run   |
+
+The short run of L5 on `nor-qspi-16m` stops at a mean of 4 erases per sector.
+That is too short to level 70 % of static data cheaply: keeping the highest count within 1.2 times the mean after 4 erases per block takes about three moves per static block, about half of all erases.
+On a long run, a static block moves once every `staticWearLevelingThreshold` erases of the others, so the moves cost about 0.7 divided by the threshold of all erases, and the spread stays within the threshold.
+So every NOR subject also records WL-1 and WL-2 on the lifetime run of L5 on `nor-qspi-1m`, which reaches a mean of several hundred erases, and the targets apply there; on L4 and on the short run of L5 they are reported.
+WL-4 counts the moves of static wear leveling from the counters of the volume, and is recorded only for `embedded-filesystem/nor`.
+WL-3 is reported, and `merge_report.py` adds its ratio to the best littlefs subject to the summary.
 
 ## Device metrics for SD cards and eMMC
 
@@ -194,9 +221,9 @@ For SD cards and eMMC, wear leveling is done by the card, and the device metrics
 
 ## Robustness metrics
 
-| Id  | Metric          | Definition                                                                                                           | Target                                                                                                                                   |
-|-----|-----------------|----------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| P-1 | Power-cut sweep | Share of cut points after which the volume mounts consistently and every file holds its previous or its new contents | NOR: 100 %. FAT: 100 % with atomic sector writes, also when unflushed writes are lost or reordered, and reported with torn sector writes |
+| Id  | Metric          | Definition                                                                                                           | Target                                                                                                                                                                                                            |
+|-----|-----------------|----------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| P-1 | Power-cut sweep | Share of cut points after which the volume mounts consistently and every file holds its previous or its new contents | NOR: 100 %, with the interrupted program or erase not started, partial or completed. FAT: 100 % with atomic sector writes, also when unflushed writes are lost or reordered, and reported with torn sector writes |
 
 The sweep is described in [Testing.md](Testing.md).
 
@@ -243,8 +270,8 @@ Every metric executable writes a fragment with the device models it used and one
 }
 ```
 
-The targets of a subject come from its `metrics::Targets`, which the metric executable gives to its `metrics::MetricRecorder`: `metrics::FatTargets` for the FAT subject and its power-cut sweep, computing the W-6 bound from the timings of the device model; baselines record no targets.
-A target is either a bound, such as `<= 1.1`, which the metric executable decides, or a comparison with other subjects, such as `>= baselines` (the best of FatFs and littlefs) or `<= fatfs` (the best FatFs configuration), which is decided when the fragments are merged.
+The targets of a subject come from its `metrics::Targets`, which the metric executable gives to its `metrics::MetricRecorder`: `metrics::FatTargets` for the FAT subject and its power-cut sweep, and `metrics::NorTargets` for the NOR subject and its power-cut sweep, each computing the W-6 bound from the timings of the device model; baselines record no targets.
+A target is either a bound, such as `<= 1.1`, which the metric executable decides, or a comparison with other subjects, such as `>= baselines` (the best of FatFs and littlefs), `<= fatfs` (the best FatFs configuration) or `>= 0.97 baselines` (0.97 times the best baseline), which is decided when the fragments are merged.
 `metrics/report/merge_report.py` merges the fragments into `metrics.json`, with the same shape, and writes a Markdown summary of it, `metrics.md`.
 Given the `metrics.json` of `main` with `--baseline`, it marks a reported metric of embedded-filesystem as failed when it is worse than on `main` by more than 5 %, in the direction given by `better`; results on a device model whose parameters changed, and results that the metric executables mark as `diagnostic`, are not compared.
 The metrics workflow posts the summary as a comment on the pull request, updating the same comment on every push.
@@ -254,6 +281,7 @@ The `metrics.json` of `main` is kept as a workflow artifact and used to detect r
 
 Every subject, embedded-filesystem and the baselines alike, implements `metrics::FileSystemUnderTest`, an asynchronous interface whose operations complete through callbacks.
 `metrics::Runner` calls the subject, checks that no call completes before the event dispatcher runs, runs the virtual clock until the call completes, and records the latency, the device work and the result of every call, together with the phase of the workload it belongs to.
+A subject whose volume counts its allocations and checkpoints, as `embedded-filesystem/nor` does, reports them too, and the runner records them with every call.
 Idle periods and settling are recorded too, so that background work counts.
 The workloads in `metrics/workload/Workloads.cpp` drive the runner, and `metrics/workload/MetricComputations.cpp` turns the records of a phase into the metrics of this document.
 Phases are named after the workload and its parameters, such as `L1 1048576 64` for 64 B chunks in a 1 MiB file, or `L6 lookup 100` for lookups in a directory of 100 entries.
