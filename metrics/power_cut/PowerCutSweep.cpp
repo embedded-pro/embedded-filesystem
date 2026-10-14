@@ -3,6 +3,7 @@
 #include "metrics/device/MeteredBlockDevice.hpp"
 #include "metrics/device/MeteredFlash.hpp"
 #include "metrics/device/VirtualTimeEnvironment.hpp"
+#include <algorithm>
 
 namespace metrics
 {
@@ -29,6 +30,34 @@ namespace metrics
                 return name + "+lossOfUnflushedWrites";
 
             return cut.unflushed == UnflushedWrites::reordered ? name + "+reorderedUnflushedWrites" : name;
+        }
+
+        void MarkProgrammedUnits(MeteredFlash& metered, const std::vector<std::vector<uint8_t>>& sectors, uint32_t programUnit)
+        {
+            uint32_t address = 0;
+            for (const auto& sector : sectors)
+            {
+                for (std::size_t start = 0; start < sector.size(); start += programUnit)
+                {
+                    auto unit = sector.begin() + static_cast<std::ptrdiff_t>(start);
+                    auto end = unit + static_cast<std::ptrdiff_t>(std::min<std::size_t>(programUnit, sector.size() - start));
+                    if (std::ranges::any_of(unit, end, [](uint8_t byte)
+                            {
+                                return byte != 0xff;
+                            }))
+                        metered.MarkProgrammed(address + static_cast<uint32_t>(start), 1);
+                }
+
+                address += static_cast<uint32_t>(sector.size());
+            }
+        }
+
+        std::optional<std::string> Rewrites(const MeteredFlash& metered)
+        {
+            if (metered.Counters().programUnitRewrites != 0)
+                return "a program unit was programmed twice without an erase";
+
+            return std::nullopt;
         }
 
         void Record(SweepResult& result, std::optional<uint64_t> step, std::string mode, std::optional<std::string> reason)
@@ -93,35 +122,41 @@ namespace metrics
     {
         flash.sectors = image;
         uint64_t writeSteps = 0;
+        std::optional<std::string> rewrites;
 
         {
             VirtualTimeEnvironment environment;
             PowerCutFlash power{ flash };
             MeteredFlash metered{ power, model };
+            MarkProgrammedUnits(metered, image, model.programUnit);
             Context context{ environment.Time(), metered };
             operation(context);
             writeSteps = power.WriteSteps();
+            rewrites = Rewrites(metered);
         }
 
-        Record(result, std::nullopt, "uncut", VerifyImage(verify));
+        Record(result, std::nullopt, "uncut", rewrites ? rewrites : VerifyImage(verify));
         return writeSteps;
     }
 
     void NorPowerCutSweep::CutRun(const NorCut& cut, const Phase& operation, const Verify& verify, SweepResult& result)
     {
         flash.sectors = image;
+        std::optional<std::string> rewrites;
 
         {
             VirtualTimeEnvironment environment;
             PowerCutFlash power{ flash };
             power.Arm(cut);
             MeteredFlash metered{ power, model };
+            MarkProgrammedUnits(metered, image, model.programUnit);
             Context context{ environment.Time(), metered };
             operation(context);
+            rewrites = Rewrites(metered);
         }
 
         ++result.runs;
-        Record(result, cut.step, Name(cut.mode), VerifyImage(verify));
+        Record(result, cut.step, Name(cut.mode), rewrites ? rewrites : VerifyImage(verify));
     }
 
     std::optional<std::string> NorPowerCutSweep::VerifyImage(const Verify& verify)

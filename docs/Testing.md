@@ -94,7 +94,7 @@ After each cut, the sweep checks that:
 
 * the library mounts the volume;
 * an independent checker, which parses the image without the code of `fs/nor`, finds valid superblocks, a checkpoint with a valid CRC, a journal whose records replay without a mismatch, every node of every map with a valid CRC and reachable once, every block that the state uses marked in use with a header of the right type and owner, and no block used twice;
-* no program unit was programmed twice since its last erase, as counted by `metrics::MeteredFlash`;
+* no program unit was programmed twice since its last erase, as counted by `metrics::MeteredFlash`, which takes every unit that does not read erased when the operation starts as programmed;
 * every file holds, byte by byte, either its contents before the interrupted operation or its contents after it;
 * a file or directory that was being created or removed exists with its previous contents or not at all, one that was being renamed exists under exactly one of its old and new names with its contents, and no other entry appeared or disappeared.
 

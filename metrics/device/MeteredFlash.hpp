@@ -25,6 +25,8 @@ namespace metrics
         void ReadBuffer(infra::ByteRange buffer, uint32_t address, infra::Function<void()> onDone) override;
         void EraseSectors(uint32_t beginIndex, uint32_t endIndex, infra::Function<void()> onDone) override;
 
+        void MarkProgrammed(uint32_t address, std::size_t size);
+
         const FlashCounters& Counters() const;
         const std::vector<uint32_t>& EraseCounts() const;
         const NorModel& Model() const;

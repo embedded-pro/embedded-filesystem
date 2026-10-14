@@ -178,6 +178,54 @@ TEST(PowerCutSweepTest, the_operation_sees_its_device_stop_when_power_is_cut)
     EXPECT_EQ((std::vector<bool>{ true, false }), firstWriteCompleted);
 }
 
+TEST(PowerCutSweepTest, a_run_that_programs_a_unit_twice_without_an_erase_is_inconsistent)
+{
+    metrics::NorPowerCutSweep sweep{ smallNor, { metrics::NorCutMode::completed } };
+
+    auto result = sweep.Run(Nothing, [](metrics::NorPowerCutSweep::Context& context)
+        {
+            if (Program(context, infra::MakeRange(record), 0))
+                Program(context, infra::MakeRange(record), 2);
+        },
+        CommittedRecordIsComplete);
+
+    ASSERT_EQ(2, result.failures.size());
+    EXPECT_EQ(std::nullopt, result.failures[0].step);
+    EXPECT_EQ("a program unit was programmed twice without an erase", result.failures[0].reason);
+    EXPECT_EQ(1, result.failures[1].step);
+}
+
+TEST(PowerCutSweepTest, a_unit_that_the_set_up_programmed_counts_as_programmed)
+{
+    metrics::NorPowerCutSweep sweep{ smallNor, { metrics::NorCutMode::completed } };
+    static constexpr std::array<uint8_t, 1> marker{ 0x42 };
+
+    auto result = sweep.Run([](metrics::NorPowerCutSweep::Context& context)
+        {
+            Program(context, infra::MakeRange(marker), 3);
+        },
+        WriteRecordThenCommit, CommittedRecordIsComplete);
+
+    ASSERT_FALSE(result.failures.empty());
+    EXPECT_EQ("a program unit was programmed twice without an erase", result.failures[0].reason);
+}
+
+TEST(PowerCutSweepTest, a_unit_that_reads_erased_after_the_set_up_may_be_programmed)
+{
+    metrics::NorPowerCutSweep sweep{ smallNor };
+    static constexpr std::array<uint8_t, 1> erased{ 0xff };
+    static constexpr std::array<uint8_t, 1> marker{ 0x42 };
+
+    auto result = sweep.Run([](metrics::NorPowerCutSweep::Context& context)
+        {
+            Program(context, infra::MakeRange(erased), 0);
+            Program(context, infra::MakeRange(marker), 100);
+        },
+        WriteRecordThenCommit, CommittedRecordIsComplete);
+
+    EXPECT_TRUE(result.failures.empty());
+}
+
 TEST(PowerCutSweepTest, limiting_the_cut_points_samples_them_with_a_deterministic_stride)
 {
     EXPECT_EQ((std::vector<uint64_t>{ 0, 1, 2 }), metrics::SampledCutPoints(3, std::nullopt));
