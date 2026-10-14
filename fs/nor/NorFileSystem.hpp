@@ -1,0 +1,172 @@
+#ifndef FS_NOR_NOR_FILE_SYSTEM_HPP
+#define FS_NOR_NOR_FILE_SYSTEM_HPP
+
+#include "fs/common/DeferredCompletions.hpp"
+#include "fs/common/OperationQueue.hpp"
+#include "fs/interfaces/FileSystem.hpp"
+#include "fs/nor/NorBlockStates.hpp"
+#include "fs/nor/NorConfig.hpp"
+#include "fs/nor/NorFormatter.hpp"
+#include "fs/nor/NorLifecycle.hpp"
+#include "fs/nor/NorRecord.hpp"
+#include "fs/nor/NorVolume.hpp"
+#include "hal/interfaces/Flash.hpp"
+#include "services/fsm/StateMachineDefinition.hpp"
+#include "services/fsm/TableStateMachine.hpp"
+#include <array>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+
+namespace fs
+{
+    class NorFileSystem
+        : public FileSystem
+    {
+    public:
+        template<NorConfig Config, std::size_t Files>
+        class WithStorage;
+
+        using Machine = services::TableStateMachine<NorLifecycleState, NorLifecycleEvent, NorFileSystem>;
+        using Initial = NorUnmounted;
+
+        static constexpr infra::Duration defaultIdleDelay{ std::chrono::milliseconds(10) };
+
+        static constexpr std::array<Machine::Transition, 9> Rows();
+        static constexpr Machine::Rules Rules();
+
+        void Format(const infra::Function<void(Result result)>& onDone);
+
+        void Mount(const infra::Function<void(Result result)>& onDone) override;
+        void Unmount(const infra::Function<void(Result result)>& onDone) override;
+        void Open(infra::BoundedConstString path, OpenMode mode, const infra::Function<void(Result result, infra::SharedPtr<File> file)>& onDone) override;
+        void OpenDirectory(infra::BoundedConstString path, const infra::Function<void(Result result, infra::SharedPtr<Directory> directory)>& onDone) override;
+        void Stat(infra::BoundedConstString path, const infra::Function<void(Result result, const EntryInfo& info)>& onDone) override;
+        void Remove(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone) override;
+        void Rename(infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone) override;
+        void MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone) override;
+        void Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone) override;
+
+    protected:
+        NorFileSystem(const NorVolumeParts& parts, const NorConfig& config, infra::Duration idleDelay);
+        NorFileSystem(const NorFileSystem& other) = delete;
+        NorFileSystem& operator=(const NorFileSystem& other) = delete;
+        ~NorFileSystem();
+
+    private:
+        bool IsMounted() const;
+        template<class Callback>
+        void Refuse(const Callback& onDone);
+
+        void BeginFormat();
+        void StartFormat();
+        void BeginMount();
+        void StartMount();
+        void BeginUnmount();
+        void LifecycleOperationDone(Result result);
+        void Entered(Result result);
+        void DeferCompletion(infra::Function<void(Result result)>& onDone, Result result);
+
+    private:
+        NorVolume volume;
+        OperationQueue::Claimer lifecycleClaimer;
+        Machine::WithStorage<2> lifecycle;
+        infra::Function<void(Result result)> onFormatDone;
+        infra::Function<void(Result result)> onMountDone;
+        infra::Function<void(Result result)> onUnmountDone;
+        infra::Function<void(Result result)> lifecycleDone;
+        Result lifecycleResult{ Result::success };
+    };
+
+    namespace detail
+    {
+        template<NorConfig Config, std::size_t Completions>
+        struct NorVolumeStorage
+        {
+            std::array<uint8_t, NorBlockStateBytes(Config.maxBlocks)> blockStateStorage{};
+            std::array<uint8_t, Config.maxBlocks> eraseCountStorage{};
+            std::array<uint8_t, RoundUpTo(static_cast<uint32_t>(NorLargestRecordBytes(Config.inlineBytes, Config.maxNameBytes)), Config.programUnit)> journalStorage{};
+            std::array<uint8_t, Config.cachedNodes * Config.nodeSize> nodeStorage{};
+            DeferredCompletions::WithMaxSize<Completions> deferredStorage;
+        };
+    }
+
+    template<NorConfig Config, std::size_t Files>
+    class NorFileSystem::WithStorage
+        : private detail::NorVolumeStorage<Config, Files + Config.directories + Config.pathOperations + 3>
+        , public NorFileSystem
+    {
+        static_assert(IsValidNorConfig(Config));
+        static_assert(Files > 0);
+        static_assert(NorFormatter::BufferBytes(Config) <= Config.cachedNodes * Config.nodeSize);
+
+        using Storage = detail::NorVolumeStorage<Config, Files + Config.directories + Config.pathOperations + 3>;
+
+    public:
+        explicit WithStorage(hal::Flash& flash, infra::Duration idleDelay = defaultIdleDelay)
+            : NorFileSystem(NorVolumeParts{ flash, this->deferredStorage, infra::MakeRange(this->blockStateStorage), infra::MakeRange(this->eraseCountStorage), infra::MakeRange(this->journalStorage), infra::MakeRange(this->nodeStorage) }, Config, idleDelay)
+        {}
+    };
+
+    constexpr std::array<NorFileSystem::Machine::Transition, 9> NorFileSystem::Rows()
+    {
+        return {
+            Machine::Row<NorUnmounted, NorFormatRequested, NorFormatting>(nullptr, [](NorFileSystem& volume, NorUnmounted&, const NorFormatRequested&)
+                {
+                    volume.BeginFormat();
+                    return NorFormatting{};
+                }),
+            Machine::Row<NorFault, NorFormatRequested, NorFormatting>(nullptr, [](NorFileSystem& volume, NorFault&, const NorFormatRequested&)
+                {
+                    volume.BeginFormat();
+                    return NorFormatting{};
+                }),
+            Machine::Row<NorFormatting, NorFormatDone, NorUnmounted>(nullptr, [](NorFileSystem& volume, NorFormatting&, const NorFormatDone& done)
+                {
+                    volume.lifecycleResult = done.result;
+                    return NorUnmounted{};
+                }),
+            Machine::Row<NorUnmounted, NorMountRequested, NorMounting>(nullptr, [](NorFileSystem& volume, NorUnmounted&, const NorMountRequested&)
+                {
+                    volume.BeginMount();
+                    return NorMounting{};
+                }),
+            Machine::Row<NorFault, NorMountRequested, NorMounting>(nullptr, [](NorFileSystem& volume, NorFault&, const NorMountRequested&)
+                {
+                    volume.BeginMount();
+                    return NorMounting{};
+                }),
+            Machine::Row<NorMounting, NorMountDone, NorMounted>([](NorFileSystem&, const NorMounting&, const NorMountDone& done)
+                {
+                    return done.result == Result::success;
+                }),
+            Machine::Row<NorMounting, NorMountDone, NorFault>(nullptr, [](NorFileSystem&, NorMounting&, const NorMountDone& done)
+                {
+                    return NorFault{ done.result };
+                }),
+            Machine::Row<NorMounted, NorUnmountRequested, NorUnmounting>(nullptr, [](NorFileSystem& volume, NorMounted&, const NorUnmountRequested&)
+                {
+                    volume.BeginUnmount();
+                    return NorUnmounting{};
+                }),
+            Machine::Row<NorUnmounting, NorUnmountDone, NorUnmounted>(nullptr, [](NorFileSystem& volume, NorUnmounting&, const NorUnmountDone& done)
+                {
+                    volume.lifecycleResult = done.result;
+                    return NorUnmounted{};
+                }),
+        };
+    }
+
+    constexpr NorFileSystem::Machine::Rules NorFileSystem::Rules()
+    {
+        return Machine::Rules{}
+            .Allow<NorUnmounted, NorFormatting, NorMounting>()
+            .Allow<NorFormatting, NorUnmounted>()
+            .Allow<NorMounting, NorMounted, NorFault>()
+            .Allow<NorMounted, NorUnmounting>()
+            .Allow<NorUnmounting, NorUnmounted>()
+            .Allow<NorFault, NorFormatting, NorMounting>();
+    }
+}
+
+#endif

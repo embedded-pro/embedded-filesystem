@@ -5,7 +5,9 @@ target_link_libraries(fs.nor PUBLIC
     fs.interfaces
     hal.interfaces
     infra.event
+    infra.timer
     infra.util
+    services.fsm
 )
 
 target_sources(fs.nor PRIVATE
@@ -20,6 +22,8 @@ target_sources(fs.nor PRIVATE
     NorConfig.hpp
     NorEraseCounts.cpp
     NorEraseCounts.hpp
+    NorFileSystem.cpp
+    NorFileSystem.hpp
     NorFormatter.cpp
     NorFormatter.hpp
     NorGeometry.cpp
@@ -31,6 +35,7 @@ target_sources(fs.nor PRIVATE
     NorJournalScan.cpp
     NorJournalScan.hpp
     NorLayout.hpp
+    NorLifecycle.hpp
     NorMount.cpp
     NorMount.hpp
     NorNode.cpp
@@ -41,6 +46,9 @@ target_sources(fs.nor PRIVATE
     NorRecordReader.hpp
     NorSuperblock.cpp
     NorSuperblock.hpp
+    NorVolume.cpp
+    NorVolume.hpp
+    NorVolumeState.cpp
     NorVolumeState.hpp
 )
 

@@ -29,6 +29,8 @@ namespace fs
         really_assert(buffer.size() >= BufferBytes(config));
     }
 
+    NorFormatter::~NorFormatter() = default;
+
     void NorFormatter::Format(const infra::Function<void(Result result)>& onDone)
     {
         really_assert(!this->onDone);
