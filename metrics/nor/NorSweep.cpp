@@ -1,5 +1,6 @@
 #include "metrics/nor/NorSweep.hpp"
 #include "fs/nor/NorFormatter.hpp"
+#include "fs/nor/NorRecord.hpp"
 #include <chrono>
 
 namespace metrics
@@ -27,13 +28,24 @@ namespace metrics
 
     fs::NorConfig SweepConfig(const NorModel& model)
     {
-        fs::NorConfig config;
-        config.maxBlocks = model.numberOfSectors;
-        config.sectorsPerBlock = &model == &norSweep128kTwoSectors ? 2 : 1;
-        config.programUnit = model.programUnit;
-        config.pageSize = model.pageSize;
-        config.cachedNodes = fs::norMinimumCachedNodes;
-        return config;
+        if (&model == &internalSweep96k)
+            return internalSweep96kConfig;
+
+        if (&model == &norSweep128kTwoSectors)
+            return norSweep128kTwoSectorsConfig;
+
+        return norSweep128kConfig;
+    }
+
+    std::size_t SweepRamBytes(const NorModel& model)
+    {
+        if (&model == &internalSweep96k)
+            return sizeof(fs::NorFileSystem::WithStorage<internalSweep96kConfig, 1>);
+
+        if (&model == &norSweep128kTwoSectors)
+            return sizeof(fs::NorFileSystem::WithStorage<norSweep128kTwoSectorsConfig, 1>);
+
+        return sizeof(fs::NorFileSystem::WithStorage<norSweep128kConfig, 1>);
     }
 
     NorImageSuperblock SuperblockOf(const NorModel& model, const fs::NorConfig& config)
@@ -99,5 +111,64 @@ namespace metrics
                 done = true;
             });
         Wait(context, done);
+    }
+
+    namespace detail
+    {
+        NorSweepVolumeStorage::NorSweepVolumeStorage(const fs::NorConfig& config)
+            : blockStates(fs::NorBlockStateBytes(config.maxBlocks))
+            , eraseCounts(config.maxBlocks)
+            , journal(fs::RoundUpTo(static_cast<uint32_t>(fs::NorLargestRecordBytes(config.inlineBytes, config.maxNameBytes)), config.programUnit))
+            , nodes(config.cachedNodes * config.nodeSize)
+        {}
+    }
+
+    NorSweepVolume::FileSystem::FileSystem(hal::Flash& flash, const fs::NorConfig& config)
+        : NorSweepVolumeStorage(config)
+        , fs::NorFileSystem(fs::NorVolumeParts{ flash, deferred, infra::MakeRange(blockStates), infra::MakeRange(eraseCounts), infra::MakeRange(journal), infra::MakeRange(nodes) }, config, defaultIdleDelay)
+    {}
+
+    NorSweepVolume::NorSweepVolume(SweepContext<hal::Flash>& context, const fs::NorConfig& config)
+        : context(context)
+        , fileSystem(context.device, config)
+    {}
+
+    fs::Result NorSweepVolume::Format()
+    {
+        return Run([this](const infra::Function<void(fs::Result)>& onDone)
+            {
+                fileSystem.Format(onDone);
+            });
+    }
+
+    fs::Result NorSweepVolume::Mount()
+    {
+        return Run([this](const infra::Function<void(fs::Result)>& onDone)
+            {
+                fileSystem.Mount(onDone);
+            });
+    }
+
+    fs::Result NorSweepVolume::Unmount()
+    {
+        return Run([this](const infra::Function<void(fs::Result)>& onDone)
+            {
+                fileSystem.Unmount(onDone);
+            });
+    }
+
+    template<class Start>
+    fs::Result NorSweepVolume::Run(const Start& start)
+    {
+        std::optional<fs::Result> result;
+        start([&result](fs::Result completed)
+            {
+                result = completed;
+            });
+        context.time.RunUntil([&result]
+            {
+                return result.has_value();
+            });
+        return result.value_or(fs::Result::deviceError);
     }
 }

@@ -58,7 +58,24 @@ TEST_P(NorSweepTest, programs_and_erases_the_device_synchronously)
     EXPECT_EQ(static_cast<std::size_t>(model.numberOfSectors) * model.sectorSize, metrics::ReadImage(context).size());
 }
 
+TEST_P(NorSweepTest, a_sweep_volume_formats_mounts_and_unmounts)
+{
+    metrics::NorSweepVolume volume{ context, metrics::SweepConfig(model) };
+
+    EXPECT_EQ(fs::Result::corrupted, volume.Mount());
+    EXPECT_EQ(fs::Result::success, volume.Format());
+    EXPECT_EQ(fs::Result::success, volume.Mount());
+    EXPECT_EQ(fs::Result::success, volume.Unmount());
+}
+
 INSTANTIATE_TEST_SUITE_P(Models, NorSweepTest, testing::Values(&metrics::norSweep128k, &metrics::internalSweep96k, &metrics::norSweep128kTwoSectors));
+
+TEST(NorSweepModelsTest, the_ram_of_a_model_is_that_of_its_volume_with_one_file)
+{
+    EXPECT_EQ(sizeof(fs::NorFileSystem::WithStorage<metrics::norSweep128kConfig, 1>), metrics::SweepRamBytes(metrics::norSweep128k));
+    EXPECT_EQ(sizeof(fs::NorFileSystem::WithStorage<metrics::internalSweep96kConfig, 1>), metrics::SweepRamBytes(metrics::internalSweep96k));
+    EXPECT_EQ(sizeof(fs::NorFileSystem::WithStorage<metrics::norSweep128kTwoSectorsConfig, 1>), metrics::SweepRamBytes(metrics::norSweep128kTwoSectors));
+}
 
 TEST(NorSweepModelsTest, one_model_has_blocks_of_two_sectors)
 {
