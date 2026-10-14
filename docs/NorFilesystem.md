@@ -119,6 +119,7 @@ Each entry starts with its kind:
 
 An operation writes one record with every entry it needs: creating a file puts its directory entry and its inode, `Rename` removes one entry, puts another and puts the inode with its new parent and name, and an overwrite that spans two blocks sets both blocks and the size.
 Replay checks that the previous block of a block set is the one the map holds, and a mismatch makes the mount complete with `corrupted`.
+An inode put of an inode that exists keeps its maps and ignores the roots it carries, because roots change only at checkpoints, and a checkpoint written during replay may come between a record and the roots it was written with.
 Allocation and release need no entries of their own: they follow from block sets, from sizes and from removed inodes, and the nodes of a removed data map are found by walking it, at run time and at replay alike.
 The largest record starts with a link and holds either a `Rename` or the commit of 8 block entries of a file with its size, `8 + 9 + max(9 + 13 + 5 + inode record, 8 × 17 + 11 + inlineBytes)` bytes, 228 with the defaults; the journal buffer of the volume holds it, rounded up to the program unit.
 
@@ -153,7 +154,7 @@ A node starts with a header of 12 bytes, holds its entries, and ends with a CRC 
 |--------|------|---------------------------------------------------------------------------|
 | 0      | 1    | Map: 1 for the inode table, 2 for a directory, 3 for file data            |
 | 1      | 1    | Level, 0 for a leaf                                                       |
-| 2      | 2    | Number of entries                                                         |
+| 2      | 2    | Number of entries; for a radix node, the number of slots that are not 0   |
 | 4      | 4    | Owner inode, 0 for the inode table                                        |
 | 8      | 4    | Lowest key of the node; for a radix node, the first block index it covers |
 
