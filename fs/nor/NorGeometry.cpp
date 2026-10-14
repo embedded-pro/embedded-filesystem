@@ -1,0 +1,93 @@
+#include "fs/nor/NorGeometry.hpp"
+
+namespace fs
+{
+    namespace
+    {
+        constexpr uint32_t superblocks = 2;
+        constexpr uint32_t checkpointFixedBytes = 32;
+        constexpr uint32_t dataBlocksOfOneCall = 2;
+
+        bool Fits(const NorGeometry& geometry)
+        {
+            return geometry.NodesPerBlock() != 0 && geometry.CheckpointBytes() <= geometry.PayloadSize() && geometry.blocks >= superblocks + geometry.ReserveBlocks() + geometry.WatermarkBlocks();
+        }
+    }
+
+    uint32_t NorGeometry::BlockSize() const
+    {
+        return sectorSize * sectorsPerBlock;
+    }
+
+    uint32_t NorGeometry::HeaderPartBOffset() const
+    {
+        return NorHeaderPartBOffset(programUnit);
+    }
+
+    uint32_t NorGeometry::HeaderSize() const
+    {
+        return NorHeaderSize(programUnit);
+    }
+
+    uint32_t NorGeometry::PayloadSize() const
+    {
+        return BlockSize() - HeaderSize();
+    }
+
+    uint32_t NorGeometry::NodeSlotsOffset() const
+    {
+        return RoundUpTo(HeaderSize(), pageSize);
+    }
+
+    uint32_t NorGeometry::NodesPerBlock() const
+    {
+        return (BlockSize() - NodeSlotsOffset()) / nodeSize;
+    }
+
+    uint32_t NorGeometry::CheckpointBytes() const
+    {
+        return checkpointFixedBytes + (blocks + 7) / 8;
+    }
+
+    uint32_t NorGeometry::NodeBlocksPerCheckpoint() const
+    {
+        return static_cast<uint32_t>((cachedNodes + NodesPerBlock() - 1) / NodesPerBlock());
+    }
+
+    uint32_t NorGeometry::ReserveBlocks() const
+    {
+        return 2 * NodeBlocksPerCheckpoint() + 2;
+    }
+
+    uint32_t NorGeometry::WatermarkBlocks() const
+    {
+        return dataBlocksOfOneCall + NodeBlocksPerCheckpoint() + 3;
+    }
+
+    uint32_t NorGeometry::AddressOfBlock(uint32_t block) const
+    {
+        return block * BlockSize();
+    }
+
+    uint32_t NorGeometry::FirstSectorOfBlock(uint32_t block) const
+    {
+        return block * sectorsPerBlock;
+    }
+
+    uint32_t NorGeometry::RoundToProgramUnit(uint32_t size) const
+    {
+        return RoundUpTo(size, programUnit);
+    }
+
+    std::optional<NorGeometry> MakeNorGeometry(const NorConfig& config, uint32_t sectorSize, uint32_t sectors)
+    {
+        if (sectorSize == 0 || sectorSize % config.pageSize != 0 || sectors / config.sectorsPerBlock > config.maxBlocks)
+            return std::nullopt;
+
+        NorGeometry geometry{ sectorSize, config.sectorsPerBlock, sectors / config.sectorsPerBlock, config.programUnit, config.pageSize, config.nodeSize, config.cachedNodes };
+        if (!Fits(geometry))
+            return std::nullopt;
+
+        return geometry;
+    }
+}
