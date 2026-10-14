@@ -586,6 +586,10 @@ namespace metrics
                     for (const auto& [index, block] : inode.blocks)
                         assigned = assigned && Assign(roles, block, NorBlockUse::data);
 
+                for (uint32_t block = 0; block != superblock.blocks; ++block)
+                    if (!roles[block].has_value() && IsMarkedInUse(block) && IsOfType(block, BlockType::node))
+                        roles[block] = NorBlockUse::node;
+
                 return assigned;
             }
 

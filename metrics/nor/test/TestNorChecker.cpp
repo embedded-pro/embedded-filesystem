@@ -423,6 +423,17 @@ TEST_F(NorCheckerTest, reports_a_block_that_the_checkpoint_marks_but_nothing_use
     ExpectProblem("block 9 is marked in use, but nothing uses it");
 }
 
+TEST_F(NorCheckerTest, accepts_a_node_block_whose_nodes_were_all_replaced)
+{
+    Allocate(9, fs::NorBlockType::node, 3);
+    Write(NodeAddress(9, 0), std::vector<uint8_t>(image.begin() + NodeAddress(2, 0), image.begin() + NodeAddress(2, 0) + config.nodeSize));
+    Allocate(10, fs::NorBlockType::checkpoint, 4);
+    WriteCheckpoint(10, { NodeAddress(9, 0), 1, 2, 10, firstRecord, 1, 32 }, { 0, 1, 2, 9, 10 });
+
+    ExpectConsistent();
+    EXPECT_EQ(Use::node, Check().blocks[2]);
+}
+
 TEST_F(NorCheckerTest, lists_files_and_directories_with_their_paths)
 {
     WriteTree();
