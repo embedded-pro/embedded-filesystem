@@ -11,6 +11,8 @@ target_link_libraries(fs.common PUBLIC
 target_sources(fs.common PRIVATE
     BlockDeviceResult.cpp
     BlockDeviceResult.hpp
+    CrcRecord.cpp
+    CrcRecord.hpp
     DeferredCompletions.cpp
     DeferredCompletions.hpp
     DirectTransfers.cpp
