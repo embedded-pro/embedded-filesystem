@@ -2,9 +2,7 @@
 #define FS_NOR_NOR_RECORD_HPP
 
 #include "fs/common/CrcRecord.hpp"
-#include "fs/nor/NorLayout.hpp"
 #include "infra/util/ByteRange.hpp"
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -35,6 +33,8 @@ namespace fs
     {
         uint32_t inode{ 0 };
         infra::ConstByteRange record;
+
+        bool operator==(const NorInodePut& other) const;
     };
 
     struct NorInodeRemove
@@ -76,10 +76,9 @@ namespace fs
         uint32_t inode{ 0 };
         uint32_t size{ 0 };
         infra::ConstByteRange inlineBytes;
-    };
 
-    bool operator==(const NorInodePut& x, const NorInodePut& y);
-    bool operator==(const NorSize& x, const NorSize& y);
+        bool operator==(const NorSize& other) const;
+    };
 
     using NorEntry = std::variant<NorLink, NorInodePut, NorInodeRemove, NorDirectoryEntryPut, NorDirectoryEntryRemove, NorBlockSet, NorSize>;
 
@@ -90,13 +89,6 @@ namespace fs
     constexpr std::size_t norSizeEntryFixedBytes = 11;
     constexpr std::size_t norInodePutFixedBytes = 5;
     constexpr std::size_t norInodeRemoveBytes = 5;
-
-    constexpr std::size_t NorLargestRecordBytes(uint32_t inodeRecordBytes, uint32_t inlineBytes)
-    {
-        auto rename = norDirectoryEntryRemoveBytes + norDirectoryEntryPutBytes + norInodePutFixedBytes + inodeRecordBytes;
-        auto commit = norUncommittedBlocks * norBlockSetEntryBytes + norSizeEntryFixedBytes + inlineBytes;
-        return CrcRecord::overhead + norLinkEntryBytes + std::max(rename, commit);
-    }
 
     std::size_t NorEntrySize(const NorEntry& entry);
     void AddNorEntry(CrcRecord& record, const NorEntry& entry);

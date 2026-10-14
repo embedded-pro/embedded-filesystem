@@ -1,4 +1,5 @@
 #include "fs/nor/NorGeometry.hpp"
+#include "infra/util/ReallyAssert.hpp"
 
 namespace fs
 {
@@ -81,6 +82,8 @@ namespace fs
 
     std::optional<NorGeometry> MakeNorGeometry(const NorConfig& config, uint32_t sectorSize, uint32_t sectors)
     {
+        really_assert(IsValidNorConfig(config));
+
         if (sectorSize == 0 || sectorSize % config.pageSize != 0 || sectors / config.sectorsPerBlock > config.maxBlocks)
             return std::nullopt;
 

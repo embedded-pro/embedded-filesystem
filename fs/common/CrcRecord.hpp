@@ -30,9 +30,9 @@ namespace fs
 
     struct OpenedRecord
     {
-        uint8_t entries;
+        uint8_t entries{ 0 };
         infra::ConstByteRange payload;
-        std::size_t size;
+        std::size_t size{ 0 };
     };
 
     std::optional<std::size_t> RecordLength(infra::ConstByteRange header);

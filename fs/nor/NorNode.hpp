@@ -16,11 +16,11 @@ namespace fs
 
     struct NorNodeHeader
     {
-        NorMap map;
-        uint8_t level;
-        uint16_t count;
-        uint32_t owner;
-        uint32_t lowestKey;
+        NorMap map{ NorMap::inodeTable };
+        uint8_t level{ 0 };
+        uint16_t count{ 0 };
+        uint32_t owner{ 0 };
+        uint32_t lowestKey{ 0 };
 
         bool operator==(const NorNodeHeader& other) const = default;
     };

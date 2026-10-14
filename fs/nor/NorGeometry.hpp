@@ -10,13 +10,13 @@ namespace fs
 {
     struct NorGeometry
     {
-        uint32_t sectorSize;
-        uint32_t sectorsPerBlock;
-        uint32_t blocks;
-        uint32_t programUnit;
-        uint32_t pageSize;
-        uint32_t nodeSize;
-        std::size_t cachedNodes;
+        uint32_t sectorSize{ 0 };
+        uint32_t sectorsPerBlock{ 0 };
+        uint32_t blocks{ 0 };
+        uint32_t programUnit{ 0 };
+        uint32_t pageSize{ 0 };
+        uint32_t nodeSize{ 0 };
+        std::size_t cachedNodes{ 0 };
 
         uint32_t BlockSize() const;
         uint32_t HeaderPartBOffset() const;

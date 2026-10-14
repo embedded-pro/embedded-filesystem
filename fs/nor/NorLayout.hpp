@@ -12,7 +12,6 @@ namespace fs
     constexpr uint32_t norNodeCrcBytes = 4;
     constexpr uint32_t norInodeRecordFixedBytes = 20;
     constexpr uint32_t norMaxLevels = 3;
-    constexpr uint32_t norUncommittedBlocks = 8;
 
     constexpr uint32_t RoundUpTo(uint32_t size, uint32_t unit)
     {

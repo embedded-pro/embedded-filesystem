@@ -25,8 +25,8 @@ namespace fs
 
     struct NorAllocation
     {
-        NorBlockType type;
-        uint64_t sequence;
+        NorBlockType type{ NorBlockType::data };
+        uint64_t sequence{ 0 };
         NorBlockOwner owner{};
 
         bool operator==(const NorAllocation& other) const = default;

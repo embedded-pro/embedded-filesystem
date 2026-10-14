@@ -9,13 +9,13 @@ namespace fs
 {
     struct NorSuperblock
     {
-        uint32_t sectorsPerBlock;
-        uint32_t sectorSize;
-        uint32_t blocks;
-        uint32_t programUnit;
-        uint32_t nodeSize;
-        uint32_t inlineBytes;
-        uint32_t maxNameBytes;
+        uint32_t sectorsPerBlock{ 0 };
+        uint32_t sectorSize{ 0 };
+        uint32_t blocks{ 0 };
+        uint32_t programUnit{ 0 };
+        uint32_t nodeSize{ 0 };
+        uint32_t inlineBytes{ 0 };
+        uint32_t maxNameBytes{ 0 };
 
         bool operator==(const NorSuperblock& other) const = default;
     };

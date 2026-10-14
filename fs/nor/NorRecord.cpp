@@ -135,14 +135,14 @@ namespace fs
         }
     }
 
-    bool operator==(const NorInodePut& x, const NorInodePut& y)
+    bool NorInodePut::operator==(const NorInodePut& other) const
     {
-        return x.inode == y.inode && infra::ContentsEqual(x.record, y.record);
+        return inode == other.inode && infra::ContentsEqual(record, other.record);
     }
 
-    bool operator==(const NorSize& x, const NorSize& y)
+    bool NorSize::operator==(const NorSize& other) const
     {
-        return x.inode == y.inode && x.size == y.size && infra::ContentsEqual(x.inlineBytes, y.inlineBytes);
+        return inode == other.inode && size == other.size && infra::ContentsEqual(inlineBytes, other.inlineBytes);
     }
 
     std::size_t NorEntrySize(const NorEntry& entry)
