@@ -139,6 +139,11 @@ namespace metrics
         return directories.Allocate();
     }
 
+    infra::SharedPtr<fs::NorFile> NorSweepVolume::FileSystem::AllocateFile()
+    {
+        return files.Allocate();
+    }
+
     NorSweepVolume::NorSweepVolume(SweepContext<hal::Flash>& context, const fs::NorConfig& config)
         : context(context)
         , fileSystem(context.device, config)

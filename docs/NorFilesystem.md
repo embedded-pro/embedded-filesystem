@@ -230,6 +230,12 @@ The inline area of an inode holds the bytes of the last logical block that are n
 The inline area is at least as large as the block header, so a file of 4096 bytes needs one data block of 4060 bytes and 36 bytes in its inline area, and a file that fits the inline area needs no data block at all.
 When the end of the file grows beyond the inline area, a data block is allocated, and the bytes of the inline area are programmed into it with the new ones.
 
+### Reading
+
+A read reads the record of the file first, so it follows the map wherever a checkpoint or the garbage collection moved it.
+The last bytes of the file, as many as the inline area holds, come from the record; every byte before them comes from the data block of its logical block, found through the data map, at the header size plus its offset in the logical block.
+A logical block before the inline area without a data block, a data block outside the volume or not in use, and an inline area longer than the file complete the read with `corrupted`.
+
 ### Appending
 
 An append is programmed in place, into the erased program units of the data block of the last logical block, and the record that commits it holds only a size entry with the bytes of the inline area.

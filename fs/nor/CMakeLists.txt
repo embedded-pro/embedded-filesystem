@@ -32,6 +32,8 @@ target_sources(fs.nor PRIVATE
     NorEntrySeek.hpp
     NorEraseCounts.cpp
     NorEraseCounts.hpp
+    NorFile.cpp
+    NorFile.hpp
     NorFileSystem.cpp
     NorFileSystem.hpp
     NorFormatter.cpp
@@ -58,12 +60,17 @@ target_sources(fs.nor PRIVATE
     NorNode.hpp
     NorNodeCache.cpp
     NorNodeCache.hpp
+    NorRead.cpp
+    NorRead.hpp
     NorRecord.cpp
     NorRecord.hpp
     NorNodeWriteBack.cpp
     NorNodeWriteBack.hpp
+    NorOpen.cpp
+    NorOpen.hpp
     NorOpenDirectory.cpp
     NorOpenDirectory.hpp
+    NorOpenFile.hpp
     NorPathSlot.cpp
     NorPathSlot.hpp
     NorPathWalk.cpp
