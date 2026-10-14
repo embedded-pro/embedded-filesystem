@@ -76,7 +76,7 @@ As for FAT, the formatter and an independent checker come early, and every step 
 
 1. On-flash structures: the geometry and the checks of `fs::NorConfig`, the superblock, the block header, the node header and the records, with `fs::CrcRecord` in `fs/common`.
 2. The formatter, `fs::NorFormatter`, with the codecs of inode records and checkpoints.
-3. The independent checker of NOR images, the small device models of the sweep, and the sweep of `Format`.
+3. The independent checker of NOR images, the small device models of the sweep, and the sweep of `Format`, with P-1 as the first target of `metrics::NorTargets`.
 4. `fs::NorImageBuilder`, and mount and unmount with the lifecycle of a volume: the scan of the headers, the erase counts, the checkpoint, the journal chain and the states of the blocks.
 5. The copy-on-write B+-tree and radix tree over the node cache.
 6. Lookup by path, `Stat`, `OpenDirectory` and `Next`.
@@ -88,7 +88,7 @@ As for FAT, the formatter and an independent checker come early, and every step 
 12. Background work: the pre-erased pool and its watermark, dynamic wear leveling, the background checkpoint, `Usage` and the reserve.
 13. Garbage collection of node blocks.
 14. Static wear leveling with its foreground fallback, the counters of the volume, and WL-4.
-15. The targets of the NOR subject: `metrics::NorTargets`, the W-6 bound, the charge of erases, the W-2 periods, the ratio of R-2, the wear metrics on the lifetime run, the factor and the ratio in `merge_report.py`, and `littlefs/ram-matched` sized to the NOR subject.
+15. The other targets of the NOR subject in `metrics::NorTargets`: the W-6 bound, the charge of erases, the W-2 periods, the ratio of R-2, the wear metrics on the lifetime run, the factor and the ratio in `merge_report.py`, and `littlefs/ram-matched` sized to the NOR subject.
 16. The exhaustive sweep of every operation and background step, and P-1.
 
 ## Phase 8: on target

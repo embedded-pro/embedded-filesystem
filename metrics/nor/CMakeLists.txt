@@ -1,0 +1,25 @@
+add_library(metrics.nor STATIC)
+
+target_link_libraries(metrics.nor PUBLIC
+    fs.nor
+    infra.util
+    metrics.device
+    metrics.power_cut
+    metrics.report
+)
+
+target_sources(metrics.nor PRIVATE
+    NorChecker.cpp
+    NorChecker.hpp
+    NorSweep.cpp
+    NorSweep.hpp
+    NorTargets.cpp
+    NorTargets.hpp
+)
+
+emfs_add_metrics(metrics.nor_power_cut
+    SOURCES NorPowerCut.cpp
+    LIBRARIES metrics.nor
+)
+
+add_subdirectory(test)

@@ -96,6 +96,14 @@ namespace metrics
             });
     }
 
+    void MeteredFlash::MarkProgrammed(uint32_t address, std::size_t size)
+    {
+        AssertRange(address, size);
+
+        if (size != 0)
+            std::fill(programmed.begin() + address / model.programUnit, programmed.begin() + (address + size - 1) / model.programUnit + 1, true);
+    }
+
     const FlashCounters& MeteredFlash::Counters() const
     {
         return counters;

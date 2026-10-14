@@ -206,6 +206,15 @@ TEST_F(MeteredFlashTest, counts_programming_a_program_unit_again_without_an_eras
     EXPECT_EQ(1, metered.Counters().programUnitRewrites);
 }
 
+TEST_F(MeteredFlashTest, programming_a_unit_marked_as_programmed_counts_as_a_rewrite)
+{
+    metered.MarkProgrammed(10, 2);
+    Write(11, 1);
+    Write(12, 1);
+
+    EXPECT_EQ(1, metered.Counters().programUnitRewrites);
+}
+
 TEST_F(MeteredFlashTest, an_erase_resets_the_programmed_state_of_its_sectors)
 {
     Write(10, 1);
