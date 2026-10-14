@@ -158,6 +158,7 @@ A node starts with a header of 12 bytes, holds its entries, and ends with a CRC 
 | 8      | 4    | Lowest key of the node; for a radix node, the first block index it covers |
 
 With the default node size of 512 bytes, a node has 496 bytes for entries: a node of a radix tree holds 124 block numbers or child addresses, an inner node of a B+-tree 62 keys with their child addresses, a directory leaf 62 keys with their inode numbers, and an inode table leaf 3 inode records with their keys.
+In a B+-tree, every key is followed by its value in a leaf and by the address of its child in an inner node.
 A node is addressed by its address on the device, and 0 means no node.
 Node slots start at the header rounded up to the page, so that a node is programmed in whole pages: a 4 KiB block on SPI NOR holds 7 nodes, and a 2 KiB sector of internal flash 3.
 
@@ -335,12 +336,12 @@ So at most one move happens per interval, and its overhead is bounded by the con
 
 ## Format
 
-`fs::NorFileSystem::Format` creates a volume on the device of an unmounted volume, with the format parameters of its configuration:
+`fs::NorFileSystem::Format` creates a volume on the device of an unmounted volume, with the format parameters of its configuration, through `fs::NorFormatter`:
 
 1. Read part A of every block, to keep its erase count.
 2. Erase the two superblocks, so that a power loss from now on leaves a device that does not mount as the previous volume.
 3. Erase every other block, one sector per request, and program part A with its previous erase count plus one; a block without a valid part A gets the average of the others.
-4. Allocate the first checkpoint block and a node block, write the inode table with the root directory into the node block, and the checkpoint, with the epoch starting after it.
+4. Allocate block 2 as a node block and block 3 as the first checkpoint block, with the sequences 1 and 2, write the inode table with the root directory into the node block, and the checkpoint, with the epoch starting after it.
 5. Program the two superblocks.
 
 Every block of the new volume except the superblocks, the first checkpoint block and its node block is in the pre-erased pool.

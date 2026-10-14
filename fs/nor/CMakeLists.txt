@@ -4,15 +4,22 @@ target_link_libraries(fs.nor PUBLIC
     fs.common
     fs.interfaces
     hal.interfaces
+    infra.event
     infra.util
 )
 
 target_sources(fs.nor PRIVATE
     NorBlockHeader.cpp
     NorBlockHeader.hpp
+    NorCheckpoint.cpp
+    NorCheckpoint.hpp
     NorConfig.hpp
+    NorFormatter.cpp
+    NorFormatter.hpp
     NorGeometry.cpp
     NorGeometry.hpp
+    NorInodeRecord.cpp
+    NorInodeRecord.hpp
     NorLayout.hpp
     NorNode.cpp
     NorNode.hpp

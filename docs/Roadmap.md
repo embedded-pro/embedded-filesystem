@@ -75,7 +75,7 @@ The design is settled in [NorFilesystem.md](NorFilesystem.md) first.
 As for FAT, the formatter and an independent checker come early, and every step that adds a write path adds its cases to the power-cut sweep in `metrics/nor`, which holds at 100 % with the interrupted program or erase not started, partial and completed.
 
 1. On-flash structures: the geometry and the checks of `fs::NorConfig`, the superblock, the block header, the node header and the records, with `fs::CrcRecord` in `fs/common`.
-2. `fs::NorFileSystem::Format`.
+2. The formatter, `fs::NorFormatter`, with the codecs of inode records and checkpoints.
 3. The independent checker of NOR images, the small device models of the sweep, and the sweep of `Format`.
 4. `fs::NorImageBuilder`, and mount and unmount with the lifecycle of a volume: the scan of the headers, the erase counts, the checkpoint, the journal chain and the states of the blocks.
 5. The copy-on-write B+-tree and radix tree over the node cache.
