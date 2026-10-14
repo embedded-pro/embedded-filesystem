@@ -120,7 +120,7 @@ Each entry starts with its kind:
 An operation writes one record with every entry it needs: creating a file puts its directory entry and its inode, `Rename` removes one entry, puts another and puts the inode with its new parent and name, and an overwrite that spans two blocks sets both blocks and the size.
 Replay checks that the previous block of a block set is the one the map holds, and a mismatch makes the mount complete with `corrupted`.
 Allocation and release need no entries of their own: they follow from block sets, from sizes and from removed inodes, and the nodes of a removed data map are found by walking it, at run time and at replay alike.
-The largest record is a `Rename`, `8 + 9 + 13 + 5 + inode record` bytes; the journal buffer of the volume holds it, rounded to the program unit.
+The largest record starts with a link and holds either a `Rename` or the commit of 8 block entries of a file with its size, `8 + 9 + max(9 + 13 + 5 + inode record, 8 × 17 + 11 + inlineBytes)` bytes, 228 with the defaults; the journal buffer of the volume holds it, rounded up to the program unit.
 
 ## Journal
 
