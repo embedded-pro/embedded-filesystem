@@ -2,6 +2,7 @@
 #define FS_NOR_NOR_GEOMETRY_HPP
 
 #include "fs/nor/NorConfig.hpp"
+#include "hal/interfaces/Flash.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -34,6 +35,7 @@ namespace fs
     };
 
     std::optional<NorGeometry> MakeNorGeometry(const NorConfig& config, uint32_t sectorSize, uint32_t sectors);
+    std::optional<NorGeometry> MakeNorGeometry(const NorConfig& config, const hal::Flash& flash);
 }
 
 #endif

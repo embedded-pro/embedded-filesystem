@@ -36,7 +36,7 @@ namespace fs
         really_assert(!this->onDone);
 
         this->onDone = onDone;
-        geometry = HasEqualSectors() ? MakeNorGeometry(config, flash.SizeOfSector(0), flash.NumberOfSectors()) : std::nullopt;
+        geometry = MakeNorGeometry(config, flash);
         if (!geometry.has_value())
         {
             Complete(Result::unsupported);
@@ -212,19 +212,6 @@ namespace fs
             {
                 onDone(result);
             });
-    }
-
-    bool NorFormatter::HasEqualSectors() const
-    {
-        auto sectors = flash.NumberOfSectors();
-        if (sectors == 0)
-            return false;
-
-        for (uint32_t index = 1; index != sectors; ++index)
-            if (flash.SizeOfSector(index) != flash.SizeOfSector(0))
-                return false;
-
-        return true;
     }
 
     uint32_t NorFormatter::AverageEraseCount() const

@@ -53,6 +53,16 @@ TEST(NorNodeTest, sealing_writes_the_header_and_a_crc_of_the_rest)
     EXPECT_EQ(Crc(infra::Head(infra::MakeRange(node), 508)), fs::LoadLittle32(infra::MakeRange(node), 508));
 }
 
+TEST(NorNodeTest, writes_and_reads_the_header_without_a_crc)
+{
+    Node node{};
+    fs::WriteNorNodeHeader(dataLeaf, infra::MakeRange(node));
+
+    EXPECT_EQ((std::array<uint8_t, 12>{ 0x03, 0x00, 0x7c, 0x00, 0x07, 0x00, 0x00, 0x00, 0xf8, 0x00, 0x00, 0x00 }), infra::Head(infra::MakeRange(node), 12));
+    EXPECT_EQ(0u, fs::LoadLittle32(infra::MakeRange(node), 508));
+    EXPECT_EQ(dataLeaf, fs::ReadNorNodeHeader(infra::MakeRange(node)));
+}
+
 TEST(NorNodeTest, opens_a_sealed_node)
 {
     EXPECT_EQ(dataLeaf, fs::OpenNorNode(infra::MakeRange(Sealed(dataLeaf))));

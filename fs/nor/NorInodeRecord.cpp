@@ -28,7 +28,7 @@ namespace fs
         bytes[5] = static_cast<uint8_t>(record.name.size());
         bytes[6] = record.mapHeight;
         StoreLittle32(bytes, 8, record.size);
-        StoreLittle32(bytes, 12, record.mapRoot);
+        StoreLittle32(bytes, norInodeMapRootOffset, record.mapRoot);
         StoreLittle16(bytes, 16, static_cast<uint16_t>(record.inlineBytes.size()));
         std::ranges::copy(record.inlineBytes, bytes.begin() + norInodeRecordFixedBytes);
         std::ranges::copy(record.name, bytes.begin() + norInodeRecordFixedBytes + config.inlineBytes);
@@ -43,6 +43,6 @@ namespace fs
             return std::nullopt;
 
         auto inlineArea = infra::DiscardHead(bytes, norInodeRecordFixedBytes);
-        return NorInodeRecord{ LoadLittle32(bytes, 0), static_cast<NorInodeType>(bytes[4]), bytes[6], LoadLittle32(bytes, 8), LoadLittle32(bytes, 12), infra::Head(inlineArea, inlineLength), infra::Head(infra::DiscardHead(inlineArea, config.inlineBytes), bytes[5]) };
+        return NorInodeRecord{ LoadLittle32(bytes, 0), static_cast<NorInodeType>(bytes[4]), bytes[6], LoadLittle32(bytes, 8), LoadLittle32(bytes, norInodeMapRootOffset), infra::Head(inlineArea, inlineLength), infra::Head(infra::DiscardHead(inlineArea, config.inlineBytes), bytes[5]) };
     }
 }

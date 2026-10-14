@@ -13,6 +13,7 @@ target_link_libraries(fs.nor_test PUBLIC
 )
 
 target_sources(fs.nor_test PRIVATE
+    TestNorBTree.cpp
     TestNorBlockHeader.cpp
     TestNorBlockStates.cpp
     TestNorCheckpoint.cpp
@@ -22,9 +23,14 @@ target_sources(fs.nor_test PRIVATE
     TestNorFormatter.cpp
     TestNorGeometry.cpp
     TestNorImageBuilder.cpp
+    NorMapsFixture.hpp
+    TestNorMapFetch.cpp
     TestNorMount.cpp
     TestNorInodeRecord.cpp
     TestNorNode.cpp
+    TestNorNodeCache.cpp
+    TestNorNodeWriteBack.cpp
+    TestNorRadixTree.cpp
     TestNorRecord.cpp
     TestNorSuperblock.cpp
 )

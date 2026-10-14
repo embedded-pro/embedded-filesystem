@@ -39,15 +39,25 @@ namespace fs
         return Entries(node);
     }
 
-    void SealNorNode(const NorNodeHeader& header, infra::ByteRange node)
+    NorNodeHeader ReadNorNodeHeader(infra::ConstByteRange node)
     {
-        really_assert(node.size() > norNodeHeaderBytes + norNodeCrcBytes);
+        return NorNodeHeader{ static_cast<NorMap>(node[0]), node[1], LoadLittle16(node, 2), LoadLittle32(node, 4), LoadLittle32(node, 8) };
+    }
 
+    void WriteNorNodeHeader(const NorNodeHeader& header, infra::ByteRange node)
+    {
         node[0] = static_cast<uint8_t>(header.map);
         node[1] = header.level;
         StoreLittle16(node, 2, header.count);
         StoreLittle32(node, 4, header.owner);
         StoreLittle32(node, 8, header.lowestKey);
+    }
+
+    void SealNorNode(const NorNodeHeader& header, infra::ByteRange node)
+    {
+        really_assert(node.size() > norNodeHeaderBytes + norNodeCrcBytes);
+
+        WriteNorNodeHeader(header, node);
         StoreLittle32(node, node.size() - norNodeCrcBytes, Crc(node));
     }
 
@@ -58,6 +68,6 @@ namespace fs
         if (!IsKnownMap(node[0]) || node[1] >= norMaxLevels || LoadLittle32(node, node.size() - norNodeCrcBytes) != Crc(node))
             return std::nullopt;
 
-        return NorNodeHeader{ static_cast<NorMap>(node[0]), node[1], LoadLittle16(node, 2), LoadLittle32(node, 4), LoadLittle32(node, 8) };
+        return ReadNorNodeHeader(node);
     }
 }
