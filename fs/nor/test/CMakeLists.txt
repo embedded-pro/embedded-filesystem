@@ -18,6 +18,8 @@ target_sources(fs.nor_test PRIVATE
     TestNorBlockStates.cpp
     TestNorCheckpoint.cpp
     TestNorConfig.cpp
+    TestNorDirectories.cpp
+    TestNorDirectoryKey.cpp
     TestNorEraseCounts.cpp
     TestNorFileSystem.cpp
     TestNorFormatter.cpp

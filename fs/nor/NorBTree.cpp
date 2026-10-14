@@ -106,6 +106,27 @@ namespace fs
         return UnmodifiedNodes(Walk(root, key));
     }
 
+    NorBTree::SeekResult NorBTree::Seek(const NorMapRoot& root, uint32_t key) const
+    {
+        auto path = Walk(root, key);
+        if (path.nodes == 0)
+            return SeekResult{};
+
+        auto leaf = cache.Node(path.slots[path.nodes - 1]);
+        auto position = path.positions[path.nodes - 1];
+        if (position < CountOf(leaf))
+            return SeekResult{ Entry{ KeyAt(leaf, EntryBytes(0), position), infra::Head(infra::DiscardHead(NorNodeEntries(leaf), position * EntryBytes(0) + keyBytes), map.valueBytes) }, std::nullopt };
+
+        for (auto depth = path.nodes - 1; depth-- != 0;)
+        {
+            auto node = cache.Node(path.slots[depth]);
+            if (path.positions[depth] + 1u < CountOf(node))
+                return SeekResult{ std::nullopt, KeyAt(node, innerEntryBytes, path.positions[depth] + 1u) };
+        }
+
+        return SeekResult{};
+    }
+
     infra::ByteRange NorBTree::Insert(NorMapRoot& root, uint32_t key) const
     {
         if (root.address == 0)

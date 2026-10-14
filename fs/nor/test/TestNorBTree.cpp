@@ -302,6 +302,59 @@ TEST_F(NorBTreeTest, the_root_shrinks_along_the_path_of_a_removal)
     EXPECT_EQ(1u, cache.ModifiedNodes());
 }
 
+TEST_F(NorBTreeTest, seek_in_an_empty_tree_finds_nothing)
+{
+    auto seek = tree.Seek(root, 5);
+
+    EXPECT_FALSE(seek.entry.has_value());
+    EXPECT_FALSE(seek.nextLeaf.has_value());
+}
+
+TEST_F(NorBTreeTest, seek_finds_the_first_key_at_or_after_the_searched_one_in_its_leaf)
+{
+    InsertRange(10, 90);
+
+    auto exact = tree.Seek(root, 20);
+    auto between = tree.Seek(root, 21);
+
+    ASSERT_TRUE(exact.entry.has_value());
+    EXPECT_EQ(20u, exact.entry->key);
+    EXPECT_EQ(200u, fs::LoadLittle32(exact.entry->value, 0));
+    ASSERT_TRUE(between.entry.has_value());
+    EXPECT_EQ(30u, between.entry->key);
+}
+
+TEST_F(NorBTreeTest, seek_past_the_last_key_of_a_leaf_names_the_next_leaf)
+{
+    InsertRange(10, 90);
+
+    auto seek = tree.Seek(root, 41);
+
+    EXPECT_FALSE(seek.entry.has_value());
+    EXPECT_EQ(std::optional<uint32_t>(50), seek.nextLeaf);
+    EXPECT_EQ(50u, tree.Seek(root, 50).entry.value_or(fs::NorBTree::Entry{}).key);
+}
+
+TEST_F(NorBTreeTest, seek_past_the_last_key_of_a_subtree_names_the_next_subtree)
+{
+    InsertRange(10, 180);
+
+    auto seek = tree.Seek(root, 161);
+
+    EXPECT_FALSE(seek.entry.has_value());
+    EXPECT_EQ(std::optional<uint32_t>(170), seek.nextLeaf);
+}
+
+TEST_F(NorBTreeTest, seek_past_the_last_key_finds_nothing)
+{
+    InsertRange(10, 180);
+
+    auto seek = tree.Seek(root, 181);
+
+    EXPECT_FALSE(seek.entry.has_value());
+    EXPECT_FALSE(seek.nextLeaf.has_value());
+}
+
 TEST_F(NorBTreeTest, child_for_follows_the_last_key_not_above_the_searched_one)
 {
     InsertRange(10, 90);

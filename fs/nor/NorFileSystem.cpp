@@ -10,14 +10,17 @@ namespace fs
     {
         lifecycle.OnEntered<NorMounted>([](NorFileSystem& fileSystem, NorMounted&)
             {
+                fileSystem.volume.MarkMounted();
                 fileSystem.Entered(Result::success);
             });
         lifecycle.OnEntered<NorFault>([](NorFileSystem& fileSystem, const NorFault& fault)
             {
+                fileSystem.volume.MarkUnmounted();
                 fileSystem.Entered(fault.result);
             });
         lifecycle.OnEntered<NorUnmounted>([](NorFileSystem& fileSystem, NorUnmounted&)
             {
+                fileSystem.volume.MarkUnmounted();
                 fileSystem.Entered(fileSystem.lifecycleResult);
             });
         lifecycle.Start<NorUnmounted>();
@@ -56,14 +59,14 @@ namespace fs
         Refuse(onDone);
     }
 
-    void NorFileSystem::OpenDirectory(infra::BoundedConstString, const infra::Function<void(Result result, infra::SharedPtr<Directory> directory)>& onDone)
+    void NorFileSystem::OpenDirectory(infra::BoundedConstString path, const infra::Function<void(Result result, infra::SharedPtr<Directory> directory)>& onDone)
     {
-        Refuse(onDone);
+        StartPathCall(path, NorOpenDirectoryCall{ path, onDone });
     }
 
-    void NorFileSystem::Stat(infra::BoundedConstString, const infra::Function<void(Result result, const EntryInfo& info)>& onDone)
+    void NorFileSystem::Stat(infra::BoundedConstString path, const infra::Function<void(Result result, const EntryInfo& info)>& onDone)
     {
-        Refuse(onDone);
+        StartPathCall(path, NorStatCall{ path, onDone });
     }
 
     void NorFileSystem::Remove(infra::BoundedConstString, const infra::Function<void(Result result)>& onDone)
@@ -86,6 +89,16 @@ namespace fs
         Refuse(onDone);
     }
 
+    NorVolume& NorFileSystem::Volume()
+    {
+        return volume;
+    }
+
+    void NorFileSystem::AttachPathSlots(infra::MemoryRange<NorPathSlot> slots)
+    {
+        pathSlots = slots;
+    }
+
     bool NorFileSystem::IsMounted() const
     {
         return std::holds_alternative<NorMounted>(lifecycle.CurrentState());
@@ -95,6 +108,62 @@ namespace fs
     void NorFileSystem::Refuse(const Callback& onDone)
     {
         volume.Defer(onDone, IsMounted() ? Result::unsupported : Result::notMounted);
+    }
+
+    template<class Call>
+    void NorFileSystem::StartPathCall(infra::BoundedConstString path, Call&& call)
+    {
+        auto validation = ValidatePath(path, volume.Limits());
+        auto* slot = FreePathSlot();
+
+        if (!IsMounted())
+            volume.Defer(call.onDone.Clone(), Result::notMounted);
+        else if (validation != Result::success)
+            volume.Defer(call.onDone.Clone(), validation);
+        else if (slot == nullptr)
+            volume.Defer(call.onDone.Clone(), Result::busy);
+        else
+        {
+            slot->call = std::forward<Call>(call);
+            slot->claimer.Claim([this, slot]
+                {
+                    RunPathCall(*slot);
+                });
+        }
+    }
+
+    NorPathSlot* NorFileSystem::FreePathSlot() const
+    {
+        for (auto& slot : pathSlots)
+            if (!slot.InUse())
+                return &slot;
+
+        return nullptr;
+    }
+
+    void NorFileSystem::RunPathCall(NorPathSlot& slot)
+    {
+        auto call = std::move(*slot.call);
+        slot.call = std::nullopt;
+        RunOperation(slot, call);
+    }
+
+    void NorFileSystem::RunOperation(NorPathSlot& slot, NorPathCall& call)
+    {
+        auto finished = [&slot](Result)
+        {
+            slot.claimer.Release();
+        };
+
+        if (auto* stat = std::get_if<NorStatCall>(&call))
+            volume.Operation().emplace<NorStat>(volume, std::move(*stat), finished).Start();
+        else
+            volume.Operation().emplace<NorOpenDirectory>(volume, std::move(std::get<NorOpenDirectoryCall>(call)), [this]
+                                  {
+                                      return AllocateDirectory();
+                                  },
+                                  finished)
+                .Start();
     }
 
     void NorFileSystem::BeginFormat()

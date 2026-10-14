@@ -2,10 +2,12 @@
 #define METRICS_NOR_NOR_SWEEP_HPP
 
 #include "fs/common/DeferredCompletions.hpp"
+#include "fs/common/HandlePool.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorConfig.hpp"
 #include "fs/nor/NorFileSystem.hpp"
 #include "hal/interfaces/Flash.hpp"
+#include "infra/util/BoundedVector.hpp"
 #include "metrics/device/DeviceModels.hpp"
 #include "metrics/nor/NorChecker.hpp"
 #include "metrics/power_cut/PowerCutSweep.hpp"
@@ -44,6 +46,7 @@ namespace metrics
             std::vector<uint8_t> eraseCounts;
             std::vector<uint8_t> journal;
             std::vector<uint8_t> nodes;
+            std::vector<fs::NorNodeCache::Slot> nodeSlots;
             fs::DeferredCompletions::WithMaxSize<8> deferred;
         };
     }
@@ -64,6 +67,13 @@ namespace metrics
         {
         public:
             FileSystem(hal::Flash& flash, const fs::NorConfig& config);
+
+        private:
+            infra::SharedPtr<fs::NorDirectory> AllocateDirectory() override;
+
+        private:
+            infra::BoundedVector<fs::NorPathSlot>::WithMaxSize<8> pathSlots;
+            fs::HandlePool<fs::NorDirectory, 1> directories{ Volume() };
         };
 
         template<class Start>

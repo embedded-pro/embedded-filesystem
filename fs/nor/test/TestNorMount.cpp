@@ -117,6 +117,7 @@ TEST_F(NorMountTest, mounts_a_formatted_volume)
     ASSERT_TRUE(volume.geometry.has_value());
     EXPECT_EQ(32, volume.geometry->blocks);
     EXPECT_EQ((fs::NorCheckpoint{ rootNode, 1, 2, 3, firstRecord, 1, 32 }), volume.checkpoint);
+    EXPECT_EQ((fs::NorMapRoot{ rootNode, 1 }), volume.inodeTable);
     EXPECT_EQ(3, volume.checkpointBlock);
     EXPECT_EQ((fs::NorJournal{ 3, firstRecord, 1 }), volume.journal);
     EXPECT_EQ(3, volume.nextSequence);

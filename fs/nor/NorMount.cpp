@@ -113,6 +113,7 @@ namespace fs
 
         volume.eraseCounts.Normalize(superblocks);
         volume.nextSequence = summary.highestSequence + 1;
+        volume.inodeTable = NorMapRoot{ volume.checkpoint.inodeTableRoot, volume.checkpoint.inodeTableHeight };
         Done(Result::success);
     }
 

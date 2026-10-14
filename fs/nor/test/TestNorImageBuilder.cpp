@@ -7,6 +7,7 @@
 #include "fs/nor/test_doubles/NorImageBuilder.hpp"
 #include "hal/interfaces/test_doubles/FlashStub.hpp"
 #include "infra/event/test_helper/EventDispatcherFixture.hpp"
+#include "infra/util/BoundedString.hpp"
 #include "gmock/gmock.h"
 #include <array>
 #include <optional>
@@ -220,4 +221,96 @@ TEST_F(NorImageBuilderTest, corrupt_clears_a_byte)
     Builder().Corrupt(3 * blockSize + headerSize + 1);
 
     EXPECT_EQ(std::nullopt, CheckpointIn(3));
+}
+
+TEST_F(NorImageBuilderTest, a_directory_is_an_inode_record_and_an_entry_in_its_parent)
+{
+    auto docs = Builder().AddDirectory(fs::NorImageBuilder::rootInode, "docs");
+
+    EXPECT_EQ(2u, docs);
+    auto record = Builder().RecordOf(docs);
+    ASSERT_TRUE(record.has_value());
+    EXPECT_EQ(fs::NorImageBuilder::rootInode, record->parent);
+    EXPECT_EQ(fs::NorInodeType::directory, record->type);
+    EXPECT_TRUE(infra::ContentsEqual(infra::StringAsByteRange(infra::BoundedConstString("docs")), record->name));
+    EXPECT_EQ(std::optional<uint32_t>(docs), Builder().EntryOf(fs::NorImageBuilder::rootInode, 0x572bb700));
+    EXPECT_EQ(1, Builder().MapOf(fs::NorImageBuilder::rootInode).height);
+}
+
+TEST_F(NorImageBuilderTest, a_file_keeps_its_contents_in_its_inline_area)
+{
+    std::array<uint8_t, 5> contents{ 1, 2, 3, 4, 5 };
+
+    auto file = Builder().AddFile(fs::NorImageBuilder::rootInode, "a", infra::MakeRange(contents));
+
+    auto record = Builder().RecordOf(file);
+    ASSERT_TRUE(record.has_value());
+    EXPECT_EQ(fs::NorInodeType::file, record->type);
+    EXPECT_EQ(5u, record->size);
+    EXPECT_TRUE(infra::ContentsEqual(infra::MakeRange(contents), record->inlineBytes));
+}
+
+TEST_F(NorImageBuilderTest, names_with_the_same_hash_take_the_next_collision_index)
+{
+    auto first = Builder().AddDirectory(fs::NorImageBuilder::rootInode, "t15311");
+    auto second = Builder().AddDirectory(fs::NorImageBuilder::rootInode, "t498781");
+
+    EXPECT_EQ(std::optional<uint32_t>(first), Builder().EntryOf(fs::NorImageBuilder::rootInode, 0x6b2b9000));
+    EXPECT_EQ(std::optional<uint32_t>(second), Builder().EntryOf(fs::NorImageBuilder::rootInode, 0x6b2b9001));
+}
+
+TEST_F(NorImageBuilderTest, records_and_entries_are_written_as_given)
+{
+    Builder().AddRecord(9, fs::NorInodeRecord{ 5, fs::NorInodeType::file, 0, 3 });
+    Builder().AddEntry(fs::NorImageBuilder::rootInode, 0x100, 12);
+
+    EXPECT_EQ(5u, Builder().RecordOf(9).value_or(fs::NorInodeRecord{}).parent);
+    EXPECT_EQ(std::optional<uint32_t>(12), Builder().EntryOf(fs::NorImageBuilder::rootInode, 0x100));
+    EXPECT_EQ(std::nullopt, Builder().RecordOf(10));
+    EXPECT_EQ(std::nullopt, Builder().EntryOf(fs::NorImageBuilder::rootInode, 0x101));
+}
+
+TEST_F(NorImageBuilderTest, a_record_written_again_replaces_the_previous_one)
+{
+    Builder().AddRecord(fs::NorImageBuilder::rootInode, fs::NorInodeRecord{ 0, fs::NorInodeType::file, 0, 7 });
+
+    EXPECT_EQ(fs::NorInodeType::file, Builder().RecordOf(fs::NorImageBuilder::rootInode).value_or(fs::NorInodeRecord{}).type);
+    EXPECT_EQ(7u, Builder().RecordOf(fs::NorImageBuilder::rootInode).value_or(fs::NorInodeRecord{}).size);
+}
+
+TEST_F(NorImageBuilderTest, commit_writes_the_maps_into_a_node_block_and_a_new_checkpoint)
+{
+    auto docs = Builder().AddDirectory(fs::NorImageBuilder::rootInode, "docs");
+
+    Builder().Commit();
+
+    EXPECT_EQ(5, Builder().CheckpointBlock());
+    EXPECT_EQ(fs::NorBlockType::node, Header(4).allocation->type);
+    auto checkpoint = CheckpointIn(5);
+    ASSERT_TRUE(checkpoint.has_value());
+    EXPECT_EQ(4u, checkpoint->inodeTableRoot / blockSize);
+    EXPECT_EQ(Builder().InodeTable().address, checkpoint->inodeTableRoot);
+    EXPECT_EQ(1, checkpoint->inodeTableHeight);
+    EXPECT_EQ(3u, checkpoint->nextInode);
+    EXPECT_EQ(2u, checkpoint->liveNodes);
+    EXPECT_TRUE(fs::IsNorBlockInUse(infra::MakeRange(checkpointBytes), 4));
+    EXPECT_FALSE(fs::IsNorBlockInUse(infra::MakeRange(checkpointBytes), 3));
+    EXPECT_EQ(std::optional<uint32_t>(docs), Builder().EntryOf(fs::NorImageBuilder::rootInode, 0x572bb700));
+}
+
+TEST_F(NorImageBuilderTest, commit_fills_as_many_node_blocks_as_the_maps_need)
+{
+    for (uint32_t index = 0; index != 30; ++index)
+    {
+        std::array<char, 4> name{ 'f', static_cast<char>('a' + index / 10), static_cast<char>('0' + index % 10) };
+        Builder().AddDirectory(fs::NorImageBuilder::rootInode, infra::BoundedConstString(name.data(), 3));
+    }
+
+    Builder().Commit();
+
+    EXPECT_EQ(fs::NorBlockType::node, Header(4).allocation->type);
+    EXPECT_EQ(fs::NorBlockType::node, Header(5).allocation->type);
+    EXPECT_EQ(6, Builder().CheckpointBlock());
+    EXPECT_EQ(2, Builder().InodeTable().height);
+    EXPECT_EQ(fs::NorImageBuilder::rootInode, Builder().RecordOf(31).value_or(fs::NorInodeRecord{}).parent);
 }

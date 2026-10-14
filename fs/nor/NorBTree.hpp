@@ -15,11 +15,24 @@ namespace fs
     class NorBTree
     {
     public:
+        struct Entry
+        {
+            uint32_t key{ 0 };
+            infra::ConstByteRange value;
+        };
+
+        struct SeekResult
+        {
+            std::optional<Entry> entry;
+            std::optional<uint32_t> nextLeaf;
+        };
+
         NorBTree(NorNodeCache& cache, const NorMapId& map);
 
         std::optional<infra::ConstByteRange> Find(const NorMapRoot& root, uint32_t key) const;
         std::optional<uint32_t> NodesModifiedByInsert(const NorMapRoot& root, uint32_t key) const;
         uint32_t NodesModifiedByChange(const NorMapRoot& root, uint32_t key) const;
+        SeekResult Seek(const NorMapRoot& root, uint32_t key) const;
 
         infra::ByteRange Insert(NorMapRoot& root, uint32_t key) const;
         infra::ByteRange Modify(NorMapRoot& root, uint32_t key) const;
