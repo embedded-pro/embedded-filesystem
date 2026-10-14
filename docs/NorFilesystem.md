@@ -158,6 +158,7 @@ A node starts with a header of 12 bytes, holds its entries, and ends with a CRC 
 | 8      | 4    | Lowest key of the node; for a radix node, the first block index it covers |
 
 With the default node size of 512 bytes, a node has 496 bytes for entries: a node of a radix tree holds 124 block numbers or child addresses, an inner node of a B+-tree 62 keys with their child addresses, a directory leaf 62 keys with their inode numbers, and an inode table leaf 3 inode records with their keys.
+In a B+-tree, every key is followed by its value in a leaf and by the address of its child in an inner node.
 A node is addressed by its address on the device, and 0 means no node.
 Node slots start at the header rounded up to the page, so that a node is programmed in whole pages: a 4 KiB block on SPI NOR holds 7 nodes, and a 2 KiB sector of internal flash 3.
 

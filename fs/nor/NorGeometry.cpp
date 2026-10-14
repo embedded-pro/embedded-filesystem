@@ -5,7 +5,6 @@ namespace fs
     namespace
     {
         constexpr uint32_t superblocks = 2;
-        constexpr uint32_t checkpointFixedBytes = 32;
         constexpr uint32_t dataBlocksOfOneCall = 2;
 
         bool Fits(const NorGeometry& geometry)
@@ -46,7 +45,7 @@ namespace fs
 
     uint32_t NorGeometry::CheckpointBytes() const
     {
-        return checkpointFixedBytes + (blocks + 7) / 8;
+        return NorCheckpointBytes(blocks);
     }
 
     uint32_t NorGeometry::NodeBlocksPerCheckpoint() const
