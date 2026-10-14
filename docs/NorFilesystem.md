@@ -32,7 +32,7 @@ This allows it to run on internal microcontroller flash with error correction, w
 ## Layout
 
 A volume spans the whole device.
-Every sector of the device has the same size; a device with sectors of several sizes completes `Format` and `Mount` with `unsupported`.
+Every sector of the device has the same size; a device with sectors of several sizes completes `Format` and `Mount` with `unsupported`, and so does a device of more than 2 GiB, because the addresses of modified nodes use the top bit.
 The device is divided into blocks of `sectorsPerBlock` sectors, and sectors after the last whole block are not used.
 
 | Block type       | Purpose                                                                             | Written                                    |
@@ -160,21 +160,28 @@ A node starts with a header of 12 bytes, holds its entries, and ends with a CRC 
 
 With the default node size of 512 bytes, a node has 496 bytes for entries: a node of a radix tree holds 124 block numbers or child addresses, an inner node of a B+-tree 62 keys with their child addresses, a directory leaf 62 keys with their inode numbers, and an inode table leaf 3 inode records with their keys.
 In a B+-tree, every key is followed by its value in a leaf and by the address of its child in an inner node.
+The key of an inner entry is at most every key below it, and the keys below it are less than the key of the next entry.
+A full node splits into two halves, except when the new key comes after its last key: the new key then starts the new node alone, so inode numbers, which only grow, fill their nodes.
 A node is addressed by its address on the device, and 0 means no node.
 Node slots start at the header rounded up to the page, so that a node is programmed in whole pages: a 4 KiB block on SPI NOR holds 7 nodes, and a 2 KiB sector of internal flash 3.
 
 A radix tree of height h covers `124^h` blocks: height 1 covers about 490 KiB of a file on SPI NOR, height 2 about 59 MiB, and height 3 more than any NOR device.
-A B+-tree has at most 3 levels: the inode table then holds about 11 000 inodes and a directory about 238 000 entries.
+A B+-tree has at most 3 levels: the inode table then holds up to about 11 000 inodes and a directory up to about 238 000 entries.
 An insertion that would need a fourth level completes with `noSpace`.
-Removing entries never merges nodes: a node that becomes empty is removed, and a root with one child is replaced by that child.
+Removing entries never merges nodes: a node that becomes empty is removed from its parent, and a root left with one child is replaced by that child, again while the new root is a node of the path of the removal.
+A root of a radix tree is only replaced by its first child, which covers the same first indexes.
 The walks over a map use a stack of at most 3 nodes and no recursion.
 
-Nodes are cached in RAM, `cachedNodes` at a time.
+Nodes are cached in RAM, `cachedNodes` at a time; reading a node replaces the least recently used one that is neither modified nor pinned by the current operation.
 A modified node is not written back immediately: the change is made durable by its record, and the node itself is written at the next checkpoint, at a new address.
-A modified node stays in the cache until then.
-Before an operation changes anything, it walks the maps it changes without modifying them and counts the nodes it would modify for the first time; when they do not fit next to the nodes already modified, a checkpoint comes first.
-The largest operation, `Rename` between two directories, modifies at most 11 nodes: 3 to remove the old entry, 5 to insert the new one with two splits, and 3 for the inode record.
-The cache needs at least 4 more nodes for the root updates of a checkpoint and for reading, so `cachedNodes` must be at least 15, which `static_assert` checks.
+A modified node stays in the cache until then, and its address has the top bit set and names its slot in the cache.
+Modifying a node modifies every node on its path to the root, so that each parent refers to the new address of its child, and the new root of a directory or data map is written into the record of its inode at once, which modifies the path of that record in the inode table.
+Every walk from the root of the inode table in RAM therefore reaches the current nodes, in the cache or on the flash.
+
+Before an operation changes anything, it brings the paths it changes into the cache, pins them, and counts the nodes it would modify for the first time, the new nodes of splits included.
+When they do not fit next to the nodes already modified, or when the cache has no room to bring a path in, a checkpoint comes first and the operation starts again.
+The largest operation, `Rename` between two directories, modifies at most 15 nodes: 3 to remove the old entry, 5 to insert the new one with two splits, 3 for the record of the entry, and 2 more for the record of each directory, whose map gets a new root.
+Reading needs a node of the cache that is not modified, so a checkpoint also comes first when every node is modified, and `cachedNodes` must be at least 15, which `static_assert` checks.
 
 ## Inodes and directories
 
@@ -261,7 +268,8 @@ A checkpoint makes the journal obsolete.
 It is written between operations, so it holds only committed state, and as one unit that no foreground operation interrupts:
 
 1. A collection step for the garbage collection of node blocks, described below.
-2. Every modified node is written to node blocks, the leaves of a map before its inner nodes and every other map before the inode table; the new root of a data map or a directory map is written into the record of its inode in the inode table.
+2. Every modified node is written to node blocks, leaves before inner nodes and every other map before the inode table.
+   The address of a written node replaces its address in the cache in its parent, which is written later; the address of the root of a data map or a directory map goes into the record of its inode in the inode table, and the address of the root of the inode table into the checkpoint.
 3. A new checkpoint block is allocated and programmed with the checkpoint, its CRC last.
 
 | Offset          | Size       | Field                                           |

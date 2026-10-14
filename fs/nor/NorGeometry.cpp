@@ -22,7 +22,7 @@ namespace fs
 
         bool Fits(const NorGeometry& geometry)
         {
-            return geometry.NodesPerBlock() != 0 && geometry.CheckpointBytes() <= geometry.PayloadSize() && geometry.blocks >= superblocks + geometry.ReserveBlocks() + geometry.WatermarkBlocks();
+            return geometry.NodesPerBlock() != 0 && geometry.CheckpointBytes() <= geometry.PayloadSize() && geometry.blocks >= superblocks + geometry.ReserveBlocks() + geometry.WatermarkBlocks() && uint64_t{ geometry.blocks } * geometry.BlockSize() <= norModifiedNodeTag;
         }
     }
 

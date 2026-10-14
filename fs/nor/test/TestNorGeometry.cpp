@@ -90,6 +90,12 @@ TEST(NorGeometryTest, the_checkpoint_fits_one_block)
     EXPECT_FALSE(fs::MakeNorGeometry(spiNor, 4096, 32225).has_value());
 }
 
+TEST(NorGeometryTest, a_device_spans_at_most_2_gib)
+{
+    EXPECT_TRUE(fs::MakeNorGeometry(spiNor, 65536, 32768).has_value());
+    EXPECT_FALSE(fs::MakeNorGeometry(spiNor, 65536, 32769).has_value());
+}
+
 TEST(NorGeometryTest, a_volume_holds_the_superblocks_the_reserve_and_the_watermark)
 {
     EXPECT_TRUE(fs::MakeNorGeometry(spiNor, 4096, 18).has_value());
