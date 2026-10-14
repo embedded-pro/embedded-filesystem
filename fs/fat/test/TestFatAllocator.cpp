@@ -53,9 +53,9 @@ namespace
             ExecuteAllActions();
         }
 
-        void ExpectGrowWithReservation(std::optional<uint32_t> last, uint32_t clusters, fs::Result result, uint32_t first, uint32_t allocated)
+        void ExpectGrowWithReservation(std::optional<uint32_t> last, uint32_t clusters, fs::Result result, uint32_t first, uint32_t allocated, fs::FatChain chain = fs::FatChain::referenced)
         {
-            allocator.Grow(last, clusters, reservations.reservation, [this](fs::Result result, uint32_t first, uint32_t allocated)
+            allocator.Grow(last, clusters, reservations.reservation, chain, [this](fs::Result result, uint32_t first, uint32_t allocated)
                 {
                     grown.callback(result, first, allocated);
                 });
@@ -103,6 +103,13 @@ namespace
             state.cleanAtMount = true;
             state.fsInfo = fs::FsInfo{ std::nullopt, cluster };
             allocator.Reset();
+        }
+
+        void UseEveryClusterBefore(uint32_t end, uint32_t except)
+        {
+            for (uint32_t cluster = 2; cluster != end; ++cluster)
+                if (cluster != except)
+                    builder->SetFatEntry(cluster, EndOfChain());
         }
 
         fs::FatVolumeState state;
@@ -202,6 +209,67 @@ TEST_F(FatAllocatorTest, chain_grown_at_a_cluster_in_use_starts_at_the_cursor)
     ExpectGrowAt(40, 1, fs::Result::success, 2, 1);
 }
 
+TEST_F(FatAllocatorTest, new_chain_starts_at_the_first_free_cluster_of_the_allocation_unit_of_the_cursor)
+{
+    state.allocationUnits = fs::FatAllocationUnits{ 64, 2 };
+    UseEveryClusterBefore(200, 196);
+    StartAt(200);
+
+    ExpectGrow(std::nullopt, 2, fs::Result::success, 196, 2);
+    Flush();
+
+    EXPECT_EQ(200u, builder->FatEntry(196));
+    EXPECT_EQ(201u, allocator.Cursor());
+}
+
+TEST_F(FatAllocatorTest, new_chain_takes_no_free_cluster_before_the_allocation_unit_of_the_cursor)
+{
+    state.allocationUnits = fs::FatAllocationUnits{ 64, 2 };
+    UseEveryClusterBefore(200, 150);
+    StartAt(200);
+
+    ExpectGrow(std::nullopt, 1, fs::Result::success, 200, 1);
+}
+
+TEST_F(FatAllocatorTest, new_chain_starts_at_the_cursor_when_the_allocation_unit_is_unknown)
+{
+    UseEveryClusterBefore(200, 196);
+    StartAt(200);
+
+    ExpectGrow(std::nullopt, 1, fs::Result::success, 200, 1);
+}
+
+TEST_F(FatAllocatorTest, file_whose_next_cluster_is_in_use_takes_the_cursor_rather_than_an_earlier_free_cluster)
+{
+    state.allocationUnits = fs::FatAllocationUnits{ 64, 2 };
+    UseEveryClusterBefore(200, 196);
+    StartAt(200);
+
+    ExpectGrow(198, 1, fs::Result::success, 200, 1);
+}
+
+TEST_F(FatAllocatorTest, chain_grown_at_a_cluster_in_use_starts_at_the_first_free_cluster_of_the_allocation_unit_of_the_cursor)
+{
+    state.allocationUnits = fs::FatAllocationUnits{ 64, 2 };
+    UseEveryClusterBefore(200, 196);
+    StartAt(200);
+    builder->SetFatEntry(300, EndOfChain());
+
+    ExpectGrowAt(300, 1, fs::Result::success, 196, 1);
+}
+
+TEST_F(FatAllocatorTest, later_clusters_of_a_new_chain_continue_at_the_cursor)
+{
+    state.allocationUnits = fs::FatAllocationUnits{ 64, 2 };
+    UseEveryClusterBefore(200, 196);
+    builder->SetFatEntry(211, EndOfChain());
+
+    ExpectGrowAt(210, 2, fs::Result::success, 210, 2);
+    Flush();
+
+    EXPECT_EQ(212u, builder->FatEntry(210));
+}
+
 TEST_F(FatAllocatorTest, cursor_moves_past_each_allocation)
 {
     ExpectGrow(std::nullopt, 1, fs::Result::success, 2, 1);
@@ -289,6 +357,34 @@ TEST_F(FatAllocatorTest, link_in_another_fat_sector_flushes_the_new_entries_firs
     EXPECT_EQ(std::make_pair(Request::write, firstCopy), requests[3]);
     EXPECT_EQ(std::make_pair(Request::write, secondCopy), requests[4]);
     EXPECT_EQ(std::make_pair(Request::flush, 0u), requests[5]);
+    EXPECT_EQ(300u, builder->FatEntry(last));
+}
+
+TEST_F(FatAllocatorTest, link_of_a_referenced_chain_with_a_reservation_flushes_first)
+{
+    auto last = builder->AllocateChain(1);
+    builder->AllocateChain(1);
+    StartAt(300);
+    auto flushes = device.FlushRequests();
+
+    ExpectGrowWithReservation(last, 1, fs::Result::success, 300, 1);
+
+    EXPECT_EQ(flushes + 1, device.FlushRequests());
+}
+
+TEST_F(FatAllocatorTest, link_of_a_chain_that_no_entry_references_needs_no_flush)
+{
+    auto last = builder->AllocateChain(1);
+    builder->AllocateChain(1);
+    StartAt(300);
+    auto writes = device.WriteRequests();
+    auto flushes = device.FlushRequests();
+
+    ExpectGrowWithReservation(last, 1, fs::Result::success, 300, 1, fs::FatChain::unreferenced);
+
+    EXPECT_EQ(writes, device.WriteRequests());
+    EXPECT_EQ(flushes, device.FlushRequests());
+    Flush();
     EXPECT_EQ(300u, builder->FatEntry(last));
 }
 

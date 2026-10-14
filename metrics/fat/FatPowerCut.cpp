@@ -3,6 +3,7 @@
 #include "fs/fat/test_doubles/FatImageBuilder.hpp"
 #include "metrics/fat/FatChecker.hpp"
 #include "metrics/fat/FatSweep.hpp"
+#include "metrics/fat/FatTargets.hpp"
 #include "metrics/power_cut/PowerCutSweep.hpp"
 #include "metrics/report/Report.hpp"
 #include "metrics/suite/MetricRecorder.hpp"
@@ -179,7 +180,8 @@ namespace
 
     void SweepEveryMode(const metrics::BlockDeviceModel& model, const std::string& caseName, const std::function<metrics::SweepResult(const SweepMode& mode)>& sweep)
     {
-        metrics::MetricRecorder recorder{ metrics::GlobalReport(), "embedded-filesystem/fat", model.name, sizeof(fs::FatFileSystem::WithStorage<1, 8>) };
+        metrics::FatTargets targets{ model };
+        metrics::MetricRecorder recorder{ metrics::GlobalReport(), "embedded-filesystem/fat", model.name, sizeof(fs::FatFileSystem::WithStorage<1, 8>), &targets };
 
         for (const auto& mode : modes)
         {
@@ -361,6 +363,7 @@ INSTANTIATE_TEST_SUITE_P(Fat, FatPowerCut,
         testing::Values(SweepCase{ "append_and_sync", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 100 } }, false, false },
             SweepCase{ "append_across_cluster", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 0 } }, false, false },
             SweepCase{ "append_across_fat_sector", 1, -100, true, fs::OpenMode::append, { { std::nullopt, 200 } }, false, true },
+            SweepCase{ "append_to_an_empty_file_across_fat_sector", 0, 0, false, fs::OpenMode::append, { { std::nullopt, 100 }, { std::nullopt, 0 } }, false, true },
             SweepCase{ "overwrite_three_sectors", 1, 4 * 512, true, fs::OpenMode::readWrite, { { 512, 3 * 512 } }, false, false },
             SweepCase{ "close_after_writes", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 300 }, { std::nullopt, 300 }, { std::nullopt, 300 } }, true, false },
             SweepCase{ "expect_size_write_close", 1, 188, false, fs::OpenMode::append, { { std::nullopt, 2000 }, { std::nullopt, 2000 } }, true, false, 8000 },

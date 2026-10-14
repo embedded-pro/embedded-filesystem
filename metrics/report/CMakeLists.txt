@@ -10,6 +10,7 @@ target_sources(metrics.report PRIVATE
     Report.hpp
     ReportEnvironment.cpp
     ReportEnvironment.hpp
+    Targets.hpp
 )
 
 add_library(metrics.report_main STATIC)

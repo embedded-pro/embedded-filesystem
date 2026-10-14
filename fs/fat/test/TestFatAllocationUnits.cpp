@@ -50,3 +50,14 @@ TEST(FatAllocationUnitsTest, boundaries_repeat_every_unit)
     EXPECT_EQ(8u, units.NextBoundaryAfter(4));
     EXPECT_EQ(8u, units.NextBoundaryAfter(7));
 }
+
+TEST(FatAllocationUnitsTest, unit_of_a_cluster_starts_at_the_boundary_at_or_before_it)
+{
+    fs::FatAllocationUnits units{ 4, 4 };
+
+    EXPECT_EQ(2u, units.StartOf(2));
+    EXPECT_EQ(2u, units.StartOf(3));
+    EXPECT_EQ(4u, units.StartOf(4));
+    EXPECT_EQ(4u, units.StartOf(7));
+    EXPECT_EQ(8u, units.StartOf(8));
+}

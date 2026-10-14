@@ -1,3 +1,4 @@
+#include "metrics/report/Targets.hpp"
 #include "metrics/suite/Measurement.hpp"
 #include "metrics/workload/test_doubles/FakeFileSystem.hpp"
 #include "gmock/gmock.h"
@@ -13,6 +14,46 @@ namespace
         {
             return std::make_shared<metrics::FakeFileSystem>(flash);
         } };
+}
+
+namespace
+{
+    const metrics::BlockDeviceModel testBlockDevice{ "measurement-block", 512, 64, 16, 2, { std::chrono::microseconds(100), std::chrono::microseconds(25), std::chrono::microseconds(50), {}, {} },
+        { std::chrono::microseconds(100), std::chrono::microseconds(25), std::chrono::microseconds(50), std::chrono::milliseconds(250), std::chrono::milliseconds(10) } };
+
+    class BoundTargets
+        : public metrics::Targets
+    {
+    public:
+        std::optional<metrics::Target> For(std::string_view metric, std::string_view) const override
+        {
+            if (metric == "R-2")
+                return metrics::AtMost(1);
+
+            return std::nullopt;
+        }
+    };
+
+    hal::FlashStub flashOfTheFakeSubject{ 16, 4096 };
+    const BoundTargets boundTargets;
+
+    metrics::BlockSetup blockSetup{ "Fake_MeasurementBlock", &testBlockDevice, 1, [](metrics::VirtualTime&, hal::BlockDevice&, const metrics::BlockDeviceModel&)
+        {
+            return std::make_shared<metrics::FakeFileSystem>(flashOfTheFakeSubject);
+        },
+        &boundTargets };
+}
+
+TEST(BlockMeasurementTest, results_carry_the_targets_of_the_setup)
+{
+    metrics::BlockMeasurement measurement{ blockSetup };
+
+    measurement.Recorder().Record("R-2", "L6 random 65536", "requests", metrics::Better::lower, 1.0);
+
+    const auto& result = metrics::GlobalReport().Results().back();
+    ASSERT_TRUE(result.target.has_value());
+    EXPECT_EQ("<= 1", result.target->Text());
+    EXPECT_EQ("measurement-block", result.device);
 }
 
 TEST(NorMeasurementTest, parameters_carry_the_scale_of_the_setup_and_the_fill_level)

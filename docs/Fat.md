@@ -152,11 +152,12 @@ Clusters are allocated in this order:
 
 1. A file with a reservation takes its clusters from the reservation.
 2. A file that grows takes the cluster after its last cluster when it is free.
-3. Otherwise a file takes the first free cluster at or after the cursor within the allocation unit of the cursor, else the next free cluster after it, wrapping around at the end of the volume.
+3. Otherwise the first cluster of a new chain is the first free cluster of the allocation unit of the cursor, and any other cluster is the first free cluster at or after the cursor; either search continues past the unit, wrapping around at the end of the volume.
 4. A reservation that would cross an allocation unit boundary starts at the next boundary instead, when a free run of its length starts there.
 5. A file opened in `append` mode that has no clusters yet starts at the first allocation unit boundary at or after the cursor, wrapping around, whose whole allocation unit the cache of free runs holds, so that a log fills allocation units one after the other; when the cache holds no such allocation unit, rule 3 applies.
 6. When the allocation unit of the card is not known, the rules about allocation units do not apply.
 
+With rule 3, new files take the clusters that removed files freed in the unit the card is already writing; its search from the start of the unit reads the FAT sectors that cover it, one or two on a card formatted to the SD specification.
 The allocation unit is given by `FatConfig::blocksPerAllocationUnit`, because `hal::BlockDevice` does not report it.
 On FAT12, the allocator never takes a cluster whose 12-bit FAT entry straddles two sectors, because such an entry is changed by two writes; these clusters count as used.
 A file whose last cluster has such an entry, which only another implementation creates, is extended by writing both halves of that entry, so a power loss between the two writes can corrupt its chain.
@@ -182,6 +183,7 @@ The order of writes is fixed so that a power loss never leaves a directory entry
 
 The ranks of the sector cache enforce the order of data, FAT and directory entries.
 Within the FAT, sectors are written in ascending order, so when the entries of the new clusters are in another FAT sector than the link of step 3, the operation flushes the cache between steps 2 and 3.
+A file whose directory entry does not refer to a cluster yet, such as a new file before its first `Sync`, needs no such flush: no entry refers to its chain until step 4, which the ranks write after a flush, so a power loss leaves at most clusters allocated but unused.
 `Sync` writes back every modified sector in this order and flushes the device.
 The directory entry is written only when its contents changed, so an overwrite inside a file that keeps its size and timestamps costs no write of the directory.
 

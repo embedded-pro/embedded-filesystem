@@ -159,7 +159,8 @@ The volume is filled until the usage reported by the filesystem reaches the fill
 | W-5 | Overwrite scaling           | Device time of one overwrite in a 4 MiB file, divided by the same in a 64 KiB file                      | L3        | At most 1.2 on NOR                                                                                                                              |
 | W-6 | Call latency                | 99th percentile and maximum of the simulated latency of one call                                        | L2, L3    | Maximum at maximum timings, independent of file size and fill level: NOR at most one sector erase and one block program; FAT at most one commit |
 
-On FAT, one commit is 2 block writes plus one per copy of the FAT, 3 flushes and one allocation unit opening, plus the one background read that a call may wait for.
+On FAT, one commit is 2 block writes plus one per copy of the FAT, 3 flushes and two allocation unit openings, plus the one background read that a call may wait for.
+The card keeps only its most recently written allocation units open, so the first commit after writes elsewhere opens both the unit of its data and the unit of the FAT and the directory, whichever filesystem makes it; with 2 FAT copies on `sd-card-256m` the bound is 1021.0 ms.
 
 ## Read metrics
 
@@ -185,11 +186,11 @@ For SD cards and eMMC, wear leveling is done by the card, and the device metrics
 
 ## Device metrics for SD cards and eMMC
 
-| Id  | Metric                   | Definition                                                                                             | Workloads  | Target                                      |
-|-----|--------------------------|--------------------------------------------------------------------------------------------------------|------------|---------------------------------------------|
-| M-1 | Blocks per write request | Mean number of blocks per write request                                                                | L1, L2, L4 | At least FatFs                              |
-| M-2 | Aligned writes           | Share of the written blocks that start an allocation unit or follow the block written just before them | L1, L2, L4 | At least FatFs on L1; reported on L2 and L4 |
-| M-3 | Allocation units touched | Distinct allocation units written per MiB of user data                                                 | L1, L2, L4 | At most FatFs                               |
+| Id  | Metric                   | Definition                                                                                             | Workloads  | Target                                                                            |
+|-----|--------------------------|--------------------------------------------------------------------------------------------------------|------------|-----------------------------------------------------------------------------------|
+| M-1 | Blocks per write request | Mean number of blocks per write request                                                                | L1, L2, L4 | At least FatFs; reported on L4 for FAT                                            |
+| M-2 | Aligned writes           | Share of the written blocks that start an allocation unit or follow the block written just before them | L1, L2, L4 | At least FatFs on L1; reported on L2 and L4, and on the first phase of L1 for FAT |
+| M-3 | Allocation units touched | Distinct allocation units written per MiB of user data                                                 | L1, L2, L4 | At most `fatfs/tuned`                                                             |
 
 ## Robustness metrics
 
@@ -202,6 +203,9 @@ The sweep is described in [Testing.md](Testing.md).
 M-2 counts blocks rather than requests, and every block of a request after its first follows the block before it, so writing the same blocks in fewer, larger requests leaves the share unchanged; only a block that neither starts an allocation unit nor follows the previous one counts against it.
 Counted by requests, a filesystem that coalesces small writes would lower its share by sending fewer data requests next to the same number of metadata requests.
 On L2, where every `Sync` writes one data block, one block per FAT copy and one directory block, almost no write is aligned for any subject, and on L4 the alignment of small files says little, so M-2 is only reported there.
+M-3 is compared with `fatfs/tuned`, which aligns its data area to the allocation unit as embedded-filesystem does and as the SD specification asks; `fatfs/default` starts its data area right after the FAT, so on L1 a 1 MiB file and the FAT share one unit, where an aligned layout touches two.
+The FAT subject keeps the two FAT copies of the SD specification, where FatFs writes one: every `Sync` and `Remove` writes one block per copy, and so does the clean-shutdown bit at the first change after a mount.
+That costs M-1 on L4, 1.918 against 1.920 for FatFs, and M-2 on the first phase of L1, which also clears the clean-shutdown bit, 0.99756 against 0.99854; with one FAT copy they measure 2.240 and 0.99854, so these two are reported for FAT.
 
 ## On-target metrics
 
@@ -239,6 +243,7 @@ Every metric executable writes a fragment with the device models it used and one
 }
 ```
 
+The targets of a subject come from its `metrics::Targets`, which the metric executable gives to its `metrics::MetricRecorder`: `metrics::FatTargets` for the FAT subject and its power-cut sweep, computing the W-6 bound from the timings of the device model; baselines record no targets.
 A target is either a bound, such as `<= 1.1`, which the metric executable decides, or a comparison with other subjects, such as `>= baselines` (the best of FatFs and littlefs) or `<= fatfs` (the best FatFs configuration), which is decided when the fragments are merged.
 `metrics/report/merge_report.py` merges the fragments into `metrics.json`, with the same shape, and writes a Markdown summary of it, `metrics.md`.
 Given the `metrics.json` of `main` with `--baseline`, it marks a reported metric of embedded-filesystem as failed when it is worse than on `main` by more than 5 %, in the direction given by `better`; results on a device model whose parameters changed, and results that the metric executables mark as `diagnostic`, are not compared.

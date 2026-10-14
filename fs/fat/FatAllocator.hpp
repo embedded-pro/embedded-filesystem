@@ -15,6 +15,12 @@
 
 namespace fs
 {
+    enum class FatChain : uint8_t
+    {
+        referenced,
+        unreferenced
+    };
+
     class FatAllocator
     {
     public:
@@ -27,13 +33,13 @@ namespace fs
         uint32_t Cursor() const;
         uint32_t Contiguous() const;
         void Grow(std::optional<uint32_t> last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
-        void Grow(std::optional<uint32_t> last, uint32_t clusters, FatReservation& reservation, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
+        void Grow(std::optional<uint32_t> last, uint32_t clusters, FatReservation& reservation, FatChain chain, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
         void GrowAt(uint32_t start, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
         void Take(uint32_t last, uint32_t clusters, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
         void Link(const infra::Function<void(Result result)>& onDone);
 
     private:
-        void Start(std::optional<uint32_t> last, uint32_t start, uint32_t clusters, bool link, FatReservation* reservation, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
+        void Start(std::optional<uint32_t> last, uint32_t start, uint32_t clusters, bool link, FatReservation* reservation, FatChain chain, const infra::Function<void(Result result, uint32_t first, uint32_t allocated)>& onDone);
         void Next();
         void ReadCandidateSector();
         void OnSector(Result result, infra::ConstByteRange contents);
@@ -46,6 +52,7 @@ namespace fs
         void LinkLast();
         void Done(Result result);
         uint32_t Preferred() const;
+        uint32_t SearchStart() const;
         bool IsCluster(uint32_t cluster) const;
         bool Available(uint32_t cluster) const;
         uint32_t After(uint32_t cluster) const;
@@ -57,6 +64,7 @@ namespace fs
         const FatReservations& reservations;
         FatFreeSpaceScan& freeSpace;
         FatReservation* own{ nullptr };
+        FatChain chain{ FatChain::referenced };
         uint32_t cursor{ 2 };
         std::optional<uint32_t> last;
         uint32_t start{ 0 };
