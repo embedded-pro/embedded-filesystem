@@ -106,7 +106,7 @@ namespace fs
 
             void PutBytes(infra::ConstByteRange bytes)
             {
-                std::copy(bytes.begin(), bytes.end(), entry.begin() + offset);
+                std::ranges::copy(bytes, entry.begin() + offset);
                 offset += bytes.size();
             }
 

@@ -81,7 +81,7 @@ namespace fs
 
         std::ranges::fill(bytes, uint8_t{ 0xff });
         bytes[0] = static_cast<uint8_t>(allocation.type);
-        std::fill_n(bytes.begin() + 1, 3, uint8_t{ 0 });
+        std::ranges::fill(infra::Head(infra::DiscardHead(bytes, 1), 3), uint8_t{ 0 });
         StoreLittle64(bytes, 4, allocation.sequence);
         StoreLittle32(bytes, 12, allocation.owner.inode);
         StoreLittle32(bytes, 16, allocation.owner.index);

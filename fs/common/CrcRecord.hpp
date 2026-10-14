@@ -20,7 +20,7 @@ namespace fs
 
         bool Fits(std::size_t entrySize) const;
         infra::ByteRange Add(std::size_t entrySize);
-        infra::ConstByteRange Seal();
+        infra::ConstByteRange Seal() const;
 
     private:
         infra::ByteRange buffer;

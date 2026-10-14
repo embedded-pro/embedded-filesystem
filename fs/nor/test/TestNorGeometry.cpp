@@ -6,6 +6,14 @@ namespace
     constexpr fs::NorConfig spiNor{ .maxBlocks = 40000 };
     constexpr fs::NorConfig internalFlash{ .maxBlocks = 256, .programUnit = 16, .pageSize = 16 };
     constexpr fs::NorConfig twoSectors{ .maxBlocks = 64, .sectorsPerBlock = 2 };
+
+    template<class Change>
+    bool HasGeometryAfter(Change change)
+    {
+        auto config = spiNor;
+        change(config);
+        return fs::MakeNorGeometry(config, 4096, 4096).has_value();
+    }
 }
 
 TEST(NorGeometryTest, spi_nor_blocks_of_one_sector)
@@ -85,4 +93,139 @@ TEST(NorGeometryTest, a_volume_holds_the_superblocks_the_reserve_and_the_waterma
 {
     EXPECT_TRUE(fs::MakeNorGeometry(spiNor, 4096, 18).has_value());
     EXPECT_FALSE(fs::MakeNorGeometry(spiNor, 4096, 17).has_value());
+}
+
+TEST(NorGeometryTest, a_volume_needs_blocks_and_sectors)
+{
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.maxBlocks = 3;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.sectorsPerBlock = 0;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.sectorsPerBlock = 0x10000;
+        }));
+}
+
+TEST(NorGeometryTest, program_unit_and_page_are_powers_of_two_with_the_page_at_least_the_program_unit)
+{
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.programUnit = 0;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.programUnit = 3;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.pageSize = 96;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.programUnit = 512;
+        }));
+}
+
+TEST(NorGeometryTest, a_node_is_a_whole_number_of_pages_and_holds_two_inode_records)
+{
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.nodeSize = 640;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.nodeSize = 256;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.nodeSize = 0x10000;
+        }));
+    EXPECT_TRUE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.nodeSize = 1024;
+        }));
+}
+
+TEST(NorGeometryTest, the_cache_holds_at_least_the_largest_operation_and_a_checkpoint)
+{
+    EXPECT_TRUE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.cachedNodes = 15;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.cachedNodes = 14;
+        }));
+}
+
+TEST(NorGeometryTest, the_inline_area_holds_at_least_the_block_header)
+{
+    EXPECT_TRUE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.inlineBytes = 36;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.inlineBytes = 35;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.programUnit = 16;
+            config.pageSize = 16;
+            config.inlineBytes = 47;
+        }));
+}
+
+TEST(NorGeometryTest, names_are_1_to_255_bytes_and_shorter_than_a_path)
+{
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.maxNameBytes = 0;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.maxNameBytes = 256;
+            config.nodeSize = 2048;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.maxPathBytes = 64;
+        }));
+}
+
+TEST(NorGeometryTest, an_epoch_spans_at_least_two_blocks)
+{
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.journalBlocks = 1;
+        }));
+}
+
+TEST(NorGeometryTest, wear_leveling_needs_a_threshold_that_relative_counts_can_hold_and_an_interval)
+{
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.staticWearLevelingThreshold = 0;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.staticWearLevelingThreshold = 129;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.staticWearLevelingInterval = 0;
+        }));
+}
+
+TEST(NorGeometryTest, a_volume_has_a_slot_for_operations_on_paths)
+{
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.pathOperations = 0;
+        }));
 }

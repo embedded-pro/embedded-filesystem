@@ -35,7 +35,7 @@ namespace fs
         return entry;
     }
 
-    infra::ConstByteRange CrcRecord::Seal()
+    infra::ConstByteRange CrcRecord::Seal() const
     {
         auto size = overhead + payloadSize;
         StoreLittle16(buffer, 0, static_cast<uint16_t>(size));

@@ -91,6 +91,7 @@ TEST_F(NorRecordTest, entries_with_different_bytes_differ)
 
     EXPECT_NE((fs::NorInodePut{ 3, infra::MakeRange(inodeRecord) }), (fs::NorInodePut{ 3, infra::MakeRange(otherRecord) }));
     EXPECT_NE((fs::NorInodePut{ 3, infra::MakeRange(inodeRecord) }), (fs::NorInodePut{ 4, infra::MakeRange(inodeRecord) }));
+    EXPECT_NE((fs::NorSize{ 3, 1, infra::MakeRange(inlineBytes) }), (fs::NorSize{ 4, 1, infra::MakeRange(inlineBytes) }));
     EXPECT_NE((fs::NorSize{ 3, 1, infra::MakeRange(inlineBytes) }), (fs::NorSize{ 3, 2, infra::MakeRange(inlineBytes) }));
     EXPECT_NE((fs::NorSize{ 3, 1, infra::MakeRange(inlineBytes) }), (fs::NorSize{ 3, 1, {} }));
 }
