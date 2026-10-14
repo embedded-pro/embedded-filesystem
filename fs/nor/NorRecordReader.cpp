@@ -11,7 +11,7 @@ namespace fs
         really_assert(buffer.size() >= CrcRecord::overhead);
     }
 
-    void NorRecordReader::Read(const NorGeometry& geometry, uint32_t block, uint32_t offset, const infra::Function<void(std::optional<OpenedRecord> record)>& onRead)
+    void NorRecordReader::Read(const NorGeometry& geometry, uint32_t block, uint32_t offset, const infra::Function<void(const std::optional<OpenedRecord>& record)>& onRead)
     {
         if (offset + CrcRecord::headerSize > geometry.BlockSize())
         {

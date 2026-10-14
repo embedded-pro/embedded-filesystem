@@ -21,7 +21,7 @@ namespace fs
         NorRecordReader& operator=(const NorRecordReader& other) = delete;
         ~NorRecordReader() = default;
 
-        void Read(const NorGeometry& geometry, uint32_t block, uint32_t offset, const infra::Function<void(std::optional<OpenedRecord> record)>& onDone);
+        void Read(const NorGeometry& geometry, uint32_t block, uint32_t offset, const infra::Function<void(const std::optional<OpenedRecord>& record)>& onDone);
 
     private:
         void OnHeader();
@@ -33,7 +33,7 @@ namespace fs
         uint32_t address{ 0 };
         std::size_t room{ 0 };
         std::size_t length{ 0 };
-        infra::AutoResetFunction<void(std::optional<OpenedRecord> record)> onDone;
+        infra::AutoResetFunction<void(const std::optional<OpenedRecord>& record)> onDone;
     };
 }
 

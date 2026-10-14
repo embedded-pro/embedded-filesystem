@@ -45,7 +45,7 @@ namespace fs
 
     void NorJournalScan::ReadRecord()
     {
-        records.Read(*volume.geometry, block, end, [this](std::optional<OpenedRecord> record)
+        records.Read(*volume.geometry, block, end, [this](const std::optional<OpenedRecord>& record)
             {
                 OnRecord(record);
             });
@@ -93,7 +93,7 @@ namespace fs
         if (allocation.type == NorBlockType::journal && allocation.sequence > sequence && (!next.has_value() || allocation.sequence < nextSequence))
         {
             candidateSequence = allocation.sequence;
-            records.Read(*volume.geometry, candidate, volume.geometry->HeaderSize(), [this](std::optional<OpenedRecord> record)
+            records.Read(*volume.geometry, candidate, volume.geometry->HeaderSize(), [this](const std::optional<OpenedRecord>& record)
                 {
                     OnCandidateRecord(record);
                 });

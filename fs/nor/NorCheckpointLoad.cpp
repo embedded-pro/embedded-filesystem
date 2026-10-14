@@ -138,7 +138,7 @@ namespace fs
 
     void NorCheckpointLoad::ReadBitmap()
     {
-        auto bitmapBytes = static_cast<uint32_t>(NorCheckpointBitmapBytes(volume.geometry->blocks));
+        auto bitmapBytes = NorCheckpointBitmapBytes(volume.geometry->blocks);
         if (position == bitmapBytes)
         {
             onDone(Consistency());
