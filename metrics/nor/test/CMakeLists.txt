@@ -12,4 +12,6 @@ target_link_libraries(metrics.nor_test PUBLIC
 
 target_sources(metrics.nor_test PRIVATE
     TestNorChecker.cpp
+    TestNorSweep.cpp
+    TestNorTargets.cpp
 )

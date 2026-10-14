@@ -11,6 +11,15 @@ target_link_libraries(metrics.nor PUBLIC
 target_sources(metrics.nor PRIVATE
     NorChecker.cpp
     NorChecker.hpp
+    NorSweep.cpp
+    NorSweep.hpp
+    NorTargets.cpp
+    NorTargets.hpp
+)
+
+emfs_add_metrics(metrics.nor_power_cut
+    SOURCES NorPowerCut.cpp
+    LIBRARIES metrics.nor
 )
 
 add_subdirectory(test)

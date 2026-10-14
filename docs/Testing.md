@@ -99,7 +99,7 @@ After each cut, the sweep checks that:
 * a file or directory that was being created or removed exists with its previous contents or not at all, one that was being renamed exists under exactly one of its old and new names with its contents, and no other entry appeared or disappeared.
 
 The cases cover every operation that writes, the start of a new journal block after a mount, checkpoints, the background work of erasing, collecting node blocks and moving blocks, and chains of a cut, a mount, an append and another cut.
-`Format` is swept too: after a cut, the mount either completes with `corrupted` or finds the new, empty volume.
+`Format` is swept too: after a cut, the mount finds the previous volume as long as its second superblock is not erased, completes with `corrupted`, or finds the new, empty volume with every other block in the pre-erased pool.
 Small configurations, with a few cached nodes and a short journal, make the sweep cross journal blocks and checkpoints within a few operations.
 Unlike FAT, a NOR volume allows nothing extra after a cut: blocks that an interrupted operation allocated are free, because no committed state refers to them, so the run without a cut and the runs with a cut pass the same checks.
 
