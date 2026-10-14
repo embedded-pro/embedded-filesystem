@@ -11,9 +11,13 @@ target_link_libraries(fs.nor PUBLIC
 target_sources(fs.nor PRIVATE
     NorBlockHeader.cpp
     NorBlockHeader.hpp
+    NorBlockStates.cpp
+    NorBlockStates.hpp
     NorCheckpoint.cpp
     NorCheckpoint.hpp
     NorConfig.hpp
+    NorEraseCounts.cpp
+    NorEraseCounts.hpp
     NorFormatter.cpp
     NorFormatter.hpp
     NorGeometry.cpp

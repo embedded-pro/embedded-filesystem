@@ -12,8 +12,10 @@ target_link_libraries(fs.nor_test PUBLIC
 
 target_sources(fs.nor_test PRIVATE
     TestNorBlockHeader.cpp
+    TestNorBlockStates.cpp
     TestNorCheckpoint.cpp
     TestNorConfig.cpp
+    TestNorEraseCounts.cpp
     TestNorFormatter.cpp
     TestNorGeometry.cpp
     TestNorInodeRecord.cpp
