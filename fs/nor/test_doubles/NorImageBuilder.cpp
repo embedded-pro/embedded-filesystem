@@ -107,17 +107,22 @@ namespace fs
 
     void NorImageBuilder::AppendRecord(std::initializer_list<NorEntry> entries)
     {
-        auto bytes = Scratch(static_cast<uint32_t>(buffer.size()));
-        CrcRecord record{ bytes };
+        CrcRecord record{ Scratch(static_cast<uint32_t>(buffer.size())) };
         if (std::exchange(linkPending, false))
             AddNorEntry(record, link);
         for (const auto& entry : entries)
             AddNorEntry(record, entry);
 
-        auto rounded = infra::Head(bytes, geometry.RoundToProgramUnit(static_cast<uint32_t>(record.Seal().size())));
-        really_assert(journalEnd + rounded.size() <= geometry.BlockSize());
-        Program(geometry.AddressOfBlock(journalBlock) + journalEnd, rounded);
-        journalEnd += static_cast<uint32_t>(rounded.size());
+        journalEnd = ProgramRecord(journalBlock, journalEnd, record);
+    }
+
+    uint32_t NorImageBuilder::AppendRecord(uint32_t block, uint32_t offset, std::initializer_list<NorEntry> entries)
+    {
+        CrcRecord record{ Scratch(static_cast<uint32_t>(buffer.size())) };
+        for (const auto& entry : entries)
+            AddNorEntry(record, entry);
+
+        return ProgramRecord(block, offset, record);
     }
 
     void NorImageBuilder::StartJournalBlock(uint32_t block)
@@ -179,6 +184,14 @@ namespace fs
         auto bytes = infra::Head(infra::MakeRange(buffer), size);
         std::ranges::fill(bytes, uint8_t{ 0xff });
         return bytes;
+    }
+
+    uint32_t NorImageBuilder::ProgramRecord(uint32_t block, uint32_t offset, const CrcRecord& record)
+    {
+        auto rounded = infra::Head(infra::MakeRange(buffer), geometry.RoundToProgramUnit(static_cast<uint32_t>(record.Seal().size())));
+        really_assert(offset + rounded.size() <= geometry.BlockSize());
+        Program(geometry.AddressOfBlock(block) + offset, rounded);
+        return offset + static_cast<uint32_t>(rounded.size());
     }
 
     void NorImageBuilder::ProgramCheckpoint(uint32_t block, infra::ByteRange bytes)

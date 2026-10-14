@@ -20,6 +20,7 @@ target_sources(fs.nor_test PRIVATE
     TestNorFormatter.cpp
     TestNorGeometry.cpp
     TestNorImageBuilder.cpp
+    TestNorMount.cpp
     TestNorInodeRecord.cpp
     TestNorNode.cpp
     TestNorRecord.cpp

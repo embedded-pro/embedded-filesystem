@@ -65,6 +65,13 @@ namespace fs
         StoreLittle32(checkpoint, CrcOffset(blocks), Crc(checkpoint, blocks));
     }
 
+    NorCheckpoint ParseNorCheckpointFixedPart(infra::ConstByteRange fixedPart)
+    {
+        really_assert(fixedPart.size() >= norCheckpointFixedBytes);
+
+        return NorCheckpoint{ LoadLittle32(fixedPart, 0), fixedPart[4], LoadLittle32(fixedPart, 8), LoadLittle32(fixedPart, 12), LoadLittle32(fixedPart, 16), LoadLittle32(fixedPart, 20), BlocksOf(fixedPart) };
+    }
+
     std::optional<NorCheckpoint> OpenNorCheckpoint(infra::ConstByteRange bytes)
     {
         really_assert(bytes.size() >= norCheckpointFixedBytes + norCheckpointCrcBytes);
@@ -73,7 +80,7 @@ namespace fs
         if (blocks > (bytes.size() - norCheckpointFixedBytes - norCheckpointCrcBytes) * 8 || LoadLittle32(bytes, CrcOffset(blocks)) != Crc(bytes, blocks))
             return std::nullopt;
 
-        return NorCheckpoint{ LoadLittle32(bytes, 0), bytes[4], LoadLittle32(bytes, 8), LoadLittle32(bytes, 12), LoadLittle32(bytes, 16), LoadLittle32(bytes, 20), blocks };
+        return ParseNorCheckpointFixedPart(bytes);
     }
 
     bool IsNorBlockInUse(infra::ConstByteRange checkpoint, uint32_t block)

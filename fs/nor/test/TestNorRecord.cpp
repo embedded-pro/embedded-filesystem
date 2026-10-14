@@ -160,3 +160,10 @@ TEST_F(NorRecordTest, a_malformed_record_stays_malformed)
     EXPECT_EQ(std::nullopt, reader.Next());
     EXPECT_TRUE(reader.Malformed());
 }
+
+TEST(NorLargestRecordTest, holds_a_link_and_a_rename_or_eight_block_entries_with_a_size)
+{
+    static_assert(fs::NorLargestRecordBytes(64, 64) == 228);
+    static_assert(fs::NorLargestRecordBytes(64, 255) == 8 + 9 + 9 + 13 + 5 + 20 + 64 + 255);
+    static_assert(fs::NorLargestRecordBytes(255, 1) == 8 + 9 + 8 * 17 + 11 + 255);
+}

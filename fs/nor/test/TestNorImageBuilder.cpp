@@ -17,6 +17,7 @@ namespace
     constexpr uint32_t blockSize = 4096;
     constexpr uint32_t headerSize = 36;
     constexpr uint32_t firstRecord = headerSize + 36;
+    constexpr uint32_t inodeRecordBytes = fs::NorInodeRecordBytes(config);
 
     class NorImageBuilderTest
         : public testing::Test
@@ -182,10 +183,20 @@ TEST_F(NorImageBuilderTest, the_first_record_of_a_journal_block_links_it_to_the_
     EXPECT_EQ(fs::NorBlockType::journal, Header(8).allocation->type);
     auto record = RecordAt(8 * blockSize + headerSize);
     ASSERT_TRUE(record.has_value());
-    fs::NorEntryReader reader{ *record, fs::NorInodeRecordBytes(config) };
+    fs::NorEntryReader reader{ *record, inodeRecordBytes };
     EXPECT_EQ(fs::NorEntry(fs::NorLink{ 3, end }), reader.Next());
     EXPECT_EQ(fs::NorEntry(fs::NorInodeRemove{ 8 }), reader.Next());
     EXPECT_EQ(8, Builder().JournalBlock());
+}
+
+TEST_F(NorImageBuilderTest, writes_a_record_where_it_is_told)
+{
+    auto end = Builder().AppendRecord(9, headerSize, { fs::NorInodeRemove{ 7 } });
+
+    auto record = RecordAt(9 * blockSize + headerSize);
+    ASSERT_TRUE(record.has_value());
+    EXPECT_EQ(headerSize + record->size, end);
+    EXPECT_EQ(firstRecord, Builder().JournalEnd());
 }
 
 TEST_F(NorImageBuilderTest, a_record_is_padded_to_the_program_unit)

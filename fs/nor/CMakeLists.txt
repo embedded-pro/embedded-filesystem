@@ -15,6 +15,8 @@ target_sources(fs.nor PRIVATE
     NorBlockStates.hpp
     NorCheckpoint.cpp
     NorCheckpoint.hpp
+    NorCheckpointLoad.cpp
+    NorCheckpointLoad.hpp
     NorConfig.hpp
     NorEraseCounts.cpp
     NorEraseCounts.hpp
@@ -22,15 +24,24 @@ target_sources(fs.nor PRIVATE
     NorFormatter.hpp
     NorGeometry.cpp
     NorGeometry.hpp
+    NorHeaderScan.cpp
+    NorHeaderScan.hpp
     NorInodeRecord.cpp
     NorInodeRecord.hpp
+    NorJournalScan.cpp
+    NorJournalScan.hpp
     NorLayout.hpp
+    NorMount.cpp
+    NorMount.hpp
     NorNode.cpp
     NorNode.hpp
     NorRecord.cpp
     NorRecord.hpp
+    NorRecordReader.cpp
+    NorRecordReader.hpp
     NorSuperblock.cpp
     NorSuperblock.hpp
+    NorVolumeState.hpp
 )
 
 add_subdirectory(test_doubles)
