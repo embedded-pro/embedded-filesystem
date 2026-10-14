@@ -57,6 +57,7 @@ namespace fs
         uint32_t AddFile(uint32_t parent, infra::BoundedConstString name, infra::ConstByteRange contents);
         void AddRecord(uint32_t inode, const NorInodeRecord& record);
         void AddEntry(uint32_t directory, uint32_t key, uint32_t inode);
+        void MapBlock(uint32_t file, uint32_t index, uint32_t block);
         void Commit();
 
         const NorMapRoot& InodeTable() const;
@@ -66,6 +67,8 @@ namespace fs
 
     private:
         uint32_t AddInode(uint32_t parent, infra::BoundedConstString name, const NorInodeRecord& record);
+        infra::ConstByteRange WriteData(uint32_t file, infra::ConstByteRange contents, NorMapRoot& map);
+        void WriteDataBlock(uint32_t file, uint32_t index, infra::ConstByteRange bytes, NorMapRoot& map);
         uint32_t FreeKey(uint32_t directory, infra::BoundedConstString name);
         void SetMapOf(uint32_t inode, const NorMapRoot& map);
         void Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key);
@@ -99,6 +102,7 @@ namespace fs
         NorMapRoot inodeTable;
         uint32_t nextInode{ 0 };
         uint32_t liveNodes{ 0 };
+        infra::BoundedVector<uint32_t>::WithMaxSize<64> blocksToCommit;
     };
 }
 

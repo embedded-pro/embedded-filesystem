@@ -15,8 +15,10 @@
 #include "fs/nor/NorMount.hpp"
 #include "fs/nor/NorNameLookup.hpp"
 #include "fs/nor/NorNodeCache.hpp"
+#include "fs/nor/NorOpen.hpp"
 #include "fs/nor/NorOpenDirectory.hpp"
 #include "fs/nor/NorPathWalk.hpp"
+#include "fs/nor/NorRead.hpp"
 #include "fs/nor/NorStat.hpp"
 #include "fs/nor/NorVolumeState.hpp"
 #include "hal/interfaces/Flash.hpp"
@@ -39,7 +41,7 @@ namespace fs
         infra::MemoryRange<NorNodeCache::Slot> nodeSlots;
     };
 
-    using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorStat, NorOpenDirectory>;
+    using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorStat, NorOpenDirectory, NorOpen, NorRead>;
 
     class NorVolume
     {
@@ -55,6 +57,10 @@ namespace fs
         infra::ByteRange JournalBuffer() const;
         infra::ByteRange NodeStorage() const;
         PathLimits Limits() const;
+        const NorGeometry& Geometry() const;
+        NorNodeCache& Cache();
+        NorMapFetch& Fetch();
+        NorInodeRead& InodeRead();
         NorPathWalk& Walk();
         NorDirectoryRead& DirectoryRead();
         OperationQueue& Queue();

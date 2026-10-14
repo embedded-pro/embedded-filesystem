@@ -8,6 +8,7 @@
 #include "fs/nor/NorBlockStates.hpp"
 #include "fs/nor/NorConfig.hpp"
 #include "fs/nor/NorDirectory.hpp"
+#include "fs/nor/NorFile.hpp"
 #include "fs/nor/NorFormatter.hpp"
 #include "fs/nor/NorLifecycle.hpp"
 #include "fs/nor/NorNodeCache.hpp"
@@ -64,6 +65,7 @@ namespace fs
 
     private:
         virtual infra::SharedPtr<NorDirectory> AllocateDirectory() = 0;
+        virtual infra::SharedPtr<NorFile> AllocateFile() = 0;
 
         bool IsMounted() const;
         template<class Callback>
@@ -136,9 +138,15 @@ namespace fs
             return directories.Allocate();
         }
 
+        infra::SharedPtr<NorFile> AllocateFile() override
+        {
+            return files.Allocate();
+        }
+
     private:
         typename infra::BoundedVector<NorPathSlot>::template WithMaxSize<Config.pathOperations> pathSlots;
         HandlePool<NorDirectory, Config.directories> directories{ Volume() };
+        HandlePool<NorFile, Files> files{ Volume() };
     };
 
     constexpr std::array<NorFileSystem::Machine::Transition, 9> NorFileSystem::Rows()

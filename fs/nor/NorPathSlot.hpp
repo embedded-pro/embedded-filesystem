@@ -4,6 +4,8 @@
 #include "fs/common/OperationQueue.hpp"
 #include "fs/interfaces/Directory.hpp"
 #include "fs/interfaces/EntryInfo.hpp"
+#include "fs/interfaces/File.hpp"
+#include "fs/interfaces/OpenMode.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/BoundedString.hpp"
@@ -25,7 +27,14 @@ namespace fs
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<Directory> directory)> onDone;
     };
 
-    using NorPathCall = std::variant<NorStatCall, NorOpenDirectoryCall>;
+    struct NorOpenCall
+    {
+        infra::BoundedConstString path;
+        OpenMode mode{ OpenMode::read };
+        infra::AutoResetFunction<void(Result result, infra::SharedPtr<File> file)> onDone;
+    };
+
+    using NorPathCall = std::variant<NorStatCall, NorOpenDirectoryCall, NorOpenCall>;
 
     struct NorPathSlot
     {

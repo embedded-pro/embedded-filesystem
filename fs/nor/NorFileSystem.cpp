@@ -54,9 +54,12 @@ namespace fs
             volume.Defer(onDone, Result::busy);
     }
 
-    void NorFileSystem::Open(infra::BoundedConstString, OpenMode, const infra::Function<void(Result result, infra::SharedPtr<File> file)>& onDone)
+    void NorFileSystem::Open(infra::BoundedConstString path, OpenMode mode, const infra::Function<void(Result result, infra::SharedPtr<File> file)>& onDone)
     {
-        Refuse(onDone);
+        if (mode != OpenMode::read)
+            Refuse(onDone);
+        else
+            StartPathCall(path, NorOpenCall{ path, mode, onDone });
     }
 
     void NorFileSystem::OpenDirectory(infra::BoundedConstString path, const infra::Function<void(Result result, infra::SharedPtr<Directory> directory)>& onDone)
@@ -157,10 +160,17 @@ namespace fs
 
         if (auto* stat = std::get_if<NorStatCall>(&call))
             volume.Operation().emplace<NorStat>(volume, std::move(*stat), finished).Start();
-        else
-            volume.Operation().emplace<NorOpenDirectory>(volume, std::move(std::get<NorOpenDirectoryCall>(call)), [this]
+        else if (auto* openDirectory = std::get_if<NorOpenDirectoryCall>(&call))
+            volume.Operation().emplace<NorOpenDirectory>(volume, std::move(*openDirectory), [this]
                                   {
                                       return AllocateDirectory();
+                                  },
+                                  finished)
+                .Start();
+        else
+            volume.Operation().emplace<NorOpen>(volume, std::move(std::get<NorOpenCall>(call)), [this]
+                                  {
+                                      return AllocateFile();
                                   },
                                   finished)
                 .Start();

@@ -78,7 +78,7 @@ namespace
         void ExpectChangesCompleteWith(fs::Result result)
         {
             testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
-            volume.Open("/a", fs::OpenMode::read, [&done](fs::Result opened, infra::SharedPtr<fs::File> file)
+            volume.Open("/a", fs::OpenMode::write, [&done](fs::Result opened, infra::SharedPtr<fs::File> file)
                 {
                     EXPECT_EQ(nullptr, file);
                     done.callback(opened);

@@ -70,10 +70,12 @@ namespace metrics
 
         private:
             infra::SharedPtr<fs::NorDirectory> AllocateDirectory() override;
+            infra::SharedPtr<fs::NorFile> AllocateFile() override;
 
         private:
             infra::BoundedVector<fs::NorPathSlot>::WithMaxSize<8> pathSlots;
             fs::HandlePool<fs::NorDirectory, 1> directories{ Volume() };
+            fs::HandlePool<fs::NorFile, 1> files{ Volume() };
         };
 
         template<class Start>

@@ -1,4 +1,5 @@
 #include "fs/nor/NorVolume.hpp"
+#include "infra/util/ReallyAssert.hpp"
 
 namespace fs
 {
@@ -43,6 +44,27 @@ namespace fs
     PathLimits NorVolume::Limits() const
     {
         return PathLimits{ config.maxNameBytes, config.maxPathBytes };
+    }
+
+    const NorGeometry& NorVolume::Geometry() const
+    {
+        really_assert(state.geometry.has_value());
+        return *state.geometry;
+    }
+
+    NorNodeCache& NorVolume::Cache()
+    {
+        return cache;
+    }
+
+    NorMapFetch& NorVolume::Fetch()
+    {
+        return fetch;
+    }
+
+    NorInodeRead& NorVolume::InodeRead()
+    {
+        return inodeRead;
     }
 
     NorPathWalk& NorVolume::Walk()
