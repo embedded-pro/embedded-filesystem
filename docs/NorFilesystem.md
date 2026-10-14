@@ -336,12 +336,12 @@ So at most one move happens per interval, and its overhead is bounded by the con
 
 ## Format
 
-`fs::NorFileSystem::Format` creates a volume on the device of an unmounted volume, with the format parameters of its configuration:
+`fs::NorFileSystem::Format` creates a volume on the device of an unmounted volume, with the format parameters of its configuration, through `fs::NorFormatter`:
 
 1. Read part A of every block, to keep its erase count.
 2. Erase the two superblocks, so that a power loss from now on leaves a device that does not mount as the previous volume.
 3. Erase every other block, one sector per request, and program part A with its previous erase count plus one; a block without a valid part A gets the average of the others.
-4. Allocate the first checkpoint block and a node block, write the inode table with the root directory into the node block, and the checkpoint, with the epoch starting after it.
+4. Allocate block 2 as a node block and block 3 as the first checkpoint block, with the sequences 1 and 2, write the inode table with the root directory into the node block, and the checkpoint, with the epoch starting after it.
 5. Program the two superblocks.
 
 Every block of the new volume except the superblocks, the first checkpoint block and its node block is in the pre-erased pool.
