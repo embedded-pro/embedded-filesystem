@@ -9,11 +9,11 @@
 #include "fs/nor/NorRadixTree.hpp"
 #include "hal/interfaces/test_doubles/FlashStub.hpp"
 #include "infra/timer/test_helper/ClockFixture.hpp"
+#include "infra/util/BoundedVector.hpp"
 #include "gtest/gtest.h"
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <vector>
 
 namespace fs
 {
@@ -24,6 +24,8 @@ namespace fs
         static constexpr uint32_t nodeSize = 64;
         static constexpr uint32_t recordBytes = 20;
         static constexpr NorMapId inodeTable{ NorMap::inodeTable, 0, recordBytes };
+
+        using Headers = infra::BoundedVector<NorNodeHeader>::WithMaxSize<64>;
 
         static constexpr NorMapId DirectoryMap(uint32_t inode)
         {
@@ -74,9 +76,9 @@ namespace fs
             record[6] = map.height;
         }
 
-        std::vector<NorNodeHeader> WriteBack()
+        Headers WriteBack()
         {
-            std::vector<NorNodeHeader> written;
+            Headers written;
 
             for (auto next = writeBack.Next(); next.has_value(); next = writeBack.Next())
             {

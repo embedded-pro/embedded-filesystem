@@ -1,16 +1,20 @@
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorRadixTree.hpp"
 #include "hal/interfaces/test_doubles/FlashStub.hpp"
+#include "infra/util/BoundedVector.hpp"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <array>
 #include <cstdint>
-#include <map>
+#include <utility>
 
 namespace
 {
     constexpr uint32_t nodeSize = 48;
     constexpr uint32_t fanout = 8;
     constexpr uint32_t owner = 9;
+
+    using Blocks = infra::BoundedVector<std::pair<uint32_t, uint32_t>>::WithMaxSize<16>;
 
     class NorRadixTreeTest
         : public testing::Test
@@ -28,16 +32,16 @@ namespace
             return fs::LoadLittle32(fs::NorNodeEntries(NodeAt(address)), position * 4);
         }
 
-        std::map<uint32_t, uint32_t> Mapped() const
+        Blocks Mapped() const
         {
-            std::map<uint32_t, uint32_t> mapped;
+            Blocks mapped;
             if (root.address != 0)
                 Collect(root.address, static_cast<uint8_t>(root.height - 1), 0, mapped);
 
             return mapped;
         }
 
-        void Collect(uint32_t address, uint8_t level, uint32_t first, std::map<uint32_t, uint32_t>& mapped) const
+        void Collect(uint32_t address, uint8_t level, uint32_t first, Blocks& mapped) const
         {
             auto header = fs::ReadNorNodeHeader(NodeAt(address));
             EXPECT_EQ(fs::NorMap::fileData, header.map);
@@ -57,7 +61,7 @@ namespace
                     continue;
 
                 if (level == 0)
-                    mapped[first + position] = value;
+                    mapped.emplace_back(first + position, value);
                 else
                     Collect(value, static_cast<uint8_t>(level - 1), first + position * span, mapped);
             }
@@ -90,7 +94,7 @@ TEST_F(NorRadixTreeTest, set_creates_the_nodes_down_to_the_leaf)
     EXPECT_EQ(33u, tree.Find(root, 70));
     EXPECT_EQ(0u, tree.Find(root, 71));
     EXPECT_EQ(0u, tree.Find(root, 6));
-    EXPECT_EQ((std::map<uint32_t, uint32_t>{ { 70, 33 } }), Mapped());
+    EXPECT_THAT(Mapped(), testing::ElementsAre(testing::Pair(70, 33)));
     EXPECT_EQ(3u, cache.ModifiedNodes());
 }
 
@@ -99,7 +103,7 @@ TEST_F(NorRadixTreeTest, set_replaces_a_mapped_block)
     tree.Set(root, 3, 7);
     tree.Set(root, 3, 8);
 
-    EXPECT_EQ((std::map<uint32_t, uint32_t>{ { 3, 8 } }), Mapped());
+    EXPECT_THAT(Mapped(), testing::ElementsAre(testing::Pair(3, 8)));
 }
 
 TEST_F(NorRadixTreeTest, the_tree_grows_when_an_index_is_beyond_its_reach)
@@ -113,7 +117,7 @@ TEST_F(NorRadixTreeTest, the_tree_grows_when_an_index_is_beyond_its_reach)
 
     EXPECT_EQ(2, root.height);
     EXPECT_EQ(leaf, SlotAt(root.address, 0));
-    EXPECT_EQ((std::map<uint32_t, uint32_t>{ { 3, 7 }, { 9, 8 } }), Mapped());
+    EXPECT_THAT(Mapped(), testing::ElementsAre(testing::Pair(3, 7), testing::Pair(9, 8)));
 }
 
 TEST_F(NorRadixTreeTest, the_tree_grows_by_two_levels_at_once)
@@ -123,7 +127,7 @@ TEST_F(NorRadixTreeTest, the_tree_grows_by_two_levels_at_once)
     tree.Set(root, 100, 8);
 
     EXPECT_EQ(3, root.height);
-    EXPECT_EQ((std::map<uint32_t, uint32_t>{ { 3, 7 }, { 100, 8 } }), Mapped());
+    EXPECT_THAT(Mapped(), testing::ElementsAre(testing::Pair(3, 7), testing::Pair(100, 8)));
     EXPECT_EQ(5u, cache.ModifiedNodes());
 }
 
@@ -146,7 +150,7 @@ TEST_F(NorRadixTreeTest, an_empty_leaf_leaves_its_parent_and_a_root_with_only_it
     tree.Clear(root, 9);
 
     EXPECT_EQ((fs::NorMapRoot{ first, 1 }), root);
-    EXPECT_EQ((std::map<uint32_t, uint32_t>{ { 3, 7 } }), Mapped());
+    EXPECT_THAT(Mapped(), testing::ElementsAre(testing::Pair(3, 7)));
     EXPECT_EQ(1u, cache.ModifiedNodes());
 }
 
@@ -158,7 +162,7 @@ TEST_F(NorRadixTreeTest, a_root_whose_only_child_is_not_its_first_stays)
     tree.Clear(root, 3);
 
     EXPECT_EQ(2, root.height);
-    EXPECT_EQ((std::map<uint32_t, uint32_t>{ { 9, 8 } }), Mapped());
+    EXPECT_THAT(Mapped(), testing::ElementsAre(testing::Pair(9, 8)));
 }
 
 TEST_F(NorRadixTreeTest, clearing_one_of_several_blocks_keeps_the_leaf)
@@ -168,7 +172,7 @@ TEST_F(NorRadixTreeTest, clearing_one_of_several_blocks_keeps_the_leaf)
 
     tree.Clear(root, 3);
 
-    EXPECT_EQ((std::map<uint32_t, uint32_t>{ { 4, 9 } }), Mapped());
+    EXPECT_THAT(Mapped(), testing::ElementsAre(testing::Pair(4, 9)));
 }
 
 TEST_F(NorRadixTreeTest, a_root_with_several_children_stays)
@@ -180,7 +184,7 @@ TEST_F(NorRadixTreeTest, a_root_with_several_children_stays)
     tree.Clear(root, 9);
 
     EXPECT_EQ(2, root.height);
-    EXPECT_EQ((std::map<uint32_t, uint32_t>{ { 3, 7 }, { 20, 6 } }), Mapped());
+    EXPECT_THAT(Mapped(), testing::ElementsAre(testing::Pair(3, 7), testing::Pair(20, 6)));
 }
 
 TEST_F(NorRadixTreeTest, clearing_an_index_that_is_not_mapped_changes_nothing)
@@ -196,7 +200,7 @@ TEST_F(NorRadixTreeTest, clearing_an_index_that_is_not_mapped_changes_nothing)
     EXPECT_EQ(before, root);
     EXPECT_EQ(0u, tree.NodesModifiedByClear(root, 4));
     EXPECT_EQ(0u, tree.NodesModifiedByClear(root, 20));
-    EXPECT_EQ((std::map<uint32_t, uint32_t>{ { 3, 7 }, { 9, 8 } }), Mapped());
+    EXPECT_THAT(Mapped(), testing::ElementsAre(testing::Pair(3, 7), testing::Pair(9, 8)));
 }
 
 TEST_F(NorRadixTreeTest, clearing_the_last_block_empties_the_tree)
@@ -222,7 +226,7 @@ TEST_F(NorRadixTreeTest, the_root_shrinks_along_the_path_of_a_clear)
     tree.Clear(root, 3);
 
     EXPECT_EQ(1, root.height);
-    EXPECT_EQ((std::map<uint32_t, uint32_t>{ { 4, 9 } }), Mapped());
+    EXPECT_THAT(Mapped(), testing::ElementsAre(testing::Pair(4, 9)));
     EXPECT_EQ(1u, cache.ModifiedNodes());
 }
 

@@ -1,18 +1,21 @@
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorBTree.hpp"
 #include "hal/interfaces/test_doubles/FlashStub.hpp"
+#include "infra/util/BoundedVector.hpp"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <initializer_list>
 #include <tuple>
-#include <vector>
 
 namespace
 {
     constexpr uint32_t nodeSize = 48;
     constexpr fs::NorMapId directory{ fs::NorMap::directory, 7, 4 };
+
+    using Keys = infra::BoundedVector<uint32_t>::WithMaxSize<64>;
 
     class NorBTreeTest
         : public testing::Test
@@ -57,16 +60,16 @@ namespace
             return fs::ReadNorNodeHeader(NodeAt(address)).count;
         }
 
-        std::vector<uint32_t> Keys() const
+        Keys KeysOfTree() const
         {
-            std::vector<uint32_t> keys;
+            Keys keys;
             if (root.address != 0)
                 Collect(root.address, static_cast<uint8_t>(root.height - 1), 0, uint64_t{ 1 } << 32, keys);
 
             return keys;
         }
 
-        void Collect(uint32_t address, uint8_t level, uint64_t low, uint64_t high, std::vector<uint32_t>& keys) const
+        void Collect(uint32_t address, uint8_t level, uint64_t low, uint64_t high, Keys& keys) const
         {
             auto node = NodeAt(address);
             auto header = fs::ReadNorNodeHeader(node);
@@ -116,12 +119,12 @@ TEST_F(NorBTreeTest, the_first_key_creates_a_leaf_as_root)
     EXPECT_EQ(500u, ValueOf(50));
     EXPECT_EQ(std::nullopt, tree.Find(root, 40));
     EXPECT_EQ(std::nullopt, tree.Find(root, 60));
-    EXPECT_EQ((std::vector<uint32_t>{ 50 }), Keys());
+    EXPECT_THAT(KeysOfTree(), testing::ElementsAre(50));
 }
 
 TEST_F(NorBTreeTest, keys_inserted_in_any_order_are_found_in_order)
 {
-    std::vector<uint32_t> inserted;
+    Keys inserted;
     for (uint32_t step = 0; step != 30; ++step)
     {
         auto key = step * 37 % 64 * 3;
@@ -131,7 +134,7 @@ TEST_F(NorBTreeTest, keys_inserted_in_any_order_are_found_in_order)
     }
 
     std::ranges::sort(inserted);
-    EXPECT_EQ(inserted, Keys());
+    EXPECT_EQ(inserted, KeysOfTree());
     for (auto key : inserted)
         EXPECT_EQ(key * 10, ValueOf(key));
     EXPECT_EQ(std::nullopt, tree.Find(root, 1));
@@ -148,7 +151,7 @@ TEST_F(NorBTreeTest, a_full_leaf_splits_in_half)
     EXPECT_EQ(30u, KeyAt(root.address, 1));
     EXPECT_EQ(3, CountAt(ChildAt(root.address, 0)));
     EXPECT_EQ(2, CountAt(ChildAt(root.address, 1)));
-    EXPECT_EQ((std::vector<uint32_t>{ 10, 15, 20, 30, 40 }), Keys());
+    EXPECT_THAT(KeysOfTree(), testing::ElementsAre(10, 15, 20, 30, 40));
 }
 
 TEST_F(NorBTreeTest, a_key_after_the_last_of_a_full_leaf_goes_alone_into_a_new_leaf)
@@ -168,7 +171,7 @@ TEST_F(NorBTreeTest, a_key_that_lands_in_the_upper_half_of_a_split_goes_to_the_n
     EXPECT_EQ(30u, KeyAt(root.address, 1));
     EXPECT_EQ(2, CountAt(ChildAt(root.address, 0)));
     EXPECT_EQ(3, CountAt(ChildAt(root.address, 1)));
-    EXPECT_EQ((std::vector<uint32_t>{ 10, 20, 30, 35, 40 }), Keys());
+    EXPECT_THAT(KeysOfTree(), testing::ElementsAre(10, 20, 30, 35, 40));
 }
 
 TEST_F(NorBTreeTest, a_key_below_every_key_lowers_the_first_keys_of_its_path)
@@ -178,7 +181,7 @@ TEST_F(NorBTreeTest, a_key_below_every_key_lowers_the_first_keys_of_its_path)
 
     EXPECT_EQ(5u, KeyAt(root.address, 0));
     EXPECT_EQ(5u, fs::ReadNorNodeHeader(NodeAt(root.address)).lowestKey);
-    EXPECT_EQ((std::vector<uint32_t>{ 5, 10, 20, 30, 40, 50 }), Keys());
+    EXPECT_THAT(KeysOfTree(), testing::ElementsAre(5, 10, 20, 30, 40, 50));
 }
 
 TEST_F(NorBTreeTest, inner_nodes_split_up_to_three_levels)
@@ -186,7 +189,7 @@ TEST_F(NorBTreeTest, inner_nodes_split_up_to_three_levels)
     InsertRange(10, 640);
 
     EXPECT_EQ(3, root.height);
-    EXPECT_EQ(64u, Keys().size());
+    EXPECT_EQ(64u, KeysOfTree().size());
     EXPECT_EQ(4, CountAt(root.address));
 }
 
@@ -233,7 +236,7 @@ TEST_F(NorBTreeTest, removing_a_key_keeps_the_others)
     tree.Remove(root, 30);
 
     EXPECT_EQ(std::nullopt, tree.Find(root, 30));
-    EXPECT_EQ((std::vector<uint32_t>{ 10, 20, 40, 50 }), Keys());
+    EXPECT_THAT(KeysOfTree(), testing::ElementsAre(10, 20, 40, 50));
     EXPECT_EQ(400u, ValueOf(40));
 }
 
@@ -244,7 +247,7 @@ TEST_F(NorBTreeTest, removing_the_first_key_of_a_node_raises_its_lowest_key)
     tree.Remove(root, 10);
 
     EXPECT_EQ(20u, fs::ReadNorNodeHeader(NodeAt(ChildAt(root.address, 0))).lowestKey);
-    EXPECT_EQ((std::vector<uint32_t>{ 20, 30, 40, 50 }), Keys());
+    EXPECT_THAT(KeysOfTree(), testing::ElementsAre(20, 30, 40, 50));
 }
 
 TEST_F(NorBTreeTest, an_empty_leaf_leaves_its_parent_and_a_root_with_one_child_is_replaced_by_it)
@@ -255,7 +258,7 @@ TEST_F(NorBTreeTest, an_empty_leaf_leaves_its_parent_and_a_root_with_one_child_i
     tree.Remove(root, 50);
 
     EXPECT_EQ((fs::NorMapRoot{ leaf, 1 }), root);
-    EXPECT_EQ((std::vector<uint32_t>{ 10, 20, 30, 40 }), Keys());
+    EXPECT_THAT(KeysOfTree(), testing::ElementsAre(10, 20, 30, 40));
     EXPECT_EQ(1u, cache.ModifiedNodes());
 }
 
@@ -269,7 +272,7 @@ TEST_F(NorBTreeTest, an_empty_first_leaf_leaves_its_parent)
 
     EXPECT_EQ(2, root.height);
     EXPECT_EQ(50u, fs::ReadNorNodeHeader(NodeAt(root.address)).lowestKey);
-    EXPECT_EQ((std::vector<uint32_t>{ 60, 70, 80, 90 }), Keys());
+    EXPECT_THAT(KeysOfTree(), testing::ElementsAre(60, 70, 80, 90));
 }
 
 TEST_F(NorBTreeTest, removing_the_last_key_empties_the_tree)
@@ -295,7 +298,7 @@ TEST_F(NorBTreeTest, the_root_shrinks_along_the_path_of_a_removal)
     tree.Remove(root, 170);
 
     EXPECT_EQ(1, root.height);
-    EXPECT_EQ((std::vector<uint32_t>{ 180 }), Keys());
+    EXPECT_THAT(KeysOfTree(), testing::ElementsAre(180));
     EXPECT_EQ(1u, cache.ModifiedNodes());
 }
 
