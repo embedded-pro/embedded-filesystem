@@ -23,7 +23,8 @@ namespace fs
     {
         block = volume.checkpoint.recordsBlock;
         end = volume.checkpoint.recordsOffset;
-        epochBlocks = 1;
+        volume.epoch.clear();
+        volume.epoch.push_back(block);
         ReadHeader(block, [this]
             {
                 OnFirstHeader();
@@ -127,11 +128,17 @@ namespace fs
 
     void NorJournalScan::Follow(uint32_t following)
     {
+        if (volume.epoch.full())
+        {
+            onDone(Result::corrupted);
+            return;
+        }
+
         volume.blocks.Set(following, NorBlockState::inUse);
+        volume.epoch.push_back(following);
         block = following;
         sequence = nextSequence;
         end = volume.geometry->HeaderSize();
-        ++epochBlocks;
         ReadRecord();
     }
 
@@ -141,7 +148,7 @@ namespace fs
             if (volume.blocks.State(index) == NorBlockState::pending)
                 volume.blocks.Set(index, NorBlockState::freeNotErased);
 
-        volume.journal = NorJournal{ block, end, epochBlocks };
+        volume.journal = NorJournal{ block, end, static_cast<uint32_t>(volume.epoch.size()) };
         onDone(Result::success);
     }
 

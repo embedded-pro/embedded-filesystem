@@ -1,5 +1,6 @@
 #include "fs/nor/NorMapFetch.hpp"
 #include "fs/nor/NorBTree.hpp"
+#include "fs/nor/NorLayout.hpp"
 #include "fs/nor/NorRadixTree.hpp"
 
 namespace fs
@@ -18,6 +19,12 @@ namespace fs
         level = static_cast<uint8_t>(root.height - 1);
         firstIndex = 0;
         onDone = onFetched;
+
+        if ((root.address == 0) != (root.height == 0) || root.height > norMaxLevels)
+        {
+            onDone(NorFetchResult::corrupted);
+            return;
+        }
 
         if (map.map == NorMap::fileData && !NorRadixTree::Covers(root, key, cache.NodeSize()))
             address = 0;

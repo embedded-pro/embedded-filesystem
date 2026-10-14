@@ -13,10 +13,14 @@ target_link_libraries(fs.nor_test PUBLIC
 )
 
 target_sources(fs.nor_test PRIVATE
+    NorRecordsFixture.hpp
+    NorVolumeFixture.hpp
     TestNorBTree.cpp
+    TestNorBlockAllocator.cpp
     TestNorBlockHeader.cpp
     TestNorBlockStates.cpp
     TestNorCheckpoint.cpp
+    TestNorCheckpointWriter.cpp
     TestNorConfig.cpp
     TestNorDirectories.cpp
     TestNorDirectoryKey.cpp
@@ -27,6 +31,8 @@ target_sources(fs.nor_test PRIVATE
     TestNorGeometry.cpp
     TestNorImageBuilder.cpp
     NorMapsFixture.hpp
+    TestNorJournal.cpp
+    TestNorMakeDirectory.cpp
     TestNorMapFetch.cpp
     TestNorMount.cpp
     TestNorInodeRecord.cpp
@@ -35,5 +41,6 @@ target_sources(fs.nor_test PRIVATE
     TestNorNodeWriteBack.cpp
     TestNorRadixTree.cpp
     TestNorRecord.cpp
+    TestNorRecordApply.cpp
     TestNorSuperblock.cpp
 )

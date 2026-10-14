@@ -205,11 +205,19 @@ TEST(NorGeometryTest, names_are_1_to_255_bytes_and_shorter_than_a_path)
         }));
 }
 
-TEST(NorGeometryTest, an_epoch_spans_at_least_two_blocks)
+TEST(NorGeometryTest, an_epoch_spans_2_to_16_blocks)
 {
     EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
         {
             config.journalBlocks = 1;
+        }));
+    EXPECT_TRUE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.journalBlocks = 16;
+        }));
+    EXPECT_FALSE(HasGeometryAfter([](fs::NorConfig& config)
+        {
+            config.journalBlocks = 17;
         }));
 }
 

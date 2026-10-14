@@ -43,6 +43,14 @@ namespace fs
         really_assert(bytes.size() >= NorCheckpointBytes(checkpoint.blocks));
 
         std::ranges::fill(infra::Head(bytes, CrcOffset(checkpoint.blocks)), uint8_t{ 0 });
+        SerializeNorCheckpointFixedPart(checkpoint, bytes);
+    }
+
+    void SerializeNorCheckpointFixedPart(const NorCheckpoint& checkpoint, infra::ByteRange bytes)
+    {
+        really_assert(bytes.size() >= norCheckpointFixedBytes);
+
+        std::ranges::fill(infra::Head(bytes, norCheckpointFixedBytes), uint8_t{ 0 });
         StoreLittle32(bytes, 0, checkpoint.inodeTableRoot);
         bytes[4] = checkpoint.inodeTableHeight;
         StoreLittle32(bytes, 8, checkpoint.nextInode);

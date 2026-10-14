@@ -68,6 +68,19 @@ TEST_P(NorSweepTest, a_sweep_volume_formats_mounts_and_unmounts)
     EXPECT_EQ(fs::Result::success, volume.Unmount());
 }
 
+TEST_P(NorSweepTest, a_sweep_volume_makes_directories_and_tells_their_type)
+{
+    metrics::NorSweepVolume volume{ context, metrics::SweepConfig(model) };
+    volume.Format();
+    volume.Mount();
+
+    EXPECT_EQ(fs::Result::success, volume.MakeDirectory("/a"));
+    EXPECT_EQ(fs::Result::alreadyExists, volume.MakeDirectory("/a"));
+
+    EXPECT_EQ(fs::EntryType::directory, volume.TypeOf("/a"));
+    EXPECT_EQ(std::nullopt, volume.TypeOf("/b"));
+}
+
 INSTANTIATE_TEST_SUITE_P(Models, NorSweepTest, testing::Values(&metrics::norSweep128k, &metrics::internalSweep96k, &metrics::norSweep128kTwoSectors));
 
 TEST(NorSweepModelsTest, the_ram_of_a_model_is_that_of_its_volume_with_one_file)

@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <functional>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -204,3 +205,130 @@ TEST_P(NorFormatPowerCut, every_cut_leaves_the_previous_volume_no_volume_or_the_
 }
 
 INSTANTIATE_TEST_SUITE_P(Nor, NorFormatPowerCut, testing::Values(&metrics::norSweep128k, &metrics::internalSweep96k, &metrics::norSweep128kTwoSectors), ParameterName);
+
+class NorMakeDirectoryPowerCut
+    : public testing::TestWithParam<const metrics::NorModel*>
+{
+public:
+    const metrics::NorModel& model{ *GetParam() };
+    fs::NorConfig config{ metrics::SweepConfig(model) };
+    uint32_t blockSize{ model.sectorSize * config.sectorsPerBlock };
+    uint32_t blocks{ model.numberOfSectors / config.sectorsPerBlock };
+    std::vector<std::string> paths{ Paths() };
+
+    static constexpr std::size_t flatDirectories = 60;
+
+    static std::vector<std::string> Paths()
+    {
+        std::vector<std::string> made;
+        for (std::size_t index = 0; index != flatDirectories; ++index)
+            made.push_back("/a" + std::to_string(index));
+
+        std::string nested;
+        for (std::size_t index = 0; index != 12; ++index)
+        {
+            nested += "/n" + std::to_string(index);
+            made.push_back(nested);
+        }
+
+        return made;
+    }
+
+    void SetUpVolume(Context& context) const
+    {
+        ASSERT_EQ(fs::Result::success, metrics::Format(context, config));
+
+        std::vector<uint8_t> partB(fs::RoundUpTo(fs::norHeaderPartBBytes, config.programUnit));
+        for (uint32_t block = 6; block != blocks; ++block)
+        {
+            fs::SerializeNorHeaderB(fs::NorAllocation{ fs::NorBlockType::data, 100 + block, { 99, 0 } }, infra::MakeRange(partB));
+            metrics::Program(context, block * blockSize + fs::NorHeaderPartBOffset(config.programUnit), partB);
+        }
+
+        ASSERT_EQ(std::nullopt, metrics::CheckImage(context, model).problem);
+    }
+
+    void Operate(Context& context) const
+    {
+        metrics::NorSweepVolume volume{ context, config };
+        if (volume.Mount() != fs::Result::success)
+            return;
+
+        for (std::size_t index = 0; index != paths.size(); ++index)
+        {
+            if (index == flatDirectories && (volume.Unmount() != fs::Result::success || volume.Mount() != fs::Result::success))
+                return;
+
+            if (volume.MakeDirectory(paths[index]) != fs::Result::success)
+                return;
+        }
+
+        volume.Unmount();
+    }
+
+    std::optional<std::string> Verify(Context& context, bool uncut) const
+    {
+        auto check = metrics::CheckImage(context, model);
+        if (check.problem.has_value())
+            return check.problem;
+
+        auto count = check.entries.size();
+        if (count > paths.size())
+            return "the volume holds more directories than were made";
+
+        std::set<std::string> made(paths.begin(), paths.begin() + static_cast<std::ptrdiff_t>(count));
+        for (const auto& entry : check.entries)
+            if (!entry.directory || !made.contains(entry.path))
+                return "the volume holds " + entry.path + ", which is not one of the first " + std::to_string(count) + " directories made";
+
+        if (uncut && count != paths.size())
+            return "the uncut run made " + std::to_string(count) + " directories";
+
+        return VerifyMount(context, count);
+    }
+
+    std::optional<std::string> VerifyMount(Context& context, std::size_t count) const
+    {
+        metrics::NorSweepVolume volume{ context, config };
+        if (volume.Mount() != fs::Result::success)
+            return "the volume does not mount";
+
+        for (std::size_t index = 0; index != count; ++index)
+            if (volume.TypeOf(paths[index]) != fs::EntryType::directory)
+                return paths[index] + " is not a directory after the mount";
+
+        if (count != paths.size() && volume.TypeOf(paths[count]).has_value())
+            return paths[count] + " exists after the mount, but the checker does not find it";
+
+        if (volume.MakeDirectory("/after") != fs::Result::success || volume.Unmount() != fs::Result::success)
+            return "a directory cannot be made after the mount";
+
+        auto check = metrics::CheckImage(context, model);
+        if (check.problem.has_value())
+            return "after a directory made after the mount: " + *check.problem;
+
+        if (check.Find("/after") == nullptr)
+            return "the directory made after the mount is lost";
+
+        return std::nullopt;
+    }
+};
+
+TEST_P(NorMakeDirectoryPowerCut, every_cut_keeps_the_directories_made_before_it_and_the_volume_takes_new_ones)
+{
+    SweepEveryMode(
+        model, "make directory", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpVolume(context);
+        },
+        [this](Context& context)
+        {
+            Operate(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return Verify(context, uncut);
+        });
+}
+
+INSTANTIATE_TEST_SUITE_P(Nor, NorMakeDirectoryPowerCut, testing::Values(&metrics::norSweep128k, &metrics::internalSweep96k, &metrics::norSweep128kTwoSectors), ParameterName);

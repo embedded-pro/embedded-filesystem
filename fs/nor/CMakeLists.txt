@@ -11,6 +11,8 @@ target_link_libraries(fs.nor PUBLIC
 )
 
 target_sources(fs.nor PRIVATE
+    NorBlockAllocator.cpp
+    NorBlockAllocator.hpp
     NorBlockHeader.cpp
     NorBlockHeader.hpp
     NorBTree.cpp
@@ -21,6 +23,8 @@ target_sources(fs.nor PRIVATE
     NorCheckpoint.hpp
     NorCheckpointLoad.cpp
     NorCheckpointLoad.hpp
+    NorCheckpointWriter.cpp
+    NorCheckpointWriter.hpp
     NorConfig.hpp
     NorDirectoryKey.cpp
     NorDirectoryKey.hpp
@@ -48,8 +52,12 @@ target_sources(fs.nor PRIVATE
     NorInodeRecord.hpp
     NorJournalScan.cpp
     NorJournalScan.hpp
+    NorJournalWriter.cpp
+    NorJournalWriter.hpp
     NorLayout.hpp
     NorLifecycle.hpp
+    NorMakeDirectory.cpp
+    NorMakeDirectory.hpp
     NorMapFetch.cpp
     NorMapFetch.hpp
     NorMount.cpp
@@ -77,8 +85,12 @@ target_sources(fs.nor PRIVATE
     NorPathWalk.hpp
     NorRadixTree.cpp
     NorRadixTree.hpp
+    NorRecordApply.cpp
+    NorRecordApply.hpp
     NorRecordReader.cpp
     NorRecordReader.hpp
+    NorReplay.cpp
+    NorReplay.hpp
     NorStat.cpp
     NorStat.hpp
     NorSuperblock.cpp

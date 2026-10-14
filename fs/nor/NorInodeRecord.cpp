@@ -1,5 +1,6 @@
 #include "fs/nor/NorInodeRecord.hpp"
 #include "fs/common/LittleEndian.hpp"
+#include "fs/nor/NorRecord.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 
@@ -44,5 +45,13 @@ namespace fs
 
         auto inlineArea = infra::DiscardHead(bytes, norInodeRecordFixedBytes);
         return NorInodeRecord{ LoadLittle32(bytes, 0), static_cast<NorInodeType>(bytes[4]), bytes[6], LoadLittle32(bytes, 8), LoadLittle32(bytes, norInodeMapRootOffset), infra::Head(inlineArea, inlineLength), infra::Head(infra::DiscardHead(inlineArea, config.inlineBytes), bytes[5]) };
+    }
+
+    void AddNorInodePut(CrcRecord& record, uint32_t inode, const NorInodeRecord& inodeRecord, const NorConfig& config)
+    {
+        auto entry = record.Add(norInodePutFixedBytes + NorInodeRecordBytes(config));
+        entry[0] = static_cast<uint8_t>(NorEntryKind::inodePut);
+        StoreLittle32(entry, 1, inode);
+        SerializeNorInodeRecord(inodeRecord, infra::DiscardHead(entry, norInodePutFixedBytes), config);
     }
 }

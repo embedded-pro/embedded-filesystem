@@ -1,5 +1,6 @@
 #include "fs/nor/NorDirectoryKey.hpp"
 #include "fs/nor/NorFileSystem.hpp"
+#include "fs/nor/test/NorVolumeFixture.hpp"
 #include "fs/nor/test_doubles/NorFlashStubImage.hpp"
 #include "fs/nor/test_doubles/NorImageBuilder.hpp"
 #include "hal/interfaces/test_doubles/FlashStub.hpp"
@@ -123,7 +124,7 @@ namespace
         hal::FlashStub flash{ 32, 4096 };
         fs::NorFlashStubImage image{ flash };
         std::optional<fs::NorImageBuilder> builder;
-        fs::NorFileSystem::WithStorage<config, 1> volume{ flash };
+        fs::ExposedNorFileSystem<config> volume{ flash };
     };
 }
 
@@ -270,9 +271,13 @@ TEST_F(NorDirectoriesTest, a_call_beyond_the_path_slots_completes_with_busy)
         {
             done.callback(result);
         });
+    volume.MakeDirectory("/f", [&done](fs::Result result)
+        {
+            done.callback(result);
+        });
 
     EXPECT_CALL(done, callback(fs::Result::notFound)).Times(2);
-    EXPECT_CALL(done, callback(fs::Result::busy)).Times(3);
+    EXPECT_CALL(done, callback(fs::Result::busy)).Times(4);
     ExecuteAllActions();
 }
 
@@ -308,6 +313,7 @@ TEST_F(NorDirectoriesTest, a_root_that_is_not_a_directory_is_corrupted)
     Mount();
 
     ExpectStat("/a", fs::Result::corrupted);
+    ExpectStat("/", fs::Result::corrupted);
 }
 
 TEST_F(NorDirectoriesTest, a_directory_node_with_a_bad_crc_is_corrupted)
@@ -461,6 +467,7 @@ TEST_F(NorDirectoriesTest, next_with_a_corrupted_record_of_the_directory_is_corr
     Mount();
     auto opened = OpenDirectory("/");
     Builder().Corrupt(inodeTable + 20);
+    volume.Volume().Cache().Clear();
     std::optional<std::pair<Name, fs::EntryInfo>> entry;
 
     EXPECT_EQ(fs::Result::corrupted, Next(*opened, entry));

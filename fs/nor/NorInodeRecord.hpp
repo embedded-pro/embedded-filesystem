@@ -1,6 +1,7 @@
 #ifndef FS_NOR_NOR_INODE_RECORD_HPP
 #define FS_NOR_NOR_INODE_RECORD_HPP
 
+#include "fs/common/CrcRecord.hpp"
 #include "fs/nor/NorConfig.hpp"
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
@@ -29,6 +30,7 @@ namespace fs
 
     void SerializeNorInodeRecord(const NorInodeRecord& record, infra::ByteRange bytes, const NorConfig& config);
     std::optional<NorInodeRecord> ParseNorInodeRecord(infra::ConstByteRange bytes, const NorConfig& config);
+    void AddNorInodePut(CrcRecord& record, uint32_t inode, const NorInodeRecord& inodeRecord, const NorConfig& config);
 }
 
 #endif

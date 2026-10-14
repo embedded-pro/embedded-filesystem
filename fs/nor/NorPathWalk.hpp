@@ -39,7 +39,7 @@ namespace fs
 
     private:
         void RootRead(Result result);
-        void LookUp();
+        void Descend();
         void LookedUp(Result result);
 
     private:

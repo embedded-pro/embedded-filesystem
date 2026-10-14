@@ -173,6 +173,34 @@ namespace metrics
             });
     }
 
+    fs::Result NorSweepVolume::MakeDirectory(const std::string& path)
+    {
+        return Run([this, &path](const infra::Function<void(fs::Result)>& onDone)
+            {
+                fileSystem.MakeDirectory(infra::BoundedConstString(path.data(), path.size()), onDone);
+            });
+    }
+
+    std::optional<fs::EntryType> NorSweepVolume::TypeOf(const std::string& path)
+    {
+        std::optional<fs::Result> result;
+        fs::EntryType type{ fs::EntryType::file };
+        fileSystem.Stat(infra::BoundedConstString(path.data(), path.size()), [&result, &type](fs::Result found, const fs::EntryInfo& info)
+            {
+                type = info.type;
+                result = found;
+            });
+        context.time.RunUntil([&result]
+            {
+                return result.has_value();
+            });
+
+        if (result != fs::Result::success)
+            return std::nullopt;
+
+        return type;
+    }
+
     template<class Start>
     fs::Result NorSweepVolume::Run(const Start& start)
     {

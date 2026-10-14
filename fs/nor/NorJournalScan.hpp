@@ -48,7 +48,6 @@ namespace fs
         uint32_t block{ 0 };
         uint32_t end{ 0 };
         uint64_t sequence{ 0 };
-        uint32_t epochBlocks{ 0 };
         uint32_t candidate{ 0 };
         uint64_t candidateSequence{ 0 };
         std::optional<uint32_t> next;

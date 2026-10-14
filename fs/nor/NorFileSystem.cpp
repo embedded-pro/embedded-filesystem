@@ -82,9 +82,9 @@ namespace fs
         Refuse(onDone);
     }
 
-    void NorFileSystem::MakeDirectory(infra::BoundedConstString, const infra::Function<void(Result result)>& onDone)
+    void NorFileSystem::MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        Refuse(onDone);
+        StartPathCall(path, NorMakeDirectoryCall{ path, onDone });
     }
 
     void NorFileSystem::Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone)
@@ -167,13 +167,15 @@ namespace fs
                                   },
                                   finished)
                 .Start();
-        else
-            volume.Operation().emplace<NorOpen>(volume, std::move(std::get<NorOpenCall>(call)), [this]
+        else if (auto* open = std::get_if<NorOpenCall>(&call))
+            volume.Operation().emplace<NorOpen>(volume, std::move(*open), [this]
                                   {
                                       return AllocateFile();
                                   },
                                   finished)
                 .Start();
+        else
+            volume.Operation().emplace<NorMakeDirectory>(volume, std::move(std::get<NorMakeDirectoryCall>(call)), finished).Start();
     }
 
     void NorFileSystem::BeginFormat()
@@ -210,7 +212,20 @@ namespace fs
             {
                 return NorMountDone{ result };
             });
+        volume.Cache().Clear();
         volume.Operation().emplace<NorMount>(volume.Flash(), volume.Config(), volume.State(), volume.JournalBuffer(), [this](Result result)
+                              {
+                                  if (result == Result::success)
+                                      Replay();
+                                  else
+                                      LifecycleOperationDone(result);
+                              })
+            .Start();
+    }
+
+    void NorFileSystem::Replay()
+    {
+        volume.Operation().emplace<NorReplay>(volume, [this](Result result)
                               {
                                   LifecycleOperationDone(result);
                               })
@@ -225,7 +240,14 @@ namespace fs
                     {
                         return NorUnmountDone{ result };
                     });
-                LifecycleOperationDone(Result::success);
+
+                if (volume.Journal().IsMoreThanHalfFull())
+                    volume.Checkpoints().Write([this](Result result)
+                        {
+                            LifecycleOperationDone(result);
+                        });
+                else
+                    LifecycleOperationDone(Result::success);
             });
     }
 

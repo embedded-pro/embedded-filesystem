@@ -91,17 +91,25 @@ namespace
                 {
                     done.callback(renamed);
                 });
-            volume.MakeDirectory("/a", [&done](fs::Result made)
-                {
-                    done.callback(made);
-                });
             volume.Usage([&done](fs::Result measured, fs::VolumeUsage usage)
                 {
                     EXPECT_EQ(fs::VolumeUsage{}, usage);
                     done.callback(measured);
                 });
 
-            EXPECT_CALL(done, callback(result)).Times(5);
+            EXPECT_CALL(done, callback(result)).Times(4);
+            ExecuteAllActions();
+        }
+
+        void ExpectMakeDirectory(infra::BoundedConstString path, fs::Result result)
+        {
+            testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
+            volume.MakeDirectory(path, [&done](fs::Result made)
+                {
+                    done.callback(made);
+                });
+
+            EXPECT_CALL(done, callback(result));
             ExecuteAllActions();
         }
 
@@ -238,6 +246,7 @@ TEST_F(NorFileSystemTest, calls_on_an_unmounted_volume_complete_with_not_mounted
 {
     ExpectLookupsCompleteWith(fs::Result::notMounted);
     ExpectChangesCompleteWith(fs::Result::notMounted);
+    ExpectMakeDirectory("/a", fs::Result::notMounted);
 }
 
 TEST_F(NorFileSystemTest, lookups_after_unmount_complete_with_not_mounted)
@@ -263,4 +272,32 @@ TEST_F(NorFileSystemTest, changes_on_a_mounted_volume_are_unsupported_until_thei
     ExpectMount();
 
     ExpectChangesCompleteWith(fs::Result::unsupported);
+}
+
+TEST_F(NorFileSystemTest, makes_a_directory_that_a_lookup_then_finds)
+{
+    ExpectFormat();
+    ExpectMount();
+
+    ExpectMakeDirectory("/a", fs::Result::success);
+
+    testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
+    volume.Stat("/a", [&done](fs::Result found, const fs::EntryInfo& info)
+        {
+            EXPECT_EQ(fs::EntryType::directory, info.type);
+            done.callback(found);
+        });
+    EXPECT_CALL(done, callback(fs::Result::success));
+    ExecuteAllActions();
+}
+
+TEST_F(NorFileSystemTest, a_directory_made_before_unmount_is_there_after_the_next_mount)
+{
+    ExpectFormat();
+    ExpectMount();
+    ExpectMakeDirectory("/a", fs::Result::success);
+    ExpectUnmount();
+    ExpectMount();
+
+    ExpectMakeDirectory("/a", fs::Result::alreadyExists);
 }

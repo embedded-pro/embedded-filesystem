@@ -98,7 +98,8 @@ After each cut, the sweep checks that:
 * the checker also finds every free block that holds only its part A erased;
 * no program unit was programmed twice since its last erase, as counted by `metrics::MeteredFlash`, which takes every unit that does not read erased when the operation starts as programmed;
 * every file holds, byte by byte, either its contents before the interrupted operation or its contents after it;
-* a file or directory that was being created or removed exists with its previous contents or not at all, one that was being renamed exists under exactly one of its old and new names with its contents, and no other entry appeared or disappeared.
+* a file or directory that was being created or removed exists with its previous contents or not at all, one that was being renamed exists under exactly one of its old and new names with its contents, and no other entry appeared or disappeared;
+* the volume takes a new change after the mount, and the checker accepts the image again after it.
 
 The cases cover every operation that writes, the start of a new journal block after a mount, checkpoints, the background work of erasing, collecting node blocks and moving blocks, and chains of a cut, a mount, an append and another cut.
 `Format` is swept too: after a cut, the mount finds the previous volume as long as its second superblock is not erased, completes with `corrupted`, or finds the new, empty volume with every other block in the pre-erased pool.

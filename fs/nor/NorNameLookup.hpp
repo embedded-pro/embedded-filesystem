@@ -9,6 +9,7 @@
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/Function.hpp"
 #include <cstdint>
+#include <optional>
 
 namespace fs
 {
@@ -23,11 +24,13 @@ namespace fs
         void Find(const NorMapRoot& inodeTable, uint32_t directory, const NorMapRoot& map, infra::BoundedConstString name, const infra::Function<void(Result result)>& onDone);
         uint32_t FoundInode() const;
         const NorInodeRecord& FoundRecord() const;
+        std::optional<uint32_t> FreeKey() const;
 
     private:
         void SeekFrom(uint32_t key);
         void Sought(Result result);
         void CandidateRead(Result result);
+        void NotFound();
 
     private:
         NorInodeRead& inodeRead;
@@ -37,6 +40,8 @@ namespace fs
         NorMapRoot map;
         infra::BoundedConstString name;
         uint32_t lastKey{ 0 };
+        uint64_t nextFree{ 0 };
+        std::optional<uint32_t> freeKey;
         NorEntrySeek::Entry candidate;
         infra::AutoResetFunction<void(Result result)> onDone;
     };

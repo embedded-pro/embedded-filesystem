@@ -6,6 +6,7 @@
 #include "fs/nor/NorEraseCounts.hpp"
 #include "fs/nor/NorGeometry.hpp"
 #include "fs/nor/NorNode.hpp"
+#include "infra/util/BoundedVector.hpp"
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
 #include <optional>
@@ -32,7 +33,13 @@ namespace fs
         NorMapRoot inodeTable;
         uint32_t checkpointBlock{ 0 };
         NorJournal journal;
+        infra::BoundedVector<uint32_t>::WithMaxSize<norMaxJournalBlocks> epoch;
+        bool startNewJournalBlock{ false };
         uint64_t nextSequence{ 0 };
+        uint32_t nextInode{ 0 };
+        uint32_t liveNodes{ 0 };
+        std::optional<uint32_t> nodeBlock;
+        uint32_t nodeOffset{ 0 };
     };
 }
 
