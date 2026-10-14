@@ -18,11 +18,6 @@ namespace fs
         return (size + unit - 1) / unit * unit;
     }
 
-    constexpr bool IsPowerOfTwo(uint32_t value)
-    {
-        return value != 0 && (value & (value - 1)) == 0;
-    }
-
     constexpr uint32_t NorHeaderPartBOffset(uint32_t programUnit)
     {
         return RoundUpTo(norHeaderPartABytes, programUnit);

@@ -2,6 +2,7 @@
 #define FS_NOR_NOR_CONFIG_HPP
 
 #include "fs/nor/NorLayout.hpp"
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 
@@ -36,7 +37,7 @@ namespace fs
     {
         constexpr bool IsValidNorGeometry(const NorConfig& config)
         {
-            return config.maxBlocks >= 4 && config.sectorsPerBlock != 0 && config.sectorsPerBlock <= 0xffff && IsPowerOfTwo(config.programUnit) && IsPowerOfTwo(config.pageSize) && config.pageSize >= config.programUnit;
+            return config.maxBlocks >= 4 && config.sectorsPerBlock != 0 && config.sectorsPerBlock <= 0xffff && std::has_single_bit(config.programUnit) && std::has_single_bit(config.pageSize) && config.pageSize >= config.programUnit;
         }
 
         constexpr bool IsValidNorNodes(const NorConfig& config)
