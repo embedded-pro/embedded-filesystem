@@ -7,6 +7,19 @@ namespace fs
         constexpr uint32_t superblocks = 2;
         constexpr uint32_t dataBlocksOfOneCall = 2;
 
+        bool HasEqualSectors(const hal::Flash& flash)
+        {
+            auto sectors = flash.NumberOfSectors();
+            if (sectors == 0)
+                return false;
+
+            for (uint32_t sector = 1; sector != sectors; ++sector)
+                if (flash.SizeOfSector(sector) != flash.SizeOfSector(0))
+                    return false;
+
+            return true;
+        }
+
         bool Fits(const NorGeometry& geometry)
         {
             return geometry.NodesPerBlock() != 0 && geometry.CheckpointBytes() <= geometry.PayloadSize() && geometry.blocks >= superblocks + geometry.ReserveBlocks() + geometry.WatermarkBlocks();
@@ -88,5 +101,13 @@ namespace fs
             return std::nullopt;
 
         return geometry;
+    }
+
+    std::optional<NorGeometry> MakeNorGeometry(const NorConfig& config, const hal::Flash& flash)
+    {
+        if (!HasEqualSectors(flash))
+            return std::nullopt;
+
+        return MakeNorGeometry(config, flash.SizeOfSector(0), flash.NumberOfSectors());
     }
 }

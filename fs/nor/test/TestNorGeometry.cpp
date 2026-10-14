@@ -1,4 +1,5 @@
 #include "fs/nor/NorGeometry.hpp"
+#include "hal/interfaces/test_doubles/FlashStub.hpp"
 #include "gtest/gtest.h"
 
 namespace
@@ -228,4 +229,25 @@ TEST(NorGeometryTest, a_volume_has_a_slot_for_operations_on_paths)
         {
             config.pathOperations = 0;
         }));
+}
+
+TEST(NorGeometryTest, takes_the_geometry_of_a_device_whose_sectors_have_one_size)
+{
+    hal::FlashStub flash{ 4096, 4096 };
+
+    auto geometry = fs::MakeNorGeometry(spiNor, flash);
+
+    ASSERT_TRUE(geometry.has_value());
+    EXPECT_EQ(4096, geometry->sectorSize);
+    EXPECT_EQ(4096, geometry->blocks);
+}
+
+TEST(NorGeometryTest, a_device_with_sectors_of_several_sizes_or_none_has_no_geometry)
+{
+    hal::FlashStub uneven{ 4096, 4096 };
+    uneven.sectors[7].resize(2048);
+    hal::FlashStub empty{ 0, 4096 };
+
+    EXPECT_EQ(std::nullopt, fs::MakeNorGeometry(spiNor, uneven));
+    EXPECT_EQ(std::nullopt, fs::MakeNorGeometry(spiNor, empty));
 }

@@ -28,7 +28,6 @@ namespace fs
         void Start();
 
     private:
-        bool HasEqualSectors() const;
         void ReadSuperblock(uint32_t block);
         void OnSuperblock(uint32_t block);
         Result Check(const NorSuperblock& superblock) const;

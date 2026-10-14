@@ -51,7 +51,6 @@ namespace fs
         void Program(infra::ConstByteRange bytes, uint32_t address, const infra::Function<void()>& onProgrammed);
         void Complete(Result completionResult);
 
-        bool HasEqualSectors() const;
         uint32_t AverageEraseCount() const;
         infra::ByteRange Rounded(uint32_t size) const;
 

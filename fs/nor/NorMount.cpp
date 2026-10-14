@@ -25,7 +25,7 @@ namespace fs
 
     void NorMount::Start()
     {
-        volume.geometry = HasEqualSectors() ? MakeNorGeometry(config, flash.SizeOfSector(0), flash.NumberOfSectors()) : std::nullopt;
+        volume.geometry = MakeNorGeometry(config, flash);
         if (!volume.geometry.has_value())
         {
             Done(Result::unsupported);
@@ -35,19 +35,6 @@ namespace fs
         volume.blocks.Reset(volume.geometry->blocks);
         volume.eraseCounts.Reset(volume.geometry->blocks);
         ReadSuperblock(0);
-    }
-
-    bool NorMount::HasEqualSectors() const
-    {
-        auto sectors = flash.NumberOfSectors();
-        if (sectors == 0)
-            return false;
-
-        for (uint32_t sector = 1; sector != sectors; ++sector)
-            if (flash.SizeOfSector(sector) != flash.SizeOfSector(0))
-                return false;
-
-        return true;
     }
 
     void NorMount::ReadSuperblock(uint32_t block)
