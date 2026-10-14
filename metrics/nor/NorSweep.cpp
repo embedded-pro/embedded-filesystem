@@ -201,6 +201,70 @@ namespace metrics
         return type;
     }
 
+    fs::Result NorSweepVolume::OpenFile(const std::string& path, fs::OpenMode mode)
+    {
+        std::optional<fs::Result> result;
+        fileSystem.Open(infra::BoundedConstString(path.data(), path.size()), mode, [this, &result](fs::Result opened, infra::SharedPtr<fs::File> openedFile)
+            {
+                file = openedFile;
+                result = opened;
+            });
+        context.time.RunUntil([&result]
+            {
+                return result.has_value();
+            });
+        return result.value_or(fs::Result::deviceError);
+    }
+
+    fs::Result NorSweepVolume::Write(const std::vector<uint8_t>& data)
+    {
+        return Run([this, &data](const infra::Function<void(fs::Result)>& onDone)
+            {
+                file->Write(infra::MakeRange(data), onDone);
+            });
+    }
+
+    fs::Result NorSweepVolume::Sync()
+    {
+        return Run([this](const infra::Function<void(fs::Result)>& onDone)
+            {
+                file->Sync(onDone);
+            });
+    }
+
+    fs::Result NorSweepVolume::Close()
+    {
+        auto result = Run([this](const infra::Function<void(fs::Result)>& onDone)
+            {
+                file->Close(onDone);
+            });
+        file = nullptr;
+        return result;
+    }
+
+    std::optional<std::vector<uint8_t>> NorSweepVolume::ReadFile(const std::string& path)
+    {
+        if (OpenFile(path, fs::OpenMode::read) != fs::Result::success)
+            return std::nullopt;
+
+        std::vector<uint8_t> contents(file->Size());
+        std::optional<fs::Result> result;
+        file->Read(infra::MakeRange(contents), [&result](fs::Result read, std::size_t)
+            {
+                result = read;
+            });
+        context.time.RunUntil([&result]
+            {
+                return result.has_value();
+            });
+        Close();
+
+        if (result != fs::Result::success)
+            return std::nullopt;
+
+        return contents;
+    }
+
     template<class Start>
     fs::Result NorSweepVolume::Run(const Start& start)
     {

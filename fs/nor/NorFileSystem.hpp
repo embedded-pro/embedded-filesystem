@@ -147,7 +147,7 @@ namespace fs
     private:
         typename infra::BoundedVector<NorPathSlot>::template WithMaxSize<Config.pathOperations> pathSlots;
         HandlePool<NorDirectory, Config.directories> directories{ Volume() };
-        HandlePool<NorFile, Files> files{ Volume() };
+        HandlePool<NorFile::WithBuffer<NorFileBufferBytes(Config)>, Files> files{ Volume() };
     };
 
     constexpr std::array<NorFileSystem::Machine::Transition, 9> NorFileSystem::Rows()

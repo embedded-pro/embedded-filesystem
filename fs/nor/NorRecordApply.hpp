@@ -32,6 +32,13 @@ namespace fs
         void PutDirectoryEntry(const NorDirectoryEntryPut& put);
         void DirectoryFetched();
         void EntryFetched();
+        void SetBlock(const NorBlockSet& set);
+        void FileFetched();
+        void SlotFetched();
+        void SetSize(const NorSize& size);
+        void SizedFileFetched();
+        std::optional<infra::ConstByteRange> FileRecord(uint32_t inode) const;
+        bool IsFreeBlock(uint32_t block) const;
         void Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, const infra::Function<void()>& onFetchedDone);
         NorMapId InodeTable() const;
         NorMapId DirectoryMap() const;
@@ -44,6 +51,9 @@ namespace fs
         NorInodePut inodePut;
         NorDirectoryEntryPut entryPut;
         NorMapRoot directoryMap;
+        NorBlockSet blockSet;
+        NorSize sizeEntry;
+        NorMapRoot dataMap;
         infra::AutoResetFunction<void()> onFetched;
         infra::AutoResetFunction<void(Result result)> onDone;
     };

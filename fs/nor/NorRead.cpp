@@ -32,17 +32,19 @@ namespace fs
     void NorRead::RecordRead(Result result)
     {
         const auto& record = volume.InodeRead().Record();
-        if (result != Result::success || record.inlineBytes.size() > record.size)
+        if (result != Result::success || (!file.Writable() && record.inlineBytes.size() > record.size))
         {
             Done(result == Result::success ? Result::corrupted : result);
             return;
         }
 
-        readEnd = file.position + static_cast<uint32_t>(std::min<std::size_t>(buffer.size(), record.size - std::min(file.position, record.size)));
-        auto inlineStart = record.size - static_cast<uint32_t>(record.inlineBytes.size());
+        auto size = file.Writable() ? file.size : record.size;
+        auto tail = file.Writable() ? infra::ConstByteRange(file.Pending()) : record.inlineBytes;
+        readEnd = file.position + static_cast<uint32_t>(std::min<std::size_t>(buffer.size(), size - std::min(file.position, size)));
+        auto inlineStart = size - static_cast<uint32_t>(tail.size());
         auto from = std::max(file.position, inlineStart);
         if (readEnd > from)
-            infra::Copy(infra::Head(infra::DiscardHead(record.inlineBytes, from - inlineStart), readEnd - from), infra::Head(infra::DiscardHead(buffer, from - file.position), readEnd - from));
+            infra::Copy(infra::Head(infra::DiscardHead(tail, from - inlineStart), readEnd - from), infra::Head(infra::DiscardHead(buffer, from - file.position), readEnd - from));
 
         dataEnd = std::min(readEnd, inlineStart);
         map = NorMapRoot{ record.mapRoot, record.mapHeight };
@@ -55,6 +57,13 @@ namespace fs
         if (current >= dataEnd)
         {
             Done(Result::success);
+            return;
+        }
+
+        auto uncommitted = file.UncommittedBlock(current / volume.Geometry().PayloadSize());
+        if (uncommitted.has_value())
+        {
+            ReadFrom(uncommitted.value_or(0));
             return;
         }
 
@@ -83,6 +92,12 @@ namespace fs
             return;
         }
 
+        ReadFrom(block);
+    }
+
+    void NorRead::ReadFrom(uint32_t block)
+    {
+        const auto& geometry = volume.Geometry();
         auto offset = current % geometry.PayloadSize();
         chunk = std::min(geometry.PayloadSize() - offset, dataEnd - current);
         volume.Flash().ReadBuffer(infra::Head(infra::DiscardHead(buffer, current - file.position), chunk), geometry.AddressOfBlock(block) + geometry.HeaderSize() + offset, [this]

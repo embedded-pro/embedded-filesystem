@@ -1,4 +1,5 @@
 #include "fs/nor/NorVolume.hpp"
+#include "fs/nor/NorFile.hpp"
 #include "infra/util/ReallyAssert.hpp"
 
 namespace fs
@@ -102,6 +103,21 @@ namespace fs
         return journal;
     }
 
+    NorFileFlush& NorVolume::FileFlush()
+    {
+        return fileFlush;
+    }
+
+    NorFileCommit& NorVolume::FileCommit()
+    {
+        return fileCommit;
+    }
+
+    infra::IntrusiveList<NorFile>& NorVolume::OpenFiles()
+    {
+        return openFiles;
+    }
+
     OperationQueue& NorVolume::Queue()
     {
         return queue;
@@ -131,5 +147,8 @@ namespace fs
     void NorVolume::MarkUnmounted()
     {
         mounted = false;
+
+        while (!openFiles.empty())
+            openFiles.front().Detach();
     }
 }

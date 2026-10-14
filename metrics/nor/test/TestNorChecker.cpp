@@ -790,6 +790,21 @@ TEST_F(NorCheckerTest, replays_block_sets_and_sizes)
     EXPECT_EQ(Use::free, check.blocks[7]);
 }
 
+TEST_F(NorCheckerTest, a_block_that_a_record_released_may_be_reused_as_a_node_block_before_the_next_checkpoint)
+{
+    WriteTree();
+    auto grown = Pattern(payload + 20, 3);
+    std::copy_n(fileB.begin(), payload, grown.begin());
+    WriteDataBlock(8, 3, 1, 5, { grown.begin() + payload, grown.end() });
+    AppendRecord(3 * blockSize + firstRecord, { fs::NorBlockSet{ 3, 1, 7, 8 }, fs::NorSize{ 3, payload + 20, {} } });
+    Fill(7 * blockSize + 12, blockSize - 12, 0xff);
+    Allocate(7, fs::NorBlockType::node, 9);
+    auto check = Check();
+
+    EXPECT_EQ(std::nullopt, check.problem);
+    EXPECT_EQ(Use::free, check.blocks[7]);
+}
+
 TEST_F(NorCheckerTest, a_size_releases_the_blocks_beyond_it)
 {
     WriteTree();

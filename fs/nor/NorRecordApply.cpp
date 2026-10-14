@@ -3,6 +3,7 @@
 #include "fs/nor/NorBTree.hpp"
 #include "fs/nor/NorInodeRecord.hpp"
 #include "fs/nor/NorLayout.hpp"
+#include "fs/nor/NorRadixTree.hpp"
 #include "fs/nor/NorVolume.hpp"
 #include <algorithm>
 #include <limits>
@@ -14,6 +15,7 @@ namespace fs
     namespace
     {
         constexpr uint32_t entryValueBytes = 4;
+        constexpr uint32_t superblocks = 2;
 
         NorMapRoot MapOf(infra::ConstByteRange record)
         {
@@ -53,6 +55,10 @@ namespace fs
             PutInode(*put);
         else if (const auto* directoryPut = std::get_if<NorDirectoryEntryPut>(&*entry))
             PutDirectoryEntry(*directoryPut);
+        else if (const auto* set = std::get_if<NorBlockSet>(&*entry))
+            SetBlock(*set);
+        else if (const auto* size = std::get_if<NorSize>(&*entry))
+            SetSize(*size);
         else if (std::holds_alternative<NorLink>(*entry) && linked && isFirst)
             ApplyNext();
         else if (std::holds_alternative<NorLink>(*entry))
@@ -135,6 +141,94 @@ namespace fs
         StoreLittle32(entries.Insert(directoryMap, entryPut.key), 0, entryPut.inode);
         SetMapOf(NorBTree(volume.Cache(), InodeTable()).Modify(state.inodeTable, entryPut.directory), directoryMap);
         ApplyNext();
+    }
+
+    void NorRecordApply::SetBlock(const NorBlockSet& set)
+    {
+        blockSet = set;
+        Fetch(InodeTable(), volume.State().inodeTable, set.inode, [this]
+            {
+                FileFetched();
+            });
+    }
+
+    void NorRecordApply::FileFetched()
+    {
+        auto record = FileRecord(blockSet.inode);
+        if (!record.has_value())
+            onDone(Result::corrupted);
+        else if (blockSet.block == 0)
+            onDone(Result::unsupported);
+        else
+        {
+            dataMap = MapOf(*record);
+            Fetch(NorMapId{ NorMap::fileData, blockSet.inode, entryValueBytes }, dataMap, blockSet.index, [this]
+                {
+                    SlotFetched();
+                });
+        }
+    }
+
+    void NorRecordApply::SlotFetched()
+    {
+        auto& state = volume.State();
+        NorRadixTree data{ volume.Cache(), blockSet.inode };
+        if (data.Find(dataMap, blockSet.index) != blockSet.previous || !IsFreeBlock(blockSet.block) || !data.NodesModifiedBySet(dataMap, blockSet.index).has_value())
+        {
+            onDone(Result::corrupted);
+            return;
+        }
+
+        data.Set(dataMap, blockSet.index, blockSet.block);
+        SetMapOf(NorBTree(volume.Cache(), InodeTable()).Modify(state.inodeTable, blockSet.inode), dataMap);
+        state.blocks.Set(blockSet.block, NorBlockState::inUse);
+        if (blockSet.previous != 0 && std::ranges::find(state.epoch, blockSet.previous) == state.epoch.end())
+            state.blocks.Set(blockSet.previous, NorBlockState::freeNotErased);
+
+        ApplyNext();
+    }
+
+    void NorRecordApply::SetSize(const NorSize& size)
+    {
+        sizeEntry = size;
+        Fetch(InodeTable(), volume.State().inodeTable, size.inode, [this]
+            {
+                SizedFileFetched();
+            });
+    }
+
+    void NorRecordApply::SizedFileFetched()
+    {
+        auto record = FileRecord(sizeEntry.inode);
+        if (!record.has_value() || sizeEntry.inlineBytes.size() > volume.Config().inlineBytes || sizeEntry.inlineBytes.size() > sizeEntry.size)
+            onDone(Result::corrupted);
+        else if (sizeEntry.size < LoadLittle32(*record, norInodeSizeOffset))
+            onDone(Result::unsupported);
+        else
+        {
+            auto bytes = NorBTree(volume.Cache(), InodeTable()).Modify(volume.State().inodeTable, sizeEntry.inode);
+            auto inlineArea = infra::Head(infra::DiscardHead(bytes, norInodeRecordFixedBytes), volume.Config().inlineBytes);
+            StoreLittle32(bytes, norInodeSizeOffset, sizeEntry.size);
+            StoreLittle16(bytes, norInodeInlineLengthOffset, static_cast<uint16_t>(sizeEntry.inlineBytes.size()));
+            std::ranges::fill(inlineArea, uint8_t{ 0 });
+            std::ranges::copy(sizeEntry.inlineBytes, inlineArea.begin());
+            ApplyNext();
+        }
+    }
+
+    std::optional<infra::ConstByteRange> NorRecordApply::FileRecord(uint32_t inode) const
+    {
+        auto record = NorBTree(volume.Cache(), InodeTable()).Find(volume.State().inodeTable, inode);
+        if (!record.has_value() || (*record)[norInodeTypeOffset] != static_cast<uint8_t>(NorInodeType::file))
+            return std::nullopt;
+
+        return record;
+    }
+
+    bool NorRecordApply::IsFreeBlock(uint32_t block) const
+    {
+        const auto& state = volume.State();
+        return block >= superblocks && block < volume.Geometry().blocks && state.blocks.State(block) != NorBlockState::inUse;
     }
 
     void NorRecordApply::Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, const infra::Function<void()>& onFetchedDone)

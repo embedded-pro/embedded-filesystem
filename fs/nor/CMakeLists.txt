@@ -26,6 +26,8 @@ target_sources(fs.nor PRIVATE
     NorCheckpointWriter.cpp
     NorCheckpointWriter.hpp
     NorConfig.hpp
+    NorCreate.cpp
+    NorCreate.hpp
     NorDirectoryKey.cpp
     NorDirectoryKey.hpp
     NorDirectory.cpp
@@ -37,6 +39,10 @@ target_sources(fs.nor PRIVATE
     NorEraseCounts.cpp
     NorEraseCounts.hpp
     NorFile.cpp
+    NorFileCommit.cpp
+    NorFileCommit.hpp
+    NorFileFlush.cpp
+    NorFileFlush.hpp
     NorFile.hpp
     NorFileSystem.cpp
     NorFileSystem.hpp
@@ -78,6 +84,7 @@ target_sources(fs.nor PRIVATE
     NorOpen.hpp
     NorOpenDirectory.cpp
     NorOpenDirectory.hpp
+    NorOpenFile.cpp
     NorOpenFile.hpp
     NorPathSlot.cpp
     NorPathSlot.hpp
@@ -95,10 +102,14 @@ target_sources(fs.nor PRIVATE
     NorStat.hpp
     NorSuperblock.cpp
     NorSuperblock.hpp
+    NorUnmount.cpp
+    NorUnmount.hpp
     NorVolume.cpp
     NorVolume.hpp
     NorVolumeState.cpp
     NorVolumeState.hpp
+    NorWrite.cpp
+    NorWrite.hpp
 )
 
 add_subdirectory(test_doubles)

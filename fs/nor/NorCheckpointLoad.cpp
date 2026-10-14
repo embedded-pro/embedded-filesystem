@@ -157,34 +157,23 @@ namespace fs
         auto blocks = volume.geometry->blocks;
         for (uint32_t index = 0; index != size; ++index)
             for (uint32_t bit = 0; bit != bitsPerByte && (position + index) * bitsPerByte + bit < blocks; ++bit)
-                if (!Settle((position + index) * bitsPerByte + bit, ((buffer[index] >> bit) & 1) != 0))
-                {
-                    onDone(Result::corrupted);
-                    return;
-                }
+                Settle((position + index) * bitsPerByte + bit, ((buffer[index] >> bit) & 1) != 0);
 
         position += size;
         ReadBitmap();
     }
 
-    bool NorCheckpointLoad::Settle(uint32_t block, bool inUse) const
+    void NorCheckpointLoad::Settle(uint32_t block, bool inUse) const
     {
         auto state = volume.blocks.State(block);
-
-        if (state == norUnknownEraseCount && inUse)
-            return false;
-
         if (state == norUnknownEraseCount)
         {
             volume.eraseCounts.Record(block, averageCount);
             volume.blocks.Set(block, NorBlockState::freeNotErased);
         }
-        else if (state == NorBlockState::freeErased && inUse)
-            return false;
-        else if (inUse)
-            volume.blocks.Set(block, NorBlockState::inUse);
 
-        return true;
+        if (inUse && (state != NorBlockState::pending || block == volume.checkpointBlock || block == volume.checkpoint.recordsBlock))
+            volume.blocks.Set(block, NorBlockState::inUse);
     }
 
     Result NorCheckpointLoad::Consistency() const

@@ -1,20 +1,54 @@
 #include "fs/nor/NorFile.hpp"
 #include "fs/nor/NorVolume.hpp"
+#include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
+#include <utility>
 
 namespace fs
 {
-    NorFile::NorFile(NorVolume& volume)
+    NorFile::NorFile(NorVolume& volume, infra::ByteRange buffer)
         : volume(volume)
+        , buffer(buffer)
         , claimer(volume.Queue())
-    {}
-
-    NorFile::~NorFile() = default;
-
-    void NorFile::Open(uint32_t inode, uint32_t size, OpenMode mode)
     {
-        state = NorOpenFile{ inode, size, 0, mode };
+        really_assert(buffer.size() >= NorFileBufferBytes(volume.Config()));
+    }
+
+    NorFile::~NorFile()
+    {
+        if (open)
+            Detach();
+    }
+
+    void NorFile::Open(const NorOpenFile& opened)
+    {
+        state = opened;
+        state.buffer = buffer;
+        state.position = state.mode == OpenMode::append ? state.size : 0;
         generation = volume.Generation();
+        open = true;
+        volume.OpenFiles().push_back(*this);
+    }
+
+    infra::ByteRange NorFile::Buffer() const
+    {
+        return buffer;
+    }
+
+    NorOpenFile& NorFile::State()
+    {
+        return state;
+    }
+
+    const NorOpenFile& NorFile::State() const
+    {
+        return state;
+    }
+
+    void NorFile::Detach()
+    {
+        volume.OpenFiles().erase(*this);
+        open = false;
     }
 
     uint32_t NorFile::Size() const
@@ -34,15 +68,109 @@ namespace fs
 
     void NorFile::Read(infra::ByteRange buffer, const infra::Function<void(Result result, std::size_t bytesRead)>& onDone)
     {
-        if (reading)
+        if (Pending())
         {
             volume.Defer(onDone, Result::busy);
             return;
         }
 
-        reading = true;
         readBuffer = buffer;
         onRead = onDone;
+        Claim(Call::read);
+    }
+
+    void NorFile::Write(infra::ConstByteRange data, const infra::Function<void(Result result)>& onDone)
+    {
+        if (Pending() || !state.Writable())
+        {
+            volume.Defer(onDone, Unwritable());
+            return;
+        }
+
+        writeData = data;
+        this->onDone = onDone;
+        Claim(Call::write);
+    }
+
+    void NorFile::Truncate(const infra::Function<void(Result result)>& onDone)
+    {
+        if (Pending() || !state.Writable())
+            volume.Defer(onDone, Unwritable());
+        else
+            volume.Defer(onDone, Availability() == Result::success ? Result::unsupported : Availability());
+    }
+
+    void NorFile::ExpectSize(uint32_t, const infra::Function<void(Result result)>& onDone)
+    {
+        if (Pending() || !state.Writable())
+            volume.Defer(onDone, Unwritable());
+        else
+            volume.Defer(onDone, Availability());
+    }
+
+    void NorFile::Sync(const infra::Function<void(Result result)>& onDone)
+    {
+        if (Pending())
+            volume.Defer(onDone, Result::busy);
+        else if (!state.Writable())
+            volume.Defer(onDone, Availability());
+        else
+        {
+            this->onDone = onDone;
+            Claim(Call::sync);
+        }
+    }
+
+    void NorFile::Close(const infra::Function<void(Result result)>& onDone)
+    {
+        if (Pending())
+            volume.Defer(onDone, Result::busy);
+        else if (!state.Writable())
+        {
+            volume.Defer(onDone, Availability());
+            Forget();
+        }
+        else
+        {
+            this->onDone = onDone;
+            Claim(Call::close);
+        }
+    }
+
+    void NorFile::UnReferenced()
+    {
+        if (open && state.Writable() && state.Uncommitted() && volume.Available(generation))
+        {
+            call = Call::implicitClose;
+            claimer.Claim([this]
+                {
+                    Granted();
+                });
+            return;
+        }
+
+        Forget();
+        Release();
+    }
+
+    bool NorFile::Pending() const
+    {
+        return call != Call::none;
+    }
+
+    Result NorFile::Unwritable() const
+    {
+        return Pending() ? Result::busy : Result::readOnly;
+    }
+
+    Result NorFile::Availability() const
+    {
+        return volume.Available(generation) ? Result::success : Result::notMounted;
+    }
+
+    void NorFile::Claim(Call claimed)
+    {
+        call = claimed;
         self = Share(*this);
         claimer.Claim([this]
             {
@@ -50,66 +178,76 @@ namespace fs
             });
     }
 
-    void NorFile::Write(infra::ConstByteRange, const infra::Function<void(Result result)>& onDone)
-    {
-        Refuse(onDone);
-    }
-
-    void NorFile::Truncate(const infra::Function<void(Result result)>& onDone)
-    {
-        Refuse(onDone);
-    }
-
-    void NorFile::ExpectSize(uint32_t, const infra::Function<void(Result result)>& onDone)
-    {
-        Refuse(onDone);
-    }
-
-    void NorFile::Sync(const infra::Function<void(Result result)>& onDone)
-    {
-        Report(onDone);
-    }
-
-    void NorFile::Close(const infra::Function<void(Result result)>& onDone)
-    {
-        Report(onDone);
-    }
-
-    void NorFile::UnReferenced()
-    {
-        Release();
-    }
-
-    void NorFile::Refuse(const infra::Function<void(Result result)>& onDone)
-    {
-        volume.Defer(onDone, reading ? Result::busy : Result::readOnly);
-    }
-
-    void NorFile::Report(const infra::Function<void(Result result)>& onDone)
-    {
-        if (reading)
-            volume.Defer(onDone, Result::busy);
-        else
-            volume.Defer(onDone, volume.Available(generation) ? Result::success : Result::notMounted);
-    }
-
     void NorFile::Granted()
     {
         if (!volume.Available(generation))
-            ReadDone(Result::notMounted, 0);
-        else
+        {
+            if (call == Call::read)
+                ReadDone(Result::notMounted, 0);
+            else
+                Done(Result::notMounted);
+        }
+        else if (call == Call::read)
             volume.Operation().emplace<NorRead>(volume, state, readBuffer, [this](Result result, std::size_t bytesRead)
                                   {
                                       ReadDone(result, bytesRead);
                                   })
                 .Start();
+        else if (call == Call::write)
+            volume.Operation().emplace<NorWrite>(volume, state, writeData, [this](Result result)
+                                  {
+                                      Done(result);
+                                  })
+                .Start();
+        else
+            volume.FileCommit().Commit(state, [this](Result result)
+                {
+                    Done(result);
+                });
     }
 
     void NorFile::ReadDone(Result result, std::size_t bytesRead)
     {
         claimer.Release();
-        reading = false;
+        call = Call::none;
         self = nullptr;
         onRead(result, bytesRead);
+    }
+
+    void NorFile::Done(Result result)
+    {
+        auto completed = std::exchange(call, Call::none);
+        claimer.Release();
+
+        if (completed == Call::close || completed == Call::implicitClose)
+        {
+            if (result != Result::success && volume.Available(generation))
+                ReleaseUncommittedBlocks();
+
+            Forget();
+        }
+
+        if (completed == Call::implicitClose)
+        {
+            Release();
+            return;
+        }
+
+        self = nullptr;
+        onDone(result);
+    }
+
+    void NorFile::ReleaseUncommittedBlocks()
+    {
+        for (const auto& entry : state.entries)
+            volume.State().blocks.Set(entry.block, NorBlockState::freeNotErased);
+
+        state.entries.clear();
+    }
+
+    void NorFile::Forget()
+    {
+        if (open)
+            Detach();
     }
 }

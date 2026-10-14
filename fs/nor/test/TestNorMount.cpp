@@ -397,19 +397,23 @@ TEST_F(NorMountTest, a_checkpoint_that_does_not_mark_its_own_block_is_corrupted)
     EXPECT_EQ(fs::Result::corrupted, Mount());
 }
 
-TEST_F(NorMountTest, a_checkpoint_that_marks_a_free_and_erased_block_is_corrupted)
+TEST_F(NorMountTest, a_block_that_the_checkpoint_marks_is_in_use_even_when_erased_because_a_record_may_have_released_it)
 {
     WriteNewCheckpoint([](fs::NorCheckpoint&) {}, { 0, 1, 2, 5, 9 });
 
-    EXPECT_EQ(fs::Result::corrupted, Mount());
+    EXPECT_EQ(fs::Result::success, Mount());
+    EXPECT_EQ(State::inUse, StateOf(9));
 }
 
-TEST_F(NorMountTest, a_checkpoint_that_marks_a_block_without_part_a_is_corrupted)
+TEST_F(NorMountTest, a_block_that_the_checkpoint_marks_without_part_a_is_in_use_with_an_estimated_erase_count)
 {
+    Builder().SetEraseCount(5, 31);
     Builder().EraseBlock(9);
     WriteNewCheckpoint([](fs::NorCheckpoint&) {}, { 0, 1, 2, 5, 9 });
 
-    EXPECT_EQ(fs::Result::corrupted, Mount());
+    EXPECT_EQ(fs::Result::success, Mount());
+    EXPECT_EQ(State::inUse, StateOf(9));
+    EXPECT_EQ(2, volume.eraseCounts.Count(9));
 }
 
 TEST_F(NorMountTest, a_checkpoint_whose_root_is_in_a_block_that_it_does_not_use_is_corrupted)

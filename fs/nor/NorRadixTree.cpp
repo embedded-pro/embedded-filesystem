@@ -82,6 +82,15 @@ namespace fs
         return UnmodifiedNodes(path) + (path.complete ? 0 : root.height - static_cast<uint32_t>(path.nodes));
     }
 
+    std::optional<uint32_t> NorRadixTree::NodesCreatedBySet(const NorMapRoot& root, uint32_t index) const
+    {
+        auto modified = NodesModifiedBySet(root, index);
+        if (!modified.has_value() || root.address == 0 || HeightFor(index).value_or(0) > root.height)
+            return modified;
+
+        return modified.value_or(0) - UnmodifiedNodes(Walk(root, index));
+    }
+
     uint32_t NorRadixTree::NodesModifiedByClear(const NorMapRoot& root, uint32_t index) const
     {
         auto path = Walk(root, index);
@@ -195,6 +204,11 @@ namespace fs
     bool NorRadixTree::Covers(const NorMapRoot& root, uint32_t index, uint32_t nodeSize)
     {
         return root.address != 0 && index < Span(NorRadixFanout(nodeSize), root.height);
+    }
+
+    bool NorRadixTree::CanMap(uint32_t index, uint32_t nodeSize)
+    {
+        return index < Span(NorRadixFanout(nodeSize), norMaxLevels);
     }
 
     uint32_t NorRadixTree::ChildFor(infra::ConstByteRange node, uint32_t index)
