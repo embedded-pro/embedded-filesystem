@@ -55,6 +55,17 @@ TEST_F(MetricRecorderTest, record_diagnostic_adds_a_result_that_is_not_compared_
     EXPECT_TRUE(result.diagnostic);
 }
 
+TEST_F(MetricRecorderTest, after_record_every_result_as_diagnostic_a_record_is_diagnostic)
+{
+    recorder.RecordEveryResultAsDiagnostic();
+
+    recorder.Record("W-1", "L1", "B/s", metrics::Better::higher, 1000.0);
+
+    ASSERT_EQ(1, report.Results().size());
+    EXPECT_TRUE(report.Results()[0].diagnostic);
+    EXPECT_EQ(std::nullopt, report.Results()[0].target);
+}
+
 TEST_F(MetricRecorderTest, record_attaches_the_target_of_the_metric_and_workload)
 {
     testing::StrictMock<TargetsMock> targets;

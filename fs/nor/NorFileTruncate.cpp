@@ -27,7 +27,7 @@ namespace fs
         onDone = onTruncated;
 
         if (!file->entries.empty() && size != 0 && size < file->programmed)
-            volume.FileCommit().Commit(*file, [this](Result result)
+            volume.FileCommit().Commit(*file, NorReserve::used, [this](Result result)
                 {
                     if (result == Result::success)
                         TruncateCommitted();
@@ -129,7 +129,7 @@ namespace fs
 
     void NorFileTruncate::Commit()
     {
-        volume.FileCommit().Commit(*file, [this](Result result)
+        volume.FileCommit().Commit(*file, NorReserve::used, [this](Result result)
             {
                 onDone(result);
             });

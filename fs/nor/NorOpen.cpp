@@ -90,7 +90,7 @@ namespace fs
     void NorOpen::Empty(const NorFoundInode& found)
     {
         opened = NorOpenFile{ found.inode, 0, 0, call.mode, found.size };
-        volume.FileCommit().Commit(opened, [this](Result result)
+        volume.FileCommit().Commit(opened, NorReserve::used, [this](Result result)
             {
                 if (result == Result::success)
                     file->Open(opened);

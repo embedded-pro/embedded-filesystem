@@ -63,6 +63,8 @@ namespace metrics
         fs::Result MakeDirectory(const std::string& path);
         fs::Result Remove(const std::string& path);
         fs::Result Rename(const std::string& from, const std::string& to);
+        void Settle();
+        bool JournalMoreThanHalfFull();
         std::optional<fs::EntryType> TypeOf(const std::string& path);
         fs::Result OpenFile(const std::string& path, fs::OpenMode mode);
         fs::Result Write(const std::vector<uint8_t>& data);
@@ -79,6 +81,8 @@ namespace metrics
         {
         public:
             FileSystem(hal::Flash& flash, const fs::NorConfig& config);
+
+            bool JournalMoreThanHalfFull();
 
         private:
             infra::SharedPtr<fs::NorDirectory> AllocateDirectory() override;

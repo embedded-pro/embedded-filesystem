@@ -345,6 +345,65 @@ TEST_F(NorFileWriteTest, a_write_without_a_free_block_has_no_space_and_keeps_wha
     EXPECT_EQ(config.inlineBytes, file->Position());
 }
 
+TEST_F(NorFileWriteTest, a_write_that_needs_a_data_block_from_the_reserve_has_no_space)
+{
+    auto file = Open("/a", fs::OpenMode::write);
+    LeaveFreeBlocks(Volume().Geometry().ReserveBlocks());
+    auto contents = Pattern<100>();
+
+    EXPECT_EQ(fs::Result::noSpace, Write(*file, infra::MakeRange(contents)));
+
+    EXPECT_EQ(config.inlineBytes, file->Size());
+}
+
+TEST_F(NorFileWriteTest, a_write_that_must_copy_a_block_written_before_the_mount_into_the_reserve_has_no_space)
+{
+    Unmount();
+    auto contents = Pattern<5000>();
+    Builder().AddFile(root, "a", infra::MakeRange(contents));
+    Builder().Commit();
+    Mount();
+    auto file = Open("/a", fs::OpenMode::append);
+    LeaveFreeBlocks(Volume().Geometry().ReserveBlocks());
+    auto more = Pattern<300>();
+
+    EXPECT_EQ(fs::Result::noSpace, Write(*file, infra::MakeRange(more)));
+}
+
+TEST_F(NorFileWriteTest, sync_may_copy_a_block_written_before_the_mount_into_the_reserve)
+{
+    Unmount();
+    auto contents = Pattern<5000>();
+    Builder().AddFile(root, "a", infra::MakeRange(contents));
+    Builder().Commit();
+    Mount();
+    auto file = Open("/a", fs::OpenMode::append);
+    ASSERT_EQ(fs::Result::success, Write(*file, Bytes("x")));
+    LeaveFreeBlocks(Volume().Geometry().ReserveBlocks());
+
+    EXPECT_EQ(fs::Result::success, Sync(*file));
+    EXPECT_EQ(fs::Result::success, Close(*file));
+    file = nullptr;
+    std::array<uint8_t, 5001> expected{};
+    std::ranges::copy(contents, expected.begin());
+    expected[5000] = 'x';
+    ExpectContents("/a", expected);
+}
+
+TEST_F(NorFileWriteTest, a_volume_with_no_free_block_beyond_the_reserve_is_full)
+{
+    LeaveFreeBlocks(Volume().Geometry().ReserveBlocks() - 1);
+    std::optional<fs::VolumeUsage> usage;
+    fileSystem.Usage([&usage](fs::Result, fs::VolumeUsage measured)
+        {
+            usage = measured;
+        });
+    ExecuteAllActions();
+
+    ASSERT_TRUE(usage.has_value());
+    EXPECT_EQ(usage->totalBytes, usage->usedBytes);
+}
+
 TEST_F(NorFileWriteTest, a_copy_without_a_free_block_has_no_space)
 {
     Unmount();

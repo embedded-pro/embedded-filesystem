@@ -17,7 +17,9 @@ target_sources(fs.nor_test PRIVATE
     NorRecordsFixture.hpp
     NorVolumeFixture.hpp
     TestNorBTree.cpp
+    TestNorBackground.cpp
     TestNorBlockAllocator.cpp
+    TestNorBlockEraser.cpp
     TestNorBlockHeader.cpp
     TestNorBlockStates.cpp
     TestNorCheckpoint.cpp

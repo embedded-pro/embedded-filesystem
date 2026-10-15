@@ -101,6 +101,17 @@ TEST(NorMeasurementTest, results_go_to_the_global_report_with_the_device_describ
     EXPECT_THAT(metrics::GlobalReport().Json(), testing::HasSubstr("\"measurement-nor\": {"));
 }
 
+TEST(NorMeasurementTest, a_setup_whose_results_are_diagnostic_records_them_as_diagnostic)
+{
+    auto setup = fakeSetup;
+    setup.diagnostic = true;
+    metrics::NorMeasurement measurement{ setup };
+
+    measurement.Recorder().Record("R-4", "L7", "ms", metrics::Better::lower, 1.0, 10);
+
+    EXPECT_TRUE(metrics::GlobalReport().Results().back().diagnostic);
+}
+
 TEST(NorSetupTest, is_named_after_its_label)
 {
     std::ostringstream stream;

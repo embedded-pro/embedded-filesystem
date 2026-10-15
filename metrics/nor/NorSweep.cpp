@@ -134,6 +134,11 @@ namespace metrics
         AttachPathSlots(infra::MakeRange(pathSlots));
     }
 
+    bool NorSweepVolume::FileSystem::JournalMoreThanHalfFull()
+    {
+        return Volume().Journal().IsMoreThanHalfFull();
+    }
+
     infra::SharedPtr<fs::NorDirectory> NorSweepVolume::FileSystem::AllocateDirectory()
     {
         return directories.Allocate();
@@ -195,6 +200,16 @@ namespace metrics
             {
                 fileSystem.Rename(infra::BoundedConstString(from.data(), from.size()), infra::BoundedConstString(to.data(), to.size()), onDone);
             });
+    }
+
+    void NorSweepVolume::Settle()
+    {
+        context.time.RunUntilIdle();
+    }
+
+    bool NorSweepVolume::JournalMoreThanHalfFull()
+    {
+        return fileSystem.JournalMoreThanHalfFull();
     }
 
     std::optional<fs::EntryType> NorSweepVolume::TypeOf(const std::string& path)

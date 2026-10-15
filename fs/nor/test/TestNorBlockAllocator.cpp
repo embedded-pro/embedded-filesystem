@@ -20,16 +20,35 @@ namespace
         : public fs::NorVolumeFixture<config, 32, blockSize>
     {
     public:
-        std::optional<uint32_t> Allocate(fs::NorBlockType type = fs::NorBlockType::journal, fs::NorBlockOwner owner = {})
+        std::optional<uint32_t> Allocate(fs::NorBlockType type = fs::NorBlockType::journal, fs::NorBlockOwner owner = {}, fs::NorReserve reserve = fs::NorReserve::used)
         {
             std::optional<std::optional<uint32_t>> allocated;
-            Volume().Allocator().Allocate(type, owner, [&allocated](std::optional<uint32_t> block)
+            Volume().Allocator().Allocate(type, owner, reserve, [&allocated](std::optional<uint32_t> block)
                 {
                     allocated = block;
                 });
             ExecuteAllActions();
             EXPECT_TRUE(allocated.has_value());
             return allocated.value_or(std::nullopt);
+        }
+
+        void LeaveFree(uint32_t free)
+        {
+            for (uint32_t block = 2; block != 32; ++block)
+                if (State().blocks.State(block) != fs::NorBlockState::freeErased)
+                    continue;
+                else if (free == 0)
+                    State().blocks.Set(block, fs::NorBlockState::inUse);
+                else
+                    --free;
+        }
+
+        uint32_t Erases() const
+        {
+            uint32_t erases = 0;
+            for (const auto& request : device.requests)
+                erases += request.erase ? 1 : 0;
+            return erases;
         }
 
         void MarkEveryFreeBlockNotErased()
@@ -115,6 +134,47 @@ TEST_F(NorBlockAllocatorTest, does_not_take_a_pending_block)
     EXPECT_EQ(std::nullopt, Allocate());
 }
 
+TEST_F(NorBlockAllocatorTest, a_block_that_keeps_the_reserve_is_not_given_out_of_it)
+{
+    Mount();
+    LeaveFree(Volume().Geometry().ReserveBlocks());
+
+    EXPECT_EQ(std::nullopt, Allocate(fs::NorBlockType::data, fs::NorBlockOwner{ 7, 0 }, fs::NorReserve::kept));
+    EXPECT_NE(std::nullopt, Allocate(fs::NorBlockType::data, fs::NorBlockOwner{ 7, 0 }, fs::NorReserve::used));
+}
+
+TEST_F(NorBlockAllocatorTest, a_block_that_keeps_the_reserve_is_given_while_more_blocks_than_the_reserve_are_free)
+{
+    Mount();
+    LeaveFree(Volume().Geometry().ReserveBlocks() + 1);
+
+    EXPECT_NE(std::nullopt, Allocate(fs::NorBlockType::data, fs::NorBlockOwner{ 7, 0 }, fs::NorReserve::kept));
+}
+
+TEST_F(NorBlockAllocatorTest, an_allocation_that_leaves_the_pool_below_its_watermark_erases_one_sector_of_a_free_block)
+{
+    Mount();
+    LeaveFree(Volume().Geometry().WatermarkBlocks());
+    State().blocks.Set(30, fs::NorBlockState::freeNotErased);
+    device.recording = true;
+
+    Allocate();
+
+    EXPECT_EQ(1, Erases());
+    EXPECT_EQ(fs::NorBlockState::freeErased, State().blocks.State(30));
+}
+
+TEST_F(NorBlockAllocatorTest, an_allocation_that_erased_its_own_block_erases_nothing_more)
+{
+    Mount();
+    MarkEveryFreeBlockNotErased();
+    device.recording = true;
+
+    Allocate();
+
+    EXPECT_EQ(1, Erases());
+}
+
 namespace
 {
     constexpr fs::NorConfig twoSectorWideUnit{ .maxBlocks = 20, .sectorsPerBlock = 2, .programUnit = 16, .pageSize = 16, .cachedNodes = 15 };
@@ -171,7 +231,32 @@ TEST_F(NorBlockAllocatorOnMockTest, erases_one_sector_per_request_then_programs_
     EXPECT_CALL(flash, writeBufferMock(std::vector<uint8_t>(partB.begin(), partB.end()), 6 * 4096 + 16));
     EXPECT_CALL(done, callback(std::optional<uint32_t>(6)));
 
-    volume.Allocator().Allocate(fs::NorBlockType::node, {}, [this](std::optional<uint32_t> block)
+    volume.Allocator().Allocate(fs::NorBlockType::node, {}, fs::NorReserve::used, [this](std::optional<uint32_t> block)
+        {
+            done.callback(block);
+        });
+    CompleteRequests();
+}
+
+TEST_F(NorBlockAllocatorOnMockTest, an_empty_pool_finishes_the_block_that_the_eraser_started)
+{
+    volume.State().blocks.Set(9, fs::NorBlockState::freeNotErased);
+    EXPECT_CALL(flash, eraseSectorsMock(12, 13));
+    volume.Eraser().Step([] {});
+    CompleteRequests();
+    volume.State().eraseCounts.Record(9, 1);
+
+    std::array<uint8_t, 16> partA{};
+    fs::SerializeNorHeaderA(5, infra::MakeRange(partA));
+    std::array<uint8_t, 32> partB{};
+    fs::SerializeNorHeaderB(fs::NorAllocation{ fs::NorBlockType::node, 9, {} }, infra::MakeRange(partB));
+    testing::InSequence sequence;
+    EXPECT_CALL(flash, eraseSectorsMock(13, 14));
+    EXPECT_CALL(flash, writeBufferMock(std::vector<uint8_t>(partA.begin(), partA.end()), 6 * 4096));
+    EXPECT_CALL(flash, writeBufferMock(std::vector<uint8_t>(partB.begin(), partB.end()), 6 * 4096 + 16));
+    EXPECT_CALL(done, callback(std::optional<uint32_t>(6)));
+
+    volume.Allocator().Allocate(fs::NorBlockType::node, {}, fs::NorReserve::used, [this](std::optional<uint32_t> block)
         {
             done.callback(block);
         });

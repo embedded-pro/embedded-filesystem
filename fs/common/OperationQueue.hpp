@@ -4,6 +4,7 @@
 #include "infra/event/ClaimableResource.hpp"
 #include "infra/timer/Timer.hpp"
 #include "infra/util/Function.hpp"
+#include <cstdint>
 
 namespace fs
 {
@@ -18,6 +19,8 @@ namespace fs
         OperationQueue& operator=(const OperationQueue& other) = delete;
         ~OperationQueue() = default;
 
+        uint32_t ForegroundReleases() const;
+
     private:
         void ForegroundClaiming();
         void ForegroundReleased();
@@ -27,6 +30,7 @@ namespace fs
         infra::Duration idleDelay;
         infra::Function<void()> onIdle;
         infra::TimerSingleShot idleTimer;
+        uint32_t foregroundReleases{ 0 };
     };
 
     class OperationQueue::Claimer

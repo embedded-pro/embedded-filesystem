@@ -2,6 +2,7 @@
 #define FS_NOR_NOR_FILE_FLUSH_HPP
 
 #include "fs/interfaces/Result.hpp"
+#include "fs/nor/NorBlockAllocator.hpp"
 #include "fs/nor/NorOpenFile.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/Function.hpp"
@@ -20,7 +21,7 @@ namespace fs
         NorFileFlush& operator=(const NorFileFlush& other) = delete;
         ~NorFileFlush();
 
-        void Flush(NorOpenFile& file, uint32_t to, const infra::Function<void(Result result)>& onDone);
+        void Flush(NorOpenFile& file, uint32_t to, NorReserve reserve, const infra::Function<void(Result result)>& onDone);
 
     private:
         void Copied(std::optional<uint32_t> block);

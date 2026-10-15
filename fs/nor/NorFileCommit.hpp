@@ -2,6 +2,7 @@
 #define FS_NOR_NOR_FILE_COMMIT_HPP
 
 #include "fs/interfaces/Result.hpp"
+#include "fs/nor/NorBlockAllocator.hpp"
 #include "fs/nor/NorMapFetch.hpp"
 #include "fs/nor/NorNode.hpp"
 #include "fs/nor/NorOpenFile.hpp"
@@ -22,7 +23,7 @@ namespace fs
         NorFileCommit& operator=(const NorFileCommit& other) = delete;
         ~NorFileCommit();
 
-        void Commit(NorOpenFile& file, const infra::Function<void(Result result)>& onDone);
+        void Commit(NorOpenFile& file, NorReserve reserve, const infra::Function<void(Result result)>& onDone);
 
     private:
         void FetchPaths();
@@ -39,6 +40,7 @@ namespace fs
     private:
         NorVolume& volume;
         NorOpenFile* file{ nullptr };
+        NorReserve reserve{ NorReserve::used };
         NorMapRoot dataMap;
         std::optional<uint32_t> secondLeafIndex;
         infra::AutoResetFunction<void()> onFetched;

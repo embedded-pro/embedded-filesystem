@@ -27,6 +27,8 @@ namespace metrics
         , scaleDivisor(setup.scaleDivisor)
     {
         GlobalReport().AddDevice(*setup.model);
+        if (setup.diagnostic)
+            recorder.RecordEveryResultAsDiagnostic();
     }
 
     Runner& NorMeasurement::Workloads()

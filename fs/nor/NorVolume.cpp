@@ -13,7 +13,10 @@ namespace fs
         , journalBuffer(parts.journalBuffer)
         , nodeStorage(parts.nodeStorage)
         , cache(parts.flash, parts.nodeSlots, parts.nodeStorage)
-        , queue(idleDelay, [] {})
+        , queue(idleDelay, [this]
+              {
+                  background.Idle();
+              })
     {}
 
     NorVolume::~NorVolume() = default;
@@ -82,6 +85,11 @@ namespace fs
     NorNameLookup& NorVolume::NameLookup()
     {
         return nameLookup;
+    }
+
+    NorBlockEraser& NorVolume::Eraser()
+    {
+        return eraser;
     }
 
     NorBlockAllocator& NorVolume::Allocator()
@@ -158,11 +166,14 @@ namespace fs
     {
         ++generation;
         mounted = true;
+        background.Start();
     }
 
     void NorVolume::MarkUnmounted()
     {
         mounted = false;
+        background.Stop();
+        eraser.Reset();
 
         while (!openFiles.empty())
             openFiles.front().Detach();

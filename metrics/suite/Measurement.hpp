@@ -28,6 +28,7 @@ namespace metrics
         uint32_t scaleDivisor;
         std::function<std::shared_ptr<FileSystemUnderTest>(VirtualTime& time, hal::Flash& flash)> create;
         std::set<std::string, std::less<>> deferredWorkloads;
+        bool diagnostic{ false };
     };
 
     struct BlockSetup
