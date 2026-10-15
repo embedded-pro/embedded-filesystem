@@ -1126,10 +1126,10 @@ public:
         volume.Unmount();
     }
 
-    bool OnlyAt(const metrics::NorCheck& check, const std::string& expected, std::string RenamedPaths::*member) const
+    static bool OnlyAt(const metrics::NorCheck& check, const std::string& expected, const std::vector<std::string>& candidates)
     {
-        for (const auto& paths : afterRenames)
-            if ((check.Find(paths.*member) != nullptr) != (paths.*member == expected))
+        for (const auto& candidate : candidates)
+            if ((check.Find(candidate) != nullptr) != (candidate == expected))
                 return false;
 
         return true;
@@ -1137,10 +1137,20 @@ public:
 
     std::optional<std::size_t> RenamesDone(const metrics::NorCheck& check) const
     {
+        std::vector<std::string> files;
+        std::vector<std::string> moved;
+        std::vector<std::string> parents;
+        for (const auto& paths : afterRenames)
+        {
+            files.push_back(paths.file);
+            moved.push_back(paths.moved);
+            parents.push_back(paths.parent);
+        }
+
         for (std::size_t done = 0; done != afterRenames.size(); ++done)
         {
             const auto& expected = afterRenames[done];
-            if (OnlyAt(check, expected.file, &RenamedPaths::file) && OnlyAt(check, expected.moved, &RenamedPaths::moved) && OnlyAt(check, expected.parent, &RenamedPaths::parent))
+            if (OnlyAt(check, expected.file, files) && OnlyAt(check, expected.moved, moved) && OnlyAt(check, expected.parent, parents))
                 return done;
         }
 
