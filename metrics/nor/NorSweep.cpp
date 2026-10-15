@@ -118,6 +118,7 @@ namespace metrics
         NorSweepVolumeStorage::NorSweepVolumeStorage(const fs::NorConfig& config)
             : blockStates(fs::NorBlockStateBytes(config.maxBlocks))
             , eraseCounts(config.maxBlocks)
+            , nodeBlocks(fs::NorNodeBlockBytes(config.maxBlocks))
             , journal(fs::RoundUpTo(static_cast<uint32_t>(fs::NorLargestRecordBytes(config.inlineBytes, config.maxNameBytes)), config.programUnit))
             , nodes(config.cachedNodes * config.nodeSize)
             , nodeSlots(config.cachedNodes)
@@ -126,7 +127,7 @@ namespace metrics
 
     NorSweepVolume::FileSystem::FileSystem(hal::Flash& flash, const fs::NorConfig& config)
         : NorSweepVolumeStorage(config)
-        , fs::NorFileSystem(fs::NorVolumeParts{ flash, deferred, infra::MakeRange(blockStates), infra::MakeRange(eraseCounts), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(nodeSlots) }, config, defaultIdleDelay)
+        , fs::NorFileSystem(fs::NorVolumeParts{ flash, deferred, infra::MakeRange(blockStates), infra::MakeRange(eraseCounts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(nodeSlots) }, config, defaultIdleDelay)
     {
         for (std::size_t index = 0; index != config.pathOperations; ++index)
             pathSlots.emplace_back(Volume().Queue());

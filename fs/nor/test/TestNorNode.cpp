@@ -117,3 +117,13 @@ TEST(NorNodeTest, erased_flash_does_not_open)
 
     EXPECT_EQ(std::nullopt, fs::OpenNorNode(infra::MakeRange(node)));
 }
+
+TEST(NorNodeTest, a_header_names_a_known_map_and_a_level_below_the_deepest)
+{
+    EXPECT_TRUE(fs::IsNorNodeHeader(dataLeaf));
+    EXPECT_TRUE(fs::IsNorNodeHeader(fs::NorNodeHeader{ fs::NorMap::inodeTable, 2, 1, 0, 0 }));
+    EXPECT_FALSE(fs::IsNorNodeHeader(fs::NorNodeHeader{ fs::NorMap::inodeTable, 3, 1, 0, 0 }));
+    EXPECT_FALSE(fs::IsNorNodeHeader(fs::NorNodeHeader{ static_cast<fs::NorMap>(0), 0, 1, 0, 0 }));
+    EXPECT_FALSE(fs::IsNorNodeHeader(fs::NorNodeHeader{ static_cast<fs::NorMap>(4), 0, 1, 0, 0 }));
+    EXPECT_FALSE(fs::IsNorNodeHeader(fs::ReadNorNodeHeader(infra::MakeRange(std::array<uint8_t, 12>{ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff }))));
+}

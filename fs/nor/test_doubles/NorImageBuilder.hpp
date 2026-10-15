@@ -44,6 +44,7 @@ namespace fs
         void SetEraseCount(uint32_t block, uint32_t count);
         void EraseBlock(uint32_t block);
         uint64_t Allocate(uint32_t block, NorBlockType type, NorBlockOwner owner = {});
+        void AddEmptyNodeBlock(uint32_t block);
         void WriteCheckpoint(uint32_t block);
         void WriteCheckpoint(uint32_t block, const NorCheckpoint& checkpoint, std::initializer_list<uint32_t> used);
         void AppendRecord(std::initializer_list<NorEntry> entries);

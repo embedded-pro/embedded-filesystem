@@ -45,6 +45,7 @@ namespace metrics
 
             std::vector<uint8_t> blockStates;
             std::vector<uint8_t> eraseCounts;
+            std::vector<uint8_t> nodeBlocks;
             std::vector<uint8_t> journal;
             std::vector<uint8_t> nodes;
             std::vector<fs::NorNodeCache::Slot> nodeSlots;

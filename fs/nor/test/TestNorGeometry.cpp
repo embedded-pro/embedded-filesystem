@@ -32,7 +32,7 @@ TEST(NorGeometryTest, spi_nor_blocks_of_one_sector)
     EXPECT_EQ(544u, geometry->CheckpointBytes());
     EXPECT_EQ(3u, geometry->NodeBlocksPerCheckpoint());
     EXPECT_EQ(8u, geometry->ReserveBlocks());
-    EXPECT_EQ(8u, geometry->WatermarkBlocks());
+    EXPECT_EQ(11u, geometry->WatermarkBlocks());
     EXPECT_EQ(20480u, geometry->AddressOfBlock(5));
     EXPECT_EQ(5u, geometry->FirstSectorOfBlock(5));
     EXPECT_EQ(20u, geometry->RoundToProgramUnit(20));
@@ -51,7 +51,7 @@ TEST(NorGeometryTest, internal_flash_with_a_program_unit_of_16_bytes)
     EXPECT_EQ(64u, geometry->CheckpointBytes());
     EXPECT_EQ(6u, geometry->NodeBlocksPerCheckpoint());
     EXPECT_EQ(14u, geometry->ReserveBlocks());
-    EXPECT_EQ(11u, geometry->WatermarkBlocks());
+    EXPECT_EQ(17u, geometry->WatermarkBlocks());
     EXPECT_EQ(32u, geometry->RoundToProgramUnit(20));
 }
 
@@ -98,8 +98,8 @@ TEST(NorGeometryTest, a_device_spans_at_most_2_gib)
 
 TEST(NorGeometryTest, a_volume_holds_the_superblocks_the_reserve_and_the_watermark)
 {
-    EXPECT_TRUE(fs::MakeNorGeometry(spiNor, 4096, 18).has_value());
-    EXPECT_FALSE(fs::MakeNorGeometry(spiNor, 4096, 17).has_value());
+    EXPECT_TRUE(fs::MakeNorGeometry(spiNor, 4096, 21).has_value());
+    EXPECT_FALSE(fs::MakeNorGeometry(spiNor, 4096, 20).has_value());
 }
 
 TEST(NorGeometryTest, a_volume_needs_blocks_and_sectors)

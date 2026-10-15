@@ -13,10 +13,16 @@ namespace fs
 
     void NorMapFetch::Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, const infra::Function<void(NorFetchResult result)>& onFetched)
     {
+        Fetch(map, root, key, 0, onFetched);
+    }
+
+    void NorMapFetch::Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, uint8_t lowest, const infra::Function<void(NorFetchResult result)>& onFetched)
+    {
         this->map = map;
         this->key = key;
         address = root.address;
         level = static_cast<uint8_t>(root.height - 1);
+        lowestLevel = lowest;
         firstIndex = 0;
         onDone = onFetched;
 
@@ -85,7 +91,7 @@ namespace fs
 
         cache.Pin(slot);
 
-        if (level == 0)
+        if (level == lowestLevel)
         {
             address = 0;
             return true;

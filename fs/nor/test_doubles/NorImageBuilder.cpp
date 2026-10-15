@@ -92,6 +92,12 @@ namespace fs
         return nextSequence++;
     }
 
+    void NorImageBuilder::AddEmptyNodeBlock(uint32_t block)
+    {
+        Allocate(block, NorBlockType::node);
+        blocksToCommit.push_back(block);
+    }
+
     void NorImageBuilder::WriteCheckpoint(uint32_t block)
     {
         MoveCheckpoint(block, Checkpoint(), {});

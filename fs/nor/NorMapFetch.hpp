@@ -27,6 +27,7 @@ namespace fs
         ~NorMapFetch();
 
         void Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, const infra::Function<void(NorFetchResult result)>& onDone);
+        void Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, uint8_t lowestLevel, const infra::Function<void(NorFetchResult result)>& onDone);
 
     private:
         void Descend();
@@ -39,6 +40,7 @@ namespace fs
         uint32_t key{ 0 };
         uint32_t address{ 0 };
         uint8_t level{ 0 };
+        uint8_t lowestLevel{ 0 };
         uint32_t firstIndex{ 0 };
         infra::AutoResetFunction<void(NorFetchResult result)> onDone;
     };

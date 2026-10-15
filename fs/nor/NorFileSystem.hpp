@@ -108,6 +108,7 @@ namespace fs
         {
             std::array<uint8_t, NorBlockStateBytes(Config.maxBlocks)> blockStateStorage{};
             std::array<uint8_t, Config.maxBlocks> eraseCountStorage{};
+            std::array<uint8_t, NorNodeBlockBytes(Config.maxBlocks)> nodeBlockStorage{};
             std::array<uint8_t, RoundUpTo(static_cast<uint32_t>(NorLargestRecordBytes(Config.inlineBytes, Config.maxNameBytes)), Config.programUnit)> journalStorage{};
             std::array<uint8_t, Config.cachedNodes * Config.nodeSize> nodeStorage{};
             std::array<NorNodeCache::Slot, Config.cachedNodes> nodeSlotStorage{};
@@ -128,7 +129,7 @@ namespace fs
 
     public:
         explicit WithStorage(hal::Flash& flash, infra::Duration idleDelay = defaultIdleDelay)
-            : NorFileSystem(NorVolumeParts{ flash, this->deferredStorage, infra::MakeRange(this->blockStateStorage), infra::MakeRange(this->eraseCountStorage), infra::MakeRange(this->journalStorage), infra::MakeRange(this->nodeStorage), infra::MakeRange(this->nodeSlotStorage) }, Config, idleDelay)
+            : NorFileSystem(NorVolumeParts{ flash, this->deferredStorage, infra::MakeRange(this->blockStateStorage), infra::MakeRange(this->eraseCountStorage), infra::MakeRange(this->nodeBlockStorage), infra::MakeRange(this->journalStorage), infra::MakeRange(this->nodeStorage), infra::MakeRange(this->nodeSlotStorage) }, Config, idleDelay)
         {
             for (std::size_t index = 0; index != Config.pathOperations; ++index)
                 pathSlots.emplace_back(Volume().Queue());

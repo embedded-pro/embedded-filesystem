@@ -25,8 +25,10 @@ namespace fs
 
         void Commit(std::size_t entryBytes, const infra::Function<void(CrcRecord& record)>& addEntries, const infra::Function<void(Result result)>& onDone);
         bool IsMoreThanHalfFull() const;
+        bool NeedsCheckpointFor(std::size_t entryBytes) const;
 
     private:
+        bool FitsInBlock(uint32_t bytes) const;
         void Place();
         void BlockAllocated(std::optional<uint32_t> block);
         void Write();

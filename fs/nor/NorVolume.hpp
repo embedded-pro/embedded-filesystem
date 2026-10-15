@@ -25,6 +25,7 @@
 #include "fs/nor/NorMount.hpp"
 #include "fs/nor/NorNameLookup.hpp"
 #include "fs/nor/NorNodeCache.hpp"
+#include "fs/nor/NorNodeCollector.hpp"
 #include "fs/nor/NorOpen.hpp"
 #include "fs/nor/NorOpenDirectory.hpp"
 #include "fs/nor/NorPathWalk.hpp"
@@ -56,6 +57,7 @@ namespace fs
         DeferredCompletions& deferred;
         infra::ByteRange blockStates;
         infra::ByteRange eraseCounts;
+        infra::ByteRange nodeBlocks;
         infra::ByteRange journalBuffer;
         infra::ByteRange nodeStorage;
         infra::MemoryRange<NorNodeCache::Slot> nodeSlots;
@@ -87,6 +89,7 @@ namespace fs
         NorBlockEraser& Eraser();
         NorBlockAllocator& Allocator();
         NorRecordApply& RecordApply();
+        NorNodeCollector& Collector();
         NorCheckpointWriter& Checkpoints();
         NorJournalWriter& Journal();
         NorFileFlush& FileFlush();
@@ -123,6 +126,7 @@ namespace fs
         NorBlockEraser eraser{ *this };
         NorBlockAllocator allocator{ *this };
         NorRecordApply recordApply{ *this };
+        NorNodeCollector collector{ *this };
         NorCheckpointWriter checkpoints{ *this };
         NorJournalWriter journal{ *this };
         NorFileFlush fileFlush{ *this };

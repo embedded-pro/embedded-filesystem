@@ -34,6 +34,7 @@ namespace fs
 
         volume.blocks.Reset(volume.geometry->blocks);
         volume.eraseCounts.Reset(volume.geometry->blocks);
+        volume.nodeBlocks.Reset(volume.geometry->blocks);
         ReadSuperblock(0);
     }
 
@@ -110,6 +111,10 @@ namespace fs
     {
         for (uint32_t block = 0; block != superblocks; ++block)
             volume.blocks.Set(block, NorBlockState::inUse);
+
+        for (uint32_t block = superblocks; block != volume.geometry->blocks; ++block)
+            if (volume.blocks.State(block) != NorBlockState::inUse)
+                volume.nodeBlocks.Remove(block);
 
         volume.eraseCounts.Normalize(superblocks);
         volume.nextSequence = summary.highestSequence + 1;

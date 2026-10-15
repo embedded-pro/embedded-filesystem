@@ -44,6 +44,11 @@ namespace fs
         return NorNodeHeader{ static_cast<NorMap>(node[0]), node[1], LoadLittle16(node, 2), LoadLittle32(node, 4), LoadLittle32(node, 8) };
     }
 
+    bool IsNorNodeHeader(const NorNodeHeader& header)
+    {
+        return IsKnownMap(static_cast<uint8_t>(header.map)) && header.level < norMaxLevels;
+    }
+
     void WriteNorNodeHeader(const NorNodeHeader& header, infra::ByteRange node)
     {
         node[0] = static_cast<uint8_t>(header.map);

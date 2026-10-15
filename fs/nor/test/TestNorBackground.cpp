@@ -16,7 +16,7 @@ using namespace std::chrono_literals;
 
 namespace
 {
-    constexpr fs::NorConfig twoSectors{ .maxBlocks = 20, .sectorsPerBlock = 2, .programUnit = 16, .pageSize = 16, .cachedNodes = 15 };
+    constexpr fs::NorConfig twoSectors{ .maxBlocks = 22, .sectorsPerBlock = 2, .programUnit = 16, .pageSize = 16, .cachedNodes = 15 };
 
     class NorBackgroundTest
         : public testing::Test
@@ -27,9 +27,9 @@ namespace
         {
             auto& state = volume.State();
             state.geometry = fs::MakeNorGeometry(twoSectors, flash);
-            state.blocks.Reset(20);
-            state.eraseCounts.Reset(20);
-            for (uint32_t block = 0; block != 20; ++block)
+            state.blocks.Reset(22);
+            state.eraseCounts.Reset(22);
+            for (uint32_t block = 0; block != 22; ++block)
             {
                 state.eraseCounts.Record(block, 5);
                 state.blocks.Set(block, fs::NorBlockState::inUse);
@@ -65,14 +65,15 @@ namespace
             return { partA.begin(), partA.end() };
         }
 
-        testing::StrictMock<hal::FlashMock> flash{ 40, 2048 };
+        testing::StrictMock<hal::FlashMock> flash{ 44, 2048 };
         fs::DeferredCompletions::WithMaxSize<2> deferred;
-        std::array<uint8_t, fs::NorBlockStateBytes(20)> states{};
-        std::array<uint8_t, 20> counts{};
+        std::array<uint8_t, fs::NorBlockStateBytes(22)> states{};
+        std::array<uint8_t, 22> counts{};
+        std::array<uint8_t, fs::NorNodeBlockBytes(22)> nodeBlocks{};
         std::array<uint8_t, 256> journal{};
         std::array<uint8_t, 15 * 512> nodes{};
         std::array<fs::NorNodeCache::Slot, 15> slots{};
-        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots) }, twoSectors, 10ms };
+        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots) }, twoSectors, 10ms };
         fs::OperationQueue::Claimer foreground{ volume.Queue() };
     };
 }
@@ -287,4 +288,109 @@ TEST_F(NorBackgroundCheckpointTest, erases_a_free_block_so_that_a_checkpoint_tha
     Idle();
 
     EXPECT_NE(checkpointBlock, State().checkpointBlock);
+}
+
+namespace
+{
+    class NorBackgroundCollectionTest
+        : public fs::NorRecordsFixture<config, 32, 4096>
+    {
+    public:
+        void Idle()
+        {
+            fs::OperationQueue::Claimer claimer{ Volume().Queue() };
+            claimer.Claim([] {});
+            ExecuteAllActions();
+            claimer.Release();
+            ForwardTime(10ms);
+        }
+
+        void KeepErased(uint32_t erased)
+        {
+            for (uint32_t block = 2; block != 32; ++block)
+                if (State().blocks.State(block) == fs::NorBlockState::freeErased && erased != 0)
+                    --erased;
+                else if (State().blocks.State(block) != fs::NorBlockState::inUse)
+                    State().blocks.Set(block, fs::NorBlockState::inUse);
+        }
+    };
+}
+
+TEST_F(NorBackgroundCollectionTest, writes_a_checkpoint_when_a_collection_is_due)
+{
+    Builder().AddDirectory(root, "a");
+    Builder().Commit();
+    Mount();
+    ASSERT_TRUE(Volume().Collector().Due());
+    auto checkpointBlock = State().checkpointBlock;
+
+    Idle();
+
+    EXPECT_NE(checkpointBlock, State().checkpointBlock);
+    EXPECT_FALSE(State().nodeBlocks.Contains(2));
+    EXPECT_FALSE(Volume().Collector().Due());
+}
+
+TEST_F(NorBackgroundCollectionTest, a_checkpoint_with_a_collection_waits_for_the_pool_to_hold_twice_the_node_blocks_of_a_checkpoint)
+{
+    Builder().AddDirectory(root, "a");
+    Builder().Commit();
+    Mount();
+    ASSERT_TRUE(Volume().Collector().Due());
+    KeepErased(2 * Volume().Geometry().NodeBlocksPerCheckpoint());
+    auto checkpointBlock = State().checkpointBlock;
+
+    Idle();
+
+    EXPECT_EQ(checkpointBlock, State().checkpointBlock);
+
+    State().blocks.Set(30, fs::NorBlockState::freeErased);
+    Idle();
+
+    EXPECT_NE(checkpointBlock, State().checkpointBlock);
+}
+
+TEST_F(NorBackgroundCollectionTest, collects_at_most_one_round_of_the_node_blocks_between_two_calls)
+{
+    AddDirectories(root, 40);
+    Mount();
+    State().liveNodes = 0;
+    auto passed = Volume().Collector().LeftBlocks();
+    auto round = Volume().Collector().CollectableBlocks();
+
+    Idle();
+
+    EXPECT_TRUE(Volume().Collector().Due());
+    EXPECT_LE(passed + round, Volume().Collector().LeftBlocks());
+    EXPECT_GT(passed + round + 2 * Volume().Geometry().NodeBlocksPerCheckpoint(), Volume().Collector().LeftBlocks());
+
+    passed = Volume().Collector().LeftBlocks();
+    ForwardTime(1s);
+
+    EXPECT_EQ(passed, Volume().Collector().LeftBlocks());
+
+    Idle();
+
+    EXPECT_LT(passed, Volume().Collector().LeftBlocks());
+}
+
+TEST_F(NorBackgroundCollectionTest, a_block_whose_nodes_cannot_be_checked_counts_in_the_round)
+{
+    AddDirectories(root, 40);
+    std::array<uint8_t, 512> rootNode{};
+    Builder().Read(Builder().InodeTable().address, infra::MakeRange(rootNode));
+    Builder().Corrupt(fs::NorBTree::ChildFor(infra::MakeRange(rootNode), 4) + 12);
+    Mount();
+    State().liveNodes = 0;
+    auto left = Volume().Collector().LeftBlocks();
+
+    Idle();
+
+    EXPECT_TRUE(Volume().Collector().Due());
+    EXPECT_LT(left, Volume().Collector().LeftBlocks());
+
+    left = Volume().Collector().LeftBlocks();
+    ForwardTime(1s);
+
+    EXPECT_EQ(left, Volume().Collector().LeftBlocks());
 }

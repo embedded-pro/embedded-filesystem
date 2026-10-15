@@ -43,6 +43,7 @@ namespace fs
     infra::ByteRange NorNodeEntries(infra::ByteRange node);
     infra::ConstByteRange NorNodeEntries(infra::ConstByteRange node);
     NorNodeHeader ReadNorNodeHeader(infra::ConstByteRange node);
+    bool IsNorNodeHeader(const NorNodeHeader& header);
     void WriteNorNodeHeader(const NorNodeHeader& header, infra::ByteRange node);
     void SealNorNode(const NorNodeHeader& header, infra::ByteRange node);
     std::optional<NorNodeHeader> OpenNorNode(infra::ConstByteRange node);

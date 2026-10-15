@@ -9,7 +9,7 @@ namespace fs
         : flash(parts.flash)
         , deferred(parts.deferred)
         , config(config)
-        , state(parts.blockStates, parts.eraseCounts)
+        , state(parts.blockStates, parts.eraseCounts, parts.nodeBlocks)
         , journalBuffer(parts.journalBuffer)
         , nodeStorage(parts.nodeStorage)
         , cache(parts.flash, parts.nodeSlots, parts.nodeStorage)
@@ -102,6 +102,11 @@ namespace fs
         return recordApply;
     }
 
+    NorNodeCollector& NorVolume::Collector()
+    {
+        return collector;
+    }
+
     NorCheckpointWriter& NorVolume::Checkpoints()
     {
         return checkpoints;
@@ -166,6 +171,7 @@ namespace fs
     {
         ++generation;
         mounted = true;
+        collector.Reset();
         background.Start();
     }
 
