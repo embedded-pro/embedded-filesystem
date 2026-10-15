@@ -10,6 +10,7 @@
 #include "gtest/gtest.h"
 #include <algorithm>
 #include <functional>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -425,8 +426,11 @@ public:
     uint32_t payload{ blockSize - fs::NorHeaderSize(config.programUnit) };
 
     fs::NorConfig longJournal{ WithJournalBlocks(config, 4) };
+    fs::NorConfig leveling{ WithLeveling(config) };
     uint32_t releasedTail{ 0 };
     std::vector<std::pair<uint32_t, std::optional<fs::NorAllocation>>> setUpNodeBlocks;
+    std::map<uint32_t, uint32_t> setUpDataBlocks;
+    uint32_t mostMoves{ 0 };
     std::vector<std::string> removedDirectories;
 
     static constexpr std::size_t initialLog = 100;
@@ -436,6 +440,13 @@ public:
     static fs::NorConfig WithJournalBlocks(fs::NorConfig config, uint32_t journalBlocks)
     {
         config.journalBlocks = journalBlocks;
+        return config;
+    }
+
+    static fs::NorConfig WithLeveling(fs::NorConfig config)
+    {
+        config.staticWearLevelingThreshold = 2;
+        config.staticWearLevelingInterval = 1;
         return config;
     }
 
@@ -476,7 +487,7 @@ public:
             }
     }
 
-    void WearFreeBlocks(Context& context, std::size_t keepErased, std::optional<uint32_t> spared = std::nullopt) const
+    void WearFreeBlocks(Context& context, std::size_t keepErased, std::optional<uint32_t> spared = std::nullopt, uint32_t eraseCount = 5) const
     {
         auto check = metrics::CheckImage(context, model);
         std::vector<uint8_t> partA(fs::RoundUpTo(fs::norHeaderPartABytes, config.programUnit));
@@ -492,7 +503,7 @@ public:
             for (auto sector = block * config.sectorsPerBlock; sector != (block + 1) * config.sectorsPerBlock; ++sector)
                 metrics::EraseSector(context, sector);
 
-            fs::SerializeNorHeaderA(5, infra::MakeRange(partA));
+            fs::SerializeNorHeaderA(eraseCount, infra::MakeRange(partA));
             metrics::Program(context, block * blockSize, partA);
             fs::SerializeNorHeaderB(fs::NorAllocation{ fs::NorBlockType::data, 1000 + block, { 99, 0 } }, infra::MakeRange(partB));
             metrics::Program(context, block * blockSize + fs::NorHeaderPartBOffset(config.programUnit), partB);
@@ -1345,6 +1356,129 @@ public:
         volume.Unmount();
     }
 
+    std::size_t LeveledSize() const
+    {
+        return 2 * std::size_t{ payload } + 100;
+    }
+
+    void SetUpLeveling(Context& context, bool withFile)
+    {
+        ASSERT_EQ(fs::Result::success, metrics::Format(context, leveling));
+        if (withFile)
+        {
+            metrics::NorSweepVolume volume{ context, leveling };
+            ASSERT_EQ(fs::Result::success, volume.Mount());
+            ASSERT_EQ(fs::Result::success, volume.MakeDirectory("/a"));
+            ASSERT_EQ(fs::Result::success, volume.MakeDirectory("/a/b"));
+            ASSERT_EQ(fs::Result::success, volume.OpenFile("/f", fs::OpenMode::write));
+            ASSERT_EQ(fs::Result::success, volume.Write(FileBytes(0, LeveledSize())));
+            ASSERT_EQ(fs::Result::success, volume.Close());
+            ASSERT_EQ(fs::Result::success, volume.Unmount());
+        }
+
+        WearFreeBlocks(context, 0, std::nullopt, 9);
+
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        ASSERT_EQ(std::nullopt, check.problem);
+        const auto* file = check.Find("/f");
+        ASSERT_EQ(withFile, file != nullptr);
+        setUpDataBlocks = withFile ? file->blocks : std::map<uint32_t, uint32_t>{};
+
+        setUpNodeBlocks.clear();
+        for (uint32_t block = 2; block != check.blocks.size(); ++block)
+            if (check.blocks[block] == metrics::NorBlockUse::node)
+                setUpNodeBlocks.emplace_back(block, AllocationOf(image, block));
+        ASSERT_FALSE(setUpNodeBlocks.empty());
+    }
+
+    void LevelInBackground(Context& context)
+    {
+        metrics::NorSweepVolume volume{ context, leveling };
+        if (volume.Mount() != fs::Result::success)
+            return;
+
+        volume.Settle();
+        mostMoves = std::max(mostMoves, volume.Counters().movedBlocks);
+        if (volume.MakeDirectory("/m") != fs::Result::success)
+            return;
+
+        volume.Unmount();
+    }
+
+    std::optional<std::string> VerifyLeveled(Context& context, bool uncut) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        auto withFile = !setUpDataBlocks.empty();
+        if (withFile && check.Find("/a/b") == nullptr)
+            return "/a/b is lost";
+
+        const auto* file = check.Find("/f");
+        if (withFile && (file == nullptr || metrics::ReadContents(image, check, *file) != FileBytes(0, LeveledSize())))
+            return "/f does not hold its contents";
+
+        if (uncut && check.Find("/m") == nullptr)
+            return "the run without a cut did not make /m";
+
+        auto dataMoved = [&file](const auto& setUp)
+        {
+            auto found = file->blocks.find(setUp.first);
+            return found == file->blocks.end() || found->second != setUp.second;
+        };
+        if (uncut && !std::ranges::all_of(setUpDataBlocks, dataMoved))
+            return "the run without a cut did not move every data block of /f";
+
+        auto nodesLeft = [&](const auto& setUp)
+        {
+            return check.blocks[setUp.first] != metrics::NorBlockUse::node || AllocationOf(image, setUp.first) != setUp.second;
+        };
+        if (uncut && !std::ranges::all_of(setUpNodeBlocks, nodesLeft))
+            return "the run without a cut left a node block of the set-up in use";
+
+        {
+            metrics::NorSweepVolume volume{ context, leveling };
+            if (volume.Mount() != fs::Result::success)
+                return "the volume does not mount";
+
+            if (withFile && (volume.ReadFile("/f") != FileBytes(0, LeveledSize()) || volume.TypeOf("/a/b") != fs::EntryType::directory))
+                return "the library and the checker disagree on the set-up";
+
+            if (volume.TypeOf("/m").has_value() != (check.Find("/m") != nullptr))
+                return "the library and the checker disagree on /m";
+
+            if (volume.MakeDirectory("/z") != fs::Result::success || volume.Unmount() != fs::Result::success)
+                return "a change after the mount fails";
+        }
+
+        auto after = metrics::CheckImage(context, model);
+        if (after.problem.has_value())
+            return "after a change after the mount: " + *after.problem;
+
+        return std::nullopt;
+    }
+
+    void SweepLeveling(const std::string& caseName, bool withFile)
+    {
+        mostMoves = 0;
+        SweepEveryMode(
+            model, caseName, metrics::SweepRamBytes(model), [this, withFile](Context& context)
+            {
+                SetUpLeveling(context, withFile);
+            },
+            [this](Context& context)
+            {
+                LevelInBackground(context);
+            },
+            [this](Context& context, bool uncut)
+            {
+                return VerifyLeveled(context, uncut);
+            });
+    }
+
     std::optional<std::string> VerifyCollected(Context& context, bool uncut) const
     {
         auto image = metrics::ReadImage(context);
@@ -1623,6 +1757,20 @@ TEST_P(NorAppendPowerCut, the_collection_of_node_blocks_moves_the_used_nodes_and
         {
             return VerifyCollected(context, uncut);
         });
+}
+
+TEST_P(NorAppendPowerCut, static_wear_leveling_moves_data_blocks_and_a_cut_leaves_consistent)
+{
+    SweepLeveling("leveling-data", true);
+
+    EXPECT_LE(setUpDataBlocks.size(), mostMoves);
+}
+
+TEST_P(NorAppendPowerCut, static_wear_leveling_moves_node_blocks_and_a_cut_leaves_consistent)
+{
+    SweepLeveling("leveling-nodes", false);
+
+    EXPECT_LE(setUpNodeBlocks.size(), mostMoves);
 }
 
 INSTANTIATE_TEST_SUITE_P(Nor, NorAppendPowerCut, testing::Values(&metrics::norSweep128k, &metrics::internalSweep96k, &metrics::norSweep128kTwoSectors), ParameterName);

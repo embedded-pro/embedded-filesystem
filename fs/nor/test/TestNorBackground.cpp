@@ -1,6 +1,7 @@
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/OperationQueue.hpp"
 #include "fs/nor/NorVolume.hpp"
+#include "fs/nor/test/NorFilesFixture.hpp"
 #include "fs/nor/test/NorRecordsFixture.hpp"
 #include "hal/interfaces/test_doubles/FlashMock.hpp"
 #include "infra/timer/Timer.hpp"
@@ -393,4 +394,150 @@ TEST_F(NorBackgroundCollectionTest, a_block_whose_nodes_cannot_be_checked_counts
     ForwardTime(1s);
 
     EXPECT_EQ(left, Volume().Collector().LeftBlocks());
+}
+
+namespace
+{
+    constexpr fs::NorConfig levelingConfig{ .maxBlocks = 48, .cachedNodes = 15, .staticWearLevelingThreshold = 4, .staticWearLevelingInterval = 2 };
+
+    class NorBackgroundMoveTest
+        : public fs::NorFilesFixture<levelingConfig, 48, 4096>
+    {
+    public:
+        NorBackgroundMoveTest()
+        {
+            file = Builder().AddFile(root, "f", infra::MakeRange(contents));
+            Builder().Commit();
+            Mount();
+            Idle();
+            for (uint32_t block = 2; block != 48; ++block)
+                State().eraseCounts.Record(block, 10);
+            State().eraseCounts.Record(BlockInVolume(file, 0), 1);
+            State().eraseCounts.Record(MostWornCandidate(), 30);
+        }
+
+        void Idle()
+        {
+            fs::OperationQueue::Claimer claimer{ Volume().Queue() };
+            claimer.Claim([] {});
+            ExecuteAllActions();
+            claimer.Release();
+            ForwardTime(10ms);
+        }
+
+        uint32_t MostWornCandidate()
+        {
+            for (uint32_t block = 47; block != 2; --block)
+                if (State().blocks.State(block) == fs::NorBlockState::freeErased)
+                    return block;
+
+            return 0;
+        }
+
+        infra::SharedPtr<fs::File> OpenNewFile()
+        {
+            return Open("/g", fs::OpenMode::write);
+        }
+
+        std::array<uint8_t, 100> contents{ fs::Pattern<100>() };
+        std::array<uint8_t, 4200> written{ fs::Pattern<4200>(3) };
+        uint32_t file{ 0 };
+    };
+}
+
+TEST_F(NorBackgroundMoveTest, moves_a_block_when_a_move_is_due)
+{
+    auto target = MostWornCandidate();
+    Volume().Counters().erasedSectors = 2;
+
+    Idle();
+
+    EXPECT_EQ(1, Volume().Counters().movedBlocks);
+    EXPECT_EQ(target, BlockInVolume(file, 0));
+}
+
+TEST_F(NorBackgroundMoveTest, makes_no_move_before_the_interval_of_erases)
+{
+    Volume().Counters().erasedSectors = 1;
+
+    Idle();
+
+    EXPECT_EQ(0, Volume().Counters().movedBlocks);
+}
+
+TEST_F(NorBackgroundMoveTest, the_fallback_moves_a_block_right_after_the_call_whose_allocation_reached_twice_the_interval)
+{
+    auto target = MostWornCandidate();
+    auto created = OpenNewFile();
+    Volume().Counters().erasedSectors = 4;
+
+    ASSERT_EQ(fs::Result::success, Write(*created, infra::MakeRange(written)));
+
+    EXPECT_EQ(1, Volume().Counters().movedBlocks);
+    EXPECT_EQ(target, BlockInVolume(file, 0));
+    Close(*created);
+}
+
+TEST_F(NorBackgroundMoveTest, the_fallback_moves_a_block_before_a_call_that_waits)
+{
+    auto created = OpenNewFile();
+    Volume().Counters().erasedSectors = 4;
+    std::optional<uint32_t> movedBeforeStat;
+
+    created->Write(infra::MakeRange(written), [this, &movedBeforeStat](fs::Result)
+        {
+            fileSystem.Stat("/f", [this, &movedBeforeStat](fs::Result, const fs::EntryInfo&)
+                {
+                    movedBeforeStat = Volume().Counters().movedBlocks;
+                });
+        });
+    ExecuteAllActions();
+
+    EXPECT_EQ(1, movedBeforeStat);
+    Close(*created);
+}
+
+TEST_F(NorBackgroundMoveTest, no_fallback_before_twice_the_interval_of_erases)
+{
+    auto created = OpenNewFile();
+    Volume().Counters().erasedSectors = 3;
+
+    ASSERT_EQ(fs::Result::success, Write(*created, infra::MakeRange(written)));
+
+    EXPECT_EQ(0, Volume().Counters().movedBlocks);
+    Close(*created);
+}
+
+TEST_F(NorBackgroundMoveTest, the_fallback_moves_a_block_before_a_call_that_waited_for_the_call_that_armed_it)
+{
+    auto created = OpenNewFile();
+    Volume().Counters().erasedSectors = 4;
+    std::optional<uint32_t> movedBeforeStat;
+
+    created->Write(infra::MakeRange(written), [](fs::Result) {});
+    fileSystem.Stat("/f", [this, &movedBeforeStat](fs::Result, const fs::EntryInfo&)
+        {
+            movedBeforeStat = Volume().Counters().movedBlocks;
+        });
+    ExecuteAllActions();
+
+    EXPECT_EQ(1, movedBeforeStat);
+    Close(*created);
+}
+
+TEST_F(NorBackgroundMoveTest, an_unmount_whose_checkpoint_arms_the_fallback_stops_the_background)
+{
+    Volume().Counters().erasedSectors = 0;
+    auto created = OpenNewFile();
+    std::array<uint8_t, 1> byte{ 1 };
+    while (!Volume().Journal().IsMoreThanHalfFull())
+    {
+        ASSERT_EQ(fs::Result::success, Write(*created, infra::MakeRange(byte)));
+        ASSERT_EQ(fs::Result::success, Sync(*created));
+    }
+    Volume().Counters().erasedSectors = 4;
+
+    Unmount();
+
+    EXPECT_EQ(0, Volume().Counters().movedBlocks);
 }

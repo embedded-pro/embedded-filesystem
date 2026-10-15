@@ -46,6 +46,11 @@ namespace metrics
         return metered;
     }
 
+    std::optional<double> NorMeasurement::LevelingOverhead() const
+    {
+        return subject->LevelingOverhead();
+    }
+
     WorkloadParameters NorMeasurement::Parameters(uint8_t fillPercent) const
     {
         return WorkloadParameters{ .scaleDivisor = scaleDivisor, .fillPercent = fillPercent };

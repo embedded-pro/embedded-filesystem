@@ -53,4 +53,5 @@ target_sources(fs.nor_test PRIVATE
     TestNorRename.cpp
     TestNorSuperblock.cpp
     TestNorTruncate.cpp
+    TestNorWearLeveler.cpp
 )

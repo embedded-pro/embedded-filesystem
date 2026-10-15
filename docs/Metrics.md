@@ -207,13 +207,13 @@ For SD cards and eMMC, wear leveling is done by the card, and the device metrics
 | WL-1 | Erase spread        | Highest erase count divided by the mean erase count                                                                            | L4, L5    | At most 1.2 on the L5 lifetime run   |
 | WL-2 | Leveling efficiency | Mean erase count divided by the highest erase count                                                                            | L4, L5    | At least 0.8 on the L5 lifetime run  |
 | WL-3 | Lifetime            | User bytes written until the first block reaches its endurance, on `nor-qspi-1m` with the endurance scaled down to 1000 erases | L5        | Reported, with its ratio to littlefs |
-| WL-4 | Leveling overhead   | Erases caused by static wear leveling divided by all erases                                                                    | L5        | At most 5 % on the L5 lifetime run   |
+| WL-4 | Leveling overhead   | Blocks moved by static wear leveling divided by the blocks erased, each move costing the erase of the block it frees           | L5        | At most 5 % on the L5 lifetime run   |
 
 The short run of L5 on `nor-qspi-16m` stops at a mean of 4 erases per sector.
 That is too short to level 70 % of static data cheaply: keeping the highest count within 1.2 times the mean after 4 erases per block takes about three moves per static block, about half of all erases.
 On a long run, a static block moves once every `staticWearLevelingThreshold` erases of the others, so the moves cost about 0.7 divided by the threshold of all erases, and the spread stays within the threshold.
 So every NOR subject also records WL-1 and WL-2 on the lifetime run of L5 on `nor-qspi-1m`, which reaches a mean of several hundred erases, and the targets apply there; on L4 and on the short run of L5 they are reported.
-WL-4 counts the moves of static wear leveling from the counters of the volume, and is recorded only for `embedded-filesystem/nor`.
+WL-4 counts the moves of static wear leveling and the erased blocks from the counters of the volume, and is recorded only for `embedded-filesystem/nor`; on the short run of L5 it is reported.
 WL-3 is reported, and `merge_report.py` adds its ratio to the best littlefs subject to the summary.
 
 ## Device metrics for SD cards and eMMC

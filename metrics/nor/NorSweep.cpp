@@ -213,6 +213,11 @@ namespace metrics
         return fileSystem.JournalMoreThanHalfFull();
     }
 
+    fs::NorCounters NorSweepVolume::Counters() const
+    {
+        return fileSystem.Counters();
+    }
+
     std::optional<fs::EntryType> NorSweepVolume::TypeOf(const std::string& path)
     {
         std::optional<fs::Result> result;

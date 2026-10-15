@@ -76,6 +76,16 @@ TEST_F(NorCheckpointWriterTest, writes_the_modified_nodes_into_a_new_node_block_
     EXPECT_EQ((fs::NorAllocation{ fs::NorBlockType::checkpoint, 5, {} }), HeaderOf(6).allocation);
 }
 
+TEST_F(NorCheckpointWriterTest, counts_the_checkpoints_it_completes)
+{
+    WriteCheckpoint();
+    WriteCheckpoint();
+    UseEveryFreeBlock();
+    WriteCheckpoint();
+
+    EXPECT_EQ(2, Volume().Counters().checkpoints);
+}
+
 TEST_F(NorCheckpointWriterTest, frees_the_previous_checkpoint_block_and_the_blocks_of_its_epoch)
 {
     ASSERT_EQ(fs::Result::success, MakeDirectory("/a"));

@@ -81,6 +81,7 @@ A queue must outlive the claims on it, so its claimers are declared after it; a 
 Background work, such as erasing obsolete NOR blocks or scanning the FAT for free clusters, runs only when the queue is empty and after a configurable idle delay.
 The idle delay starts when a foreground operation releases the queue and no other operation is waiting, so a volume without work never wakes the processor.
 Background work claims the queue like an operation, and checks before every device request whether a foreground operation is waiting; if one is, it releases the queue and continues after the next idle delay.
+The queue notifies the volume of each release of a foreground operation, which the fallback of static wear leveling on NOR volumes uses to claim the queue ahead of waiting operations, as described in [NorFilesystem.md](NorFilesystem.md#static-wear-leveling).
 A foreground operation that arrives while background work is running therefore waits for at most one device request, for instance one sector erase, or on a NOR volume for one checkpoint or one block move, which run as one unit; W-6 in [Metrics.md](Metrics.md) measures this.
 
 ### Lifecycle state machines

@@ -20,7 +20,9 @@ namespace fs
     void NorCheckpointWriter::Write(const infra::Function<void(Result result)>& onWritten)
     {
         onDone = onWritten;
-        collect = volume.Collector().Due();
+        collectionDue = volume.Collector().Due();
+        collect = collectionDue || volume.Collector().Moving();
+        wear = volume.Collector().Moving() ? NorWear::most : NorWear::least;
         WriteNextNode();
     }
 
@@ -31,7 +33,7 @@ namespace fs
         auto next = WriteBack().Next();
 
         if (!next.has_value() && std::exchange(collect, false))
-            volume.Collector().Collect([this]
+            volume.Collector().Collect(collectionDue, [this]
                 {
                     WriteNextNode();
                 });
@@ -46,7 +48,7 @@ namespace fs
             if (state.nodeBlock.has_value() && state.nodeOffset + geometry.nodeSize <= geometry.BlockSize())
                 ProgramNode();
             else
-                volume.Allocator().Allocate(NorBlockType::node, {}, NorReserve::used, [this](std::optional<uint32_t> allocated)
+                volume.Allocator().Allocate(NorBlockType::node, {}, NorReserve::used, wear, [this](std::optional<uint32_t> allocated)
                     {
                         NodeBlockAllocated(allocated);
                     });
@@ -140,6 +142,7 @@ namespace fs
             state.blocks.Set(epochBlock, NorBlockState::freeNotErased);
 
         volume.Collector().Committed();
+        ++volume.Counters().checkpoints;
         state.liveNodes = checkpoint.liveNodes;
         volume.Cache().ClearReleasedNodes();
         state.checkpoint = checkpoint;

@@ -35,6 +35,7 @@ namespace fs
 
         volume.Flash().EraseSectors(sector, sector + 1, [this]
             {
+                ++volume.Counters().erasedSectors;
                 ++sector;
                 if (sector == volume.Geometry().FirstSectorOfBlock(block.value_or(0) + 1))
                     ProgramPartA();

@@ -13,9 +13,14 @@ namespace fs
         , journalBuffer(parts.journalBuffer)
         , nodeStorage(parts.nodeStorage)
         , cache(parts.flash, parts.nodeSlots, parts.nodeStorage)
-        , queue(idleDelay, [this]
+        , queue(
+              idleDelay, [this]
               {
                   background.Idle();
+              },
+              [this]
+              {
+                  background.CallReleased();
               })
     {}
 
@@ -34,6 +39,16 @@ namespace fs
     NorVolumeState& NorVolume::State()
     {
         return state;
+    }
+
+    NorCounters& NorVolume::Counters()
+    {
+        return counters;
+    }
+
+    const NorCounters& NorVolume::Counters() const
+    {
+        return counters;
     }
 
     infra::ByteRange NorVolume::JournalBuffer() const
@@ -107,6 +122,16 @@ namespace fs
         return collector;
     }
 
+    NorWearLeveler& NorVolume::Leveler()
+    {
+        return leveler;
+    }
+
+    NorBackground& NorVolume::Background()
+    {
+        return background;
+    }
+
     NorCheckpointWriter& NorVolume::Checkpoints()
     {
         return checkpoints;
@@ -171,7 +196,9 @@ namespace fs
     {
         ++generation;
         mounted = true;
+        counters = NorCounters{};
         collector.Reset();
+        leveler.Reset();
         background.Start();
     }
 

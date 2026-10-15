@@ -18,8 +18,14 @@ namespace fs
 
     void NorBlockAllocator::Allocate(NorBlockType allocationType, const NorBlockOwner& allocationOwner, NorReserve reserve, const infra::Function<void(std::optional<uint32_t> block)>& onAllocated)
     {
+        Allocate(allocationType, allocationOwner, reserve, NorWear::least, onAllocated);
+    }
+
+    void NorBlockAllocator::Allocate(NorBlockType allocationType, const NorBlockOwner& allocationOwner, NorReserve reserve, NorWear allocationWear, const infra::Function<void(std::optional<uint32_t> block)>& onAllocated)
+    {
         type = allocationType;
         owner = allocationOwner;
+        wear = allocationWear;
         onDone = onAllocated;
 
         const auto& blocks = volume.State().blocks;
@@ -29,21 +35,21 @@ namespace fs
             TakeErased();
     }
 
-    std::optional<uint32_t> NorBlockAllocator::LeastWornErased() const
+    std::optional<uint32_t> NorBlockAllocator::ErasedOfWear() const
     {
         const auto& state = volume.State();
-        std::optional<uint32_t> leastWorn;
+        std::optional<uint32_t> chosen;
 
         for (uint32_t candidate = superblocks; candidate != volume.Geometry().blocks; ++candidate)
-            if (state.blocks.State(candidate) == NorBlockState::freeErased && (!leastWorn.has_value() || state.eraseCounts.Count(candidate) < state.eraseCounts.Count(*leastWorn)))
-                leastWorn = candidate;
+            if (state.blocks.State(candidate) == NorBlockState::freeErased && (!chosen.has_value() || (wear == NorWear::least ? state.eraseCounts.Count(candidate) < state.eraseCounts.Count(*chosen) : state.eraseCounts.Count(candidate) > state.eraseCounts.Count(*chosen))))
+                chosen = candidate;
 
-        return leastWorn;
+        return chosen;
     }
 
     void NorBlockAllocator::TakeErased()
     {
-        auto erased = LeastWornErased();
+        auto erased = ErasedOfWear();
         auto& eraser = volume.Eraser();
         if (erased.has_value())
         {
@@ -71,6 +77,8 @@ namespace fs
         volume.Flash().WriteBuffer(partB, geometry.AddressOfBlock(block) + geometry.HeaderPartBOffset(), [this]
             {
                 volume.State().blocks.Set(block, NorBlockState::pending);
+                ++volume.Counters().allocatedBlocks;
+                volume.Background().Urge();
                 volume.Eraser().Refill([this]
                     {
                         onDone(block);

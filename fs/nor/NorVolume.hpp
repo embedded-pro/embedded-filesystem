@@ -11,6 +11,7 @@
 #include "fs/nor/NorBlockEraser.hpp"
 #include "fs/nor/NorCheckpointWriter.hpp"
 #include "fs/nor/NorConfig.hpp"
+#include "fs/nor/NorCounters.hpp"
 #include "fs/nor/NorDirectoryRead.hpp"
 #include "fs/nor/NorEntrySeek.hpp"
 #include "fs/nor/NorFileCommit.hpp"
@@ -37,6 +38,7 @@
 #include "fs/nor/NorStat.hpp"
 #include "fs/nor/NorUnmount.hpp"
 #include "fs/nor/NorVolumeState.hpp"
+#include "fs/nor/NorWearLeveler.hpp"
 #include "fs/nor/NorWrite.hpp"
 #include "hal/interfaces/Flash.hpp"
 #include "infra/timer/Timer.hpp"
@@ -76,6 +78,8 @@ namespace fs
         hal::Flash& Flash() const;
         const NorConfig& Config() const;
         NorVolumeState& State();
+        NorCounters& Counters();
+        const NorCounters& Counters() const;
         infra::ByteRange JournalBuffer() const;
         infra::ByteRange NodeStorage() const;
         PathLimits Limits() const;
@@ -90,6 +94,8 @@ namespace fs
         NorBlockAllocator& Allocator();
         NorRecordApply& RecordApply();
         NorNodeCollector& Collector();
+        NorWearLeveler& Leveler();
+        NorBackground& Background();
         NorCheckpointWriter& Checkpoints();
         NorJournalWriter& Journal();
         NorFileFlush& FileFlush();
@@ -114,6 +120,7 @@ namespace fs
         DeferredCompletions& deferred;
         NorConfig config;
         NorVolumeState state;
+        NorCounters counters;
         infra::ByteRange journalBuffer;
         infra::ByteRange nodeStorage;
         NorNodeCache cache;
@@ -127,6 +134,7 @@ namespace fs
         NorBlockAllocator allocator{ *this };
         NorRecordApply recordApply{ *this };
         NorNodeCollector collector{ *this };
+        NorWearLeveler leveler{ *this };
         NorCheckpointWriter checkpoints{ *this };
         NorJournalWriter journal{ *this };
         NorFileFlush fileFlush{ *this };

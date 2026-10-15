@@ -241,3 +241,57 @@ TEST_F(OperationQueueTest, counts_the_releases_of_granted_foreground_claims)
 
     EXPECT_EQ(1, queue.ForegroundReleases());
 }
+
+TEST_F(OperationQueueTest, notifies_each_release_of_a_granted_foreground_claim)
+{
+    testing::StrictMock<infra::MockCallback<void()>> released;
+    fs::OperationQueue notifying{ 100ms, [] {}, [&released]
+        {
+            released.callback();
+        } };
+    fs::OperationQueue::Claimer foreground{ notifying };
+    fs::OperationQueue::BackgroundClaimer inBackground{ notifying };
+    foreground.Claim([] {});
+    ExecuteAllActions();
+
+    EXPECT_CALL(released, callback());
+    foreground.Release();
+    testing::Mock::VerifyAndClearExpectations(&released);
+
+    foreground.Release();
+    inBackground.Claim([] {});
+    ExecuteAllActions();
+    inBackground.Release();
+}
+
+TEST_F(OperationQueueTest, an_urgent_background_claim_is_granted_ahead_of_waiting_claims)
+{
+    ClaimAndGrantFirst();
+    Grant(second, 2);
+    background.ClaimUrgent([this]
+        {
+            granted.callback(0);
+        });
+
+    first.Release();
+
+    testing::InSequence sequence;
+    EXPECT_CALL(granted, callback(0)).WillOnce([this]
+        {
+            background.Release();
+        });
+    EXPECT_CALL(granted, callback(2));
+    ExecuteAllActions();
+}
+
+TEST_F(OperationQueueTest, releasing_a_queued_background_claim_withdraws_it)
+{
+    ClaimAndGrantFirst();
+    GrantBackground();
+
+    background.Release();
+    first.Release();
+
+    EXPECT_CALL(idle, callback());
+    ForwardTime(1s);
+}

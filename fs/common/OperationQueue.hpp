@@ -14,7 +14,7 @@ namespace fs
         class Claimer;
         class BackgroundClaimer;
 
-        OperationQueue(infra::Duration idleDelay, const infra::Function<void()>& onIdle);
+        OperationQueue(infra::Duration idleDelay, const infra::Function<void()>& onIdle, const infra::Function<void()>& onReleased = nullptr);
         OperationQueue(const OperationQueue& other) = delete;
         OperationQueue& operator=(const OperationQueue& other) = delete;
         ~OperationQueue() = default;
@@ -29,6 +29,7 @@ namespace fs
         infra::ClaimableResource resource;
         infra::Duration idleDelay;
         infra::Function<void()> onIdle;
+        infra::Function<void()> onReleased;
         infra::TimerSingleShot idleTimer;
         uint32_t foregroundReleases{ 0 };
     };
@@ -60,6 +61,7 @@ namespace fs
         ~BackgroundClaimer() = default;
 
         void Claim(const infra::Function<void()>& onGranted);
+        void ClaimUrgent(const infra::Function<void()>& onGranted);
         void Release();
         bool IsClaimed() const;
         bool ShouldYield() const;

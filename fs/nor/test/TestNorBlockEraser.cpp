@@ -77,6 +77,15 @@ namespace
     };
 }
 
+TEST_F(NorBlockEraserTest, counts_the_sectors_it_erases)
+{
+    State().blocks.Set(10, fs::NorBlockState::freeNotErased);
+
+    Step();
+
+    EXPECT_EQ(1, Volume().Counters().erasedSectors);
+}
+
 TEST_F(NorBlockEraserTest, has_no_work_while_every_free_block_is_erased)
 {
     EXPECT_FALSE(Volume().Eraser().HasWork());

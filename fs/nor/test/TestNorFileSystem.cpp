@@ -283,6 +283,20 @@ TEST_F(NorFileSystemTest, usage_counts_the_payload_of_every_block_but_the_superb
     ExpectUsage(fs::Result::success, fs::VolumeUsage{ 3 * payload, (30 - reserve) * payload });
 }
 
+TEST_F(NorFileSystemTest, counts_the_work_of_the_volume_since_it_was_mounted)
+{
+    ExpectFormat();
+    ExpectMount();
+    EXPECT_EQ(fs::NorCounters{}, volume.Counters());
+
+    ExpectMakeDirectory("/a", fs::Result::success);
+
+    EXPECT_EQ((fs::NorCounters{ 1, 0, 0, 0 }), volume.Counters());
+    ExpectUnmount();
+    ExpectMount();
+    EXPECT_EQ(fs::NorCounters{}, volume.Counters());
+}
+
 TEST_F(NorFileSystemTest, makes_a_directory_that_a_lookup_then_finds)
 {
     ExpectFormat();
