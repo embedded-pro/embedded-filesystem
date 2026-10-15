@@ -73,7 +73,7 @@ namespace fs
 
     uint32_t NorGeometry::WatermarkBlocks() const
     {
-        return dataBlocksOfOneCall + NodeBlocksPerCheckpoint() + 3;
+        return dataBlocksOfOneCall + 2 * NodeBlocksPerCheckpoint() + 3;
     }
 
     uint32_t NorGeometry::AddressOfBlock(uint32_t block) const

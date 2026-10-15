@@ -87,5 +87,7 @@ namespace fs
         }
         else if (header.IsFreeAndErased())
             volume.blocks.Set(block, NorBlockState::freeErased);
+        else if (header.allocation.has_value() && header.allocation->type == NorBlockType::node)
+            volume.nodeBlocks.Add(block);
     }
 }

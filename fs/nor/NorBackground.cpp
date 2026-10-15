@@ -39,8 +39,20 @@ namespace fs
     bool NorBackground::CheckpointDue() const
     {
         const auto& cache = volume.Cache();
-        auto due = volume.Journal().IsMoreThanHalfFull() || 2 * cache.ModifiedNodes() > cache.Capacity();
-        return due && volume.State().blocks.Count(NorBlockState::freeErased) > volume.Geometry().NodeBlocksPerCheckpoint();
+        auto collection = volume.Collector().Due();
+        auto due = volume.Journal().IsMoreThanHalfFull() || 2 * cache.ModifiedNodes() > cache.Capacity() || (collection && RoundLeft());
+        auto nodeBlocks = (collection ? 2 : 1) * volume.Geometry().NodeBlocksPerCheckpoint();
+        return due && volume.State().blocks.Count(NorBlockState::freeErased) > nodeBlocks;
+    }
+
+    bool NorBackground::RoundLeft() const
+    {
+        return CalledSinceRound() || volume.Collector().LeftBlocks() - roundStart < roundBlocks;
+    }
+
+    bool NorBackground::CalledSinceRound() const
+    {
+        return !roundReleases.has_value() || roundReleases.value_or(0) != volume.Queue().ForegroundReleases();
     }
 
     bool NorBackground::ShouldStop() const
@@ -65,12 +77,26 @@ namespace fs
                     return NorBackgroundUnitDone{};
                 }));
         else
+        {
+            StartRound();
             volume.Checkpoints().Write(machine.CompletionWith<void(Result result)>([](Result result)
                 {
                     // The pool holds every block that the checkpoint may take
                     really_assert(result == Result::success);
                     return NorBackgroundUnitDone{};
                 }));
+        }
+    }
+
+    void NorBackground::StartRound()
+    {
+        const auto& collector = volume.Collector();
+        if (collector.Due() && CalledSinceRound())
+        {
+            roundReleases = volume.Queue().ForegroundReleases();
+            roundStart = collector.LeftBlocks();
+            roundBlocks = collector.CollectableBlocks();
+        }
     }
 
     void NorBackground::Release()

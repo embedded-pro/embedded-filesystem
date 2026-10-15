@@ -189,7 +189,7 @@ namespace fs
         }
 
         auto splits = insert.value_or(0) - entries.NodesModifiedByChange(toParentMap, toKey);
-        if (cache.ModifiedNodes() + cache.UnmodifiedPinnedNodes() + splits > cache.Capacity())
+        if (cache.ModifiedNodes() + cache.UnmodifiedPinnedNodes() + splits > cache.Capacity() || volume.Journal().NeedsCheckpointFor(RecordBytes()))
             CheckpointAndRestart();
         else
             Commit();
@@ -208,7 +208,7 @@ namespace fs
 
     void NorRename::Commit()
     {
-        volume.Journal().Commit(norDirectoryEntryRemoveBytes + norDirectoryEntryPutBytes + norInodePutFixedBytes + NorInodeRecordBytes(volume.Config()), [this](CrcRecord& record)
+        volume.Journal().Commit(RecordBytes(), [this](CrcRecord& record)
             {
                 AddEntries(record);
             },
@@ -220,7 +220,7 @@ namespace fs
 
     void NorRename::AddEntries(CrcRecord& record) const
     {
-        // The path of the record stays pinned, and a checkpoint before the record keeps pinned nodes cached
+        // The path of the record stays pinned, and CheckRoom writes the checkpoint that a full journal needs before the record
         auto bytes = NorBTree(volume.Cache(), InodeTable()).Find(volume.State().inodeTable, inode);
         really_assert(bytes.has_value());
         auto renamed = ParseNorInodeRecord(*bytes, volume.Config());
@@ -251,6 +251,11 @@ namespace fs
         volume.Cache().UnpinAll();
         onFinished(result);
         call.onDone(result);
+    }
+
+    std::size_t NorRename::RecordBytes() const
+    {
+        return norDirectoryEntryRemoveBytes + norDirectoryEntryPutBytes + norInodePutFixedBytes + NorInodeRecordBytes(volume.Config());
     }
 
     NorMapId NorRename::InodeTable() const

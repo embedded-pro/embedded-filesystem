@@ -217,6 +217,7 @@ An entry whose inode has no record, or whose record names another parent, comple
 Creating an entry takes the lowest index that its hash does not use; when all 256 are used, it completes with `noSpace`.
 `Rename` looks up both names before it changes anything, and writes one record that puts the new entry under the lowest free index of its hash, removes the old one, and puts the inode record with its new parent and name; the inode keeps its number, its map and its inline area.
 The new entry comes first, so that it goes into the map that the room check measured: removing the old entry first may drop a node and route the new entry into a node that is neither cached nor counted.
+The record copies the inode record from the cache, so when the journal is full, `Rename` writes the checkpoint before it looks up the names, and the collection step of that checkpoint cannot evict the record it copies.
 Paths are canonical, so a directory moves into its own subtree exactly when the new path starts with the old one followed by `/`.
 `Next` returns the entries of a directory in the order of their keys, and continues after the key it returned last, so entries that are added or removed meanwhile do not disturb it.
 
@@ -295,9 +296,9 @@ A file is at most 4 GiB minus one byte; a write beyond writes up to that size an
 A checkpoint makes the journal obsolete.
 It is written between operations, so it holds only committed state, and as one unit that no foreground operation interrupts:
 
-1. A collection step for the garbage collection of node blocks, described below.
-2. Every modified node is written to node blocks, leaves before inner nodes and every other map before the inode table.
+1. Every modified node is written to node blocks, leaves before inner nodes and every other map before the inode table.
    The address of a written node replaces its address in the cache in its parent, which is written later; the address of the root of a data map or a directory map goes into the record of its inode in the inode table, and the address of the root of the inode table into the checkpoint.
+2. When a collection is due, a collection step for the garbage collection of node blocks, described below, and the nodes it modified are written as in step 1.
 3. A new checkpoint block is allocated and programmed with the checkpoint, in pieces of the size of the journal buffer, the last of which holds the CRC.
    The bitmap marks every block that is in use in RAM, except the previous checkpoint block and the blocks of its epoch.
 
@@ -315,12 +316,12 @@ It is written between operations, so it holds only committed state, and as one u
 | 28 + blocks / 8 | 4          | CRC of the checkpoint                           |
 
 Until the CRC is complete, the previous checkpoint and its journal remain the valid state.
-After it, the previous checkpoint block, the journal blocks of the previous epoch and the node blocks that the collection step emptied become free, and the previous copies of the written nodes are no longer used.
+After it, the previous checkpoint block, the journal blocks of the previous epoch and the node blocks that the collection step passed become free, and the previous copies of the written nodes are no longer used.
 The records of the new epoch start right after the checkpoint, in the checkpoint block itself, so a checkpoint allocates no separate journal block.
 A checkpoint of a device with 4096 blocks takes 544 bytes, and a checkpoint always fits in one block: `Format` and `Mount` complete with `unsupported` when the bitmap would not.
 
 A checkpoint continues to fill the last node block of the previous checkpoint of the same mount; after a mount, the first checkpoint starts a new node block.
-The work of a checkpoint is bounded by the size of the node cache and of one collection step, and does not depend on the size of the files.
+The work of a checkpoint is bounded by twice the size of the node cache and by one collection step, and does not depend on the size of the files.
 A checkpoint is written when the journal is full, when the next operation would modify more nodes than the cache can hold, when an operation leaves fewer than 3 nodes of the cache unmodified, at `Unmount` as described below, and in the background.
 
 ## Allocation and the pre-erased pool
@@ -334,12 +335,12 @@ Erasing a block erases one sector per request, then programs part A with the era
 The background and the calls share one block in erasure: a call that finds the pool empty finishes the block that the background started before it takes another one, and a mount forgets it, because the block is no longer erased in part.
 The background erases every free block that is not erased, lowest erase count first, so when the volume has been idle long enough, every free block is in the pre-erased pool.
 
-The pre-erased pool also has a watermark: the blocks one call may take, which is two data blocks, the node blocks and the checkpoint block of one checkpoint, one journal block and the destination of one block move.
+The pre-erased pool also has a watermark: the blocks one call may take, which is two data blocks, the node blocks and the checkpoint block of one checkpoint with its collection step, one journal block and the destination of one block move, 11 blocks on SPI NOR with the defaults.
 A foreground call that finds the pool below the watermark erases one sector of a free block before it completes, unless it waited for an erase of the background.
 The refill follows the allocation that leaves the pool below the watermark, and a call refills at most once: the volume counts the calls by the releases of the operation queue, and a call that erased the block it needed, or that waited for a sector erase of the background, has had its refill.
 When the pool is empty and a call needs a block, the call erases one itself.
 
-A reserve of free blocks is kept for the checkpoints and the garbage collection: twice the node blocks of one checkpoint, plus one checkpoint block and one journal block, 8 blocks on SPI NOR with the defaults.
+A reserve of free blocks is kept for the checkpoints and the garbage collection: the node blocks of one checkpoint with its collection step, which writes at most twice the node cache, plus one checkpoint block and one journal block, 8 blocks on SPI NOR with the defaults.
 A write that would allocate a data block into the reserve completes with `noSpace`, also for the copy of a last block or a commit that the write makes on its way; `Sync`, `Close`, `Truncate` and `Remove` may use the reserve, because they write only records and checkpoints, and the last two free space.
 Records and checkpoints may always use it, and so do the commit of `Open` in `write` mode of an existing file and the commits of `Unmount`.
 `Usage` reports as total the payload of every block except the superblocks and the reserve, and as used the total minus the payload of the free blocks beyond the reserve.
@@ -351,14 +352,21 @@ Checkpoint and journal blocks become free as a whole at the next checkpoint.
 
 Node blocks hold several nodes, and a node block may keep some nodes in use while others are replaced.
 The volume does not track which nodes of a block are in use; it counts the live nodes, and the checkpoint stores the count.
-When the node blocks could hold more than twice the live nodes, every checkpoint starts with a collection step:
+One bit per block in RAM marks the node blocks: the mount sets it for every block in use whose part B names a node block, a checkpoint sets it for the node blocks it allocates, and the collection clears it for the blocks it frees.
+The node block that the checkpoints of the current mount are filling is never collected, because it holds the nodes they just wrote.
+When there are at least two other node blocks and they could hold more than twice the live nodes, the modified nodes counted as live, a collection is due, and the checkpoint runs a collection step after it has written the modified nodes.
+A single other node block is not collected: moving its live nodes into a new block would free nothing.
 
-1. A cursor goes over the node blocks in turn, and over the slots of each.
-2. For each node, the header tells the map, the owner and the lowest key; the node is live when a walk of that map from its root in RAM, with the modifications that are not yet written, reaches this address.
-3. A live node is marked modified, so this checkpoint writes it elsewhere; a node that is not live is skipped.
-4. The step stops when the cache has no room for more modified nodes, and the cursor stays where it stopped.
+1. A cursor goes over the node blocks in the order of their numbers, and over the slots of each; it stays in RAM between checkpoints, and starts again at the lowest block after a mount.
+2. For each node, the header tells the map, the owner, the level and the lowest key; the node is live when a walk of that map from its root in RAM towards the lowest key reaches this address at this level.
+   The root of a directory or data map comes from the record of the owner in the inode table; a node whose owner has no record, or a record of another type, is not live.
+3. A live node is read into the cache and modified with its path to the root of its map and, for a directory or data map, with the record of the owner, so that this checkpoint writes it elsewhere; a node that is not live is skipped.
+4. A walk that finds a node with an invalid CRC leaves the block in use: the cursor moves on to the next node block without freeing it, so that no node block is freed whose nodes could not be checked.
+5. The step stops when fewer than 6 nodes of the cache are unmodified, the room for one more path in its map and one in the inode table, when the free blocks next to the checkpoint block could not hold 6 more modified nodes, when it has left twice the node blocks of a checkpoint, freed or in use, or when no other node block is left; the cursor stays where it stopped.
 
-A node block whose last slot the step has passed becomes free when this checkpoint is complete, because every node of it that was live is written elsewhere by the same checkpoint.
+Writing the modified nodes first leaves the whole cache to the step, so a checkpoint that a cache full of modified nodes forced still collects, and the checkpoint writes at most twice the node cache.
+Counting the free blocks before the step keeps the nodes it moves within them, so a collection never makes a checkpoint fail for want of space.
+A node block whose last slot the step has passed is marked as allocated and not committed, so that the bitmap of the new checkpoint leaves it out, and it becomes free when this checkpoint is complete, because every node of it that was live is written elsewhere by the same checkpoint.
 Nodes are a small fraction of the data, so this relocation is a small fraction of the flash work.
 Live file data is never relocated by garbage collection; only static wear leveling moves it.
 
@@ -393,7 +401,7 @@ A power loss before step 5 leaves a device that completes `Mount` with `corrupte
 
 1. Read the superblock in block 0, or in block 1 when block 0 is not valid; when neither is, complete with `corrupted`.
    Format parameters that differ from the configuration, and more blocks than `maxBlocks`, complete with `unsupported`, and a number of blocks that does not match the device with `corrupted`.
-2. Read the header of every block, which gives the erase counts, the highest sequence, the free and erased blocks, and the checkpoint and journal blocks.
+2. Read the header of every block, which gives the erase counts, the highest sequence, the free and erased blocks, the checkpoint and journal blocks, and the node blocks.
 3. Load the checkpoint with the highest sequence whose CRC is valid.
    A checkpoint whose CRC is not valid was interrupted and is skipped, but a valid checkpoint is never skipped: if it is not consistent, the mount completes with `corrupted`, because the blocks of an older one may have been reused.
    A block that the checkpoint marks is in use even when its header is erased or of another type, because a record of the epoch may have released it, and it may have been erased and allocated again since; replaying that record releases it again, unless the block is now a journal block of the epoch.
@@ -420,11 +428,13 @@ Background work runs when the volume has been idle for the idle delay, 10 ms by 
 Its lifecycle is a `services::TableStateMachine` with the states `Stopped`, `Waiting`, `Claiming` and `Working`.
 While it holds the queue, it does one unit of work at a time, in this order of priority:
 
-1. A checkpoint, when the journal is more than half full, when more than half the cache holds modified nodes, or when the node blocks could hold more than twice the live nodes, and only when the pool holds every block it may need: more erased blocks than the node blocks of a checkpoint of the whole cache.
+1. A checkpoint, when the journal is more than half full, when more than half the cache holds modified nodes, or when a collection is due, and only when the pool holds every block it may need: more erased blocks than the node blocks of a checkpoint of the whole cache, or than twice as many when a collection is due.
 2. One sector erase of the free block that is not erased and has the lowest erase count, followed by its part A once its last sector is erased.
 3. A static wear leveling move, when one is due.
 
 A checkpoint and a move are units that are not interrupted; an erase is one device request.
+Between two calls, the background checkpoints for a collection only until the cursor has left as many node blocks as could be collected at the first of these checkpoints.
+When the nodes it moves fill new blocks as fast as it frees others, or a block cannot be checked, the collection stays due, and the background then waits for the next call instead of moving the same nodes again and again.
 After each unit, the background releases the queue when a foreground operation waits, and continues after the next idle delay; it also releases it when no work is left, and the next idle delay looks again.
 The machine starts when the volume is mounted and stops when it is unmounted.
 
@@ -435,16 +445,16 @@ Records and blocks are only ever written into program units that have been erase
 A block is erased only when no committed state refers to it, and a block released by a committed record may be erased at once, because every mount replays that record.
 The superblocks never change after formatting.
 
-| Interrupted during                 | State after the next mount                                                                              |
-|------------------------------------|---------------------------------------------------------------------------------------------------------|
-| Programming a record               | The record has an invalid CRC and is ignored; the operation did not happen                              |
-| Programming data before its record | The blocks are not referenced by any committed record and are free; the file has its committed contents |
-| Writing a checkpoint               | The previous checkpoint and its journal are used                                                        |
-| Erasing a block                    | The block has no valid part A; it is erased again and its count is estimated                            |
-| Programming part A or part B       | As for an interrupted erase, or the block is not in use and is free                                     |
-| Moving a block for wear leveling   | Either the old or the new location is referenced, never neither                                         |
-| `Rename`                           | The entry exists under its old name or under its new name, never both                                   |
-| Between `Sync` calls               | Data written after the last completed `Sync` may be lost                                                |
+| Interrupted during                 | State after the next mount                                                                                                                                             |
+|------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Programming a record               | The record has an invalid CRC and is ignored; the operation did not happen                                                                                             |
+| Programming data before its record | The blocks are not referenced by any committed record and are free; the file has its committed contents                                                                |
+| Writing a checkpoint               | The previous checkpoint and its journal are used, with the nodes in the node blocks the collection step passed, which stay in use until the new checkpoint is complete |
+| Erasing a block                    | The block has no valid part A; it is erased again and its count is estimated                                                                                           |
+| Programming part A or part B       | As for an interrupted erase, or the block is not in use and is free                                                                                                    |
+| Moving a block for wear leveling   | Either the old or the new location is referenced, never neither                                                                                                        |
+| `Rename`                           | The entry exists under its old name or under its new name, never both                                                                                                  |
+| Between `Sync` calls               | Data written after the last completed `Sync` may be lost                                                                                                               |
 
 The power-cut sweep in [Testing.md](Testing.md) interrupts every operation and background step after every single program and sector erase, and in the middle of the interrupted one, and checks after every remount that the volume is consistent and that every file holds either its previous or its new contents.
 
@@ -457,7 +467,7 @@ The power-cut sweep in [Testing.md](Testing.md) interrupts every operation and b
 | Overwrite within one block      | One block read and programmed, one record, at most 3 node reads when not cached | File size and fill level |
 | Seek and read                   | At most 3 node reads when not cached, then the data                             | File size and fill level |
 | Allocation                      | None, unless the pre-erased pool is below its watermark; then one sector erase  | File size and fill level |
-| Checkpoint                      | One collection step, the modified nodes and the checkpoint                      | File size                |
+| Checkpoint                      | The modified nodes, one collection step with the nodes it moves, the checkpoint | File size                |
 | Mount                           | One header read per block, the checkpoint and the journal                       | File size                |
 
 ## RAM use
@@ -466,13 +476,14 @@ The power-cut sweep in [Testing.md](Testing.md) interrupts every operation and b
 |----------------|-------------------------------------------------------------------------------------------------|
 | Block states   | 2 bits per block                                                                                |
 | Erase counts   | 1 byte per block                                                                                |
+| Node blocks    | 1 bit per block                                                                                 |
 | Node cache     | `cachedNodes` times the node size, plus a few bytes per node                                    |
 | Journal buffer | The largest record, rounded up to the program unit                                              |
 | Each open file | Position, size, 8 uncommitted entries and a buffer of one page, or of the inline area if larger |
 
-For a 16 MiB device with 4 KiB blocks, that is 4096 blocks, so 1 KiB for the block states and 4 KiB for the erase counts, plus 8 KiB for the default cache of 16 nodes of 512 bytes, and about 0.6 KiB per open file: about 14 KiB with one open file.
-The state of the volume, its handles and its operations comes on top: the metrics report 18,440 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M.
-Using larger blocks reduces the tables proportionally: with 64 KiB blocks, the same device needs 320 bytes for block states and erase counts, and about 9 KiB in all.
+For a 16 MiB device with 4 KiB blocks, that is 4096 blocks, so 1 KiB for the block states, 4 KiB for the erase counts and 0.5 KiB for the node blocks, plus 8 KiB for the default cache of 16 nodes of 512 bytes, and about 0.6 KiB per open file: about 14 KiB with one open file.
+The state of the volume, its handles and its operations comes on top: the metrics report 19,400 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M.
+Using larger blocks reduces the tables proportionally: with 64 KiB blocks, the same device needs 352 bytes for block states, erase counts and node blocks, and about 9 KiB in all.
 This is more RAM than littlefs needs for the same device; it is the price of allocation without traversal and of wear leveling based on actual erase counts.
 
 ## Configuration

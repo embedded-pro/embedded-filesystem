@@ -262,8 +262,8 @@ namespace
                 flash.done();
         }
 
-        testing::StrictMock<hal::FlashMock> flash{ 18, sectorSize };
-        fs::NorFormatter::WithStorage<fs::NorConfig{ .maxBlocks = 18 }> formatter{ flash };
+        testing::StrictMock<hal::FlashMock> flash{ 21, sectorSize };
+        fs::NorFormatter::WithStorage<fs::NorConfig{ .maxBlocks = 21 }> formatter{ flash };
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
     };
 }
@@ -271,11 +271,11 @@ namespace
 TEST_F(NorFormatterOnMockTest, reads_the_counts_erases_the_superblocks_first_and_programs_them_last)
 {
     testing::InSequence sequence;
-    for (uint32_t block = 2; block != 18; ++block)
+    for (uint32_t block = 2; block != 21; ++block)
         ExpectReadHeader(block);
     ExpectErase(0);
     ExpectErase(1);
-    for (uint32_t block = 2; block != 18; ++block)
+    for (uint32_t block = 2; block != 21; ++block)
     {
         ExpectReadHeader(block);
         ExpectErase(block);

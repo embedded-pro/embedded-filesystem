@@ -73,6 +73,22 @@ TEST_F(NorMapFetchTest, brings_the_path_of_a_key_into_the_cache)
     EXPECT_EQ(120u, fs::NorRadixTree(cache, 2).Find(file, 20));
 }
 
+TEST_F(NorMapFetchTest, brings_the_path_of_a_key_down_to_a_level_into_the_cache)
+{
+    ASSERT_EQ(2, directory.height);
+
+    EXPECT_CALL(done, callback(fs::NorFetchResult::fetched));
+    fetch.Fetch(DirectoryMap(1), directory, 70, 1, [this](fs::NorFetchResult result)
+        {
+            done.callback(result);
+        });
+    ExecuteAllActions();
+
+    auto root = cache.Find(directory.address);
+    ASSERT_TRUE(root.has_value());
+    EXPECT_EQ(std::nullopt, cache.Find(fs::NorBTree::ChildFor(cache.Node(root.value_or(0)), 70)));
+}
+
 TEST_F(NorMapFetchTest, completes_through_the_event_dispatcher_when_it_reads)
 {
     StartFetch(fetch, inodeTable, inodeTableRoot, 4);

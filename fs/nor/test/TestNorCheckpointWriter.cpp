@@ -260,10 +260,11 @@ namespace
         fs::DeferredCompletions::WithMaxSize<2> deferred;
         std::array<uint8_t, fs::NorBlockStateBytes(1600)> states{};
         std::array<uint8_t, 1600> counts{};
+        std::array<uint8_t, fs::NorNodeBlockBytes(1600)> nodeBlocks{};
         std::array<uint8_t, journalBytes> journal{};
         std::array<uint8_t, 15 * 512> nodes{};
         std::array<fs::NorNodeCache::Slot, 15> slots{};
-        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots) }, largeConfig, std::chrono::milliseconds(10) };
+        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots) }, largeConfig, std::chrono::milliseconds(10) };
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
     };
 }

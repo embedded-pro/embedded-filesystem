@@ -168,7 +168,7 @@ TEST_F(NorBlockEraserTest, an_erase_that_counts_as_the_refill_of_the_call_leaves
 
 namespace
 {
-    constexpr fs::NorConfig twoSectors{ .maxBlocks = 20, .sectorsPerBlock = 2, .programUnit = 16, .pageSize = 16, .cachedNodes = 15 };
+    constexpr fs::NorConfig twoSectors{ .maxBlocks = 22, .sectorsPerBlock = 2, .programUnit = 16, .pageSize = 16, .cachedNodes = 15 };
 
     class NorBlockEraserOnMockTest
         : public testing::Test
@@ -179,9 +179,9 @@ namespace
         {
             auto& state = volume.State();
             state.geometry = fs::MakeNorGeometry(twoSectors, flash);
-            state.blocks.Reset(20);
-            state.eraseCounts.Reset(20);
-            for (uint32_t block = 0; block != 20; ++block)
+            state.blocks.Reset(22);
+            state.eraseCounts.Reset(22);
+            for (uint32_t block = 0; block != 22; ++block)
             {
                 state.eraseCounts.Record(block, 5);
                 state.blocks.Set(block, fs::NorBlockState::inUse);
@@ -210,14 +210,15 @@ namespace
             return { partA.begin(), partA.end() };
         }
 
-        testing::StrictMock<hal::FlashMock> flash{ 40, 2048 };
+        testing::StrictMock<hal::FlashMock> flash{ 44, 2048 };
         fs::DeferredCompletions::WithMaxSize<2> deferred;
-        std::array<uint8_t, fs::NorBlockStateBytes(20)> states{};
-        std::array<uint8_t, 20> counts{};
+        std::array<uint8_t, fs::NorBlockStateBytes(22)> states{};
+        std::array<uint8_t, 22> counts{};
+        std::array<uint8_t, fs::NorNodeBlockBytes(22)> nodeBlocks{};
         std::array<uint8_t, 256> journal{};
         std::array<uint8_t, 15 * 512> nodes{};
         std::array<fs::NorNodeCache::Slot, 15> slots{};
-        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots) }, twoSectors, std::chrono::milliseconds(10) };
+        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots) }, twoSectors, std::chrono::milliseconds(10) };
         testing::StrictMock<infra::MockCallback<void()>> stepped;
     };
 }

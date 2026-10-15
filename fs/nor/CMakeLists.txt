@@ -80,8 +80,12 @@ target_sources(fs.nor PRIVATE
     NorNameLookup.hpp
     NorNode.cpp
     NorNode.hpp
+    NorNodeBlocks.cpp
+    NorNodeBlocks.hpp
     NorNodeCache.cpp
     NorNodeCache.hpp
+    NorNodeCollector.cpp
+    NorNodeCollector.hpp
     NorRead.cpp
     NorRead.hpp
     NorRecord.cpp

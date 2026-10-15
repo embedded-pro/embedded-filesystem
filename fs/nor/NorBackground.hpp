@@ -5,6 +5,8 @@
 #include "services/fsm/StateMachineDefinition.hpp"
 #include "services/fsm/TableStateMachine.hpp"
 #include <array>
+#include <cstdint>
+#include <optional>
 #include <variant>
 
 namespace fs
@@ -81,15 +83,21 @@ namespace fs
     private:
         bool HasWork() const;
         bool CheckpointDue() const;
+        bool RoundLeft() const;
+        bool CalledSinceRound() const;
         bool ShouldStop() const;
         void Claim();
         void Work();
+        void StartRound();
         void Release();
 
     private:
         NorVolume& volume;
         OperationQueue::BackgroundClaimer claimer;
         bool erasing{ false };
+        std::optional<uint32_t> roundReleases;
+        uint32_t roundStart{ 0 };
+        uint32_t roundBlocks{ 0 };
         Machine::WithStorage<2> machine;
     };
 

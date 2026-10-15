@@ -426,6 +426,8 @@ public:
 
     fs::NorConfig longJournal{ WithJournalBlocks(config, 4) };
     uint32_t releasedTail{ 0 };
+    std::vector<std::pair<uint32_t, std::optional<fs::NorAllocation>>> setUpNodeBlocks;
+    std::vector<std::string> removedDirectories;
 
     static constexpr std::size_t initialLog = 100;
     static constexpr std::size_t appendAfterLoss = 1000;
@@ -1268,6 +1270,145 @@ public:
         return std::nullopt;
     }
 
+    static constexpr std::size_t collectedDirectories = 6;
+
+    static std::string CollectedName(std::size_t index)
+    {
+        return "/d" + std::to_string(index);
+    }
+
+    std::size_t CollectedSize() const
+    {
+        return 2 * std::size_t{ payload } + 100;
+    }
+
+    std::optional<fs::NorAllocation> AllocationOf(const std::vector<uint8_t>& image, uint32_t block) const
+    {
+        auto header = infra::Head(infra::DiscardHead(infra::MakeRange(image), block * blockSize), fs::NorHeaderSize(config.programUnit));
+        return fs::ParseNorBlockHeader(header, config.programUnit).allocation;
+    }
+
+    void FillJournalAndSettle(metrics::NorSweepVolume& volume, const std::string& prefix)
+    {
+        for (std::size_t index = 0; index != settledDirectories && !volume.JournalMoreThanHalfFull(); ++index)
+        {
+            removedDirectories.push_back(prefix + std::to_string(index));
+            ASSERT_EQ(fs::Result::success, volume.MakeDirectory(removedDirectories.back()));
+        }
+
+        volume.Settle();
+    }
+
+    void SetUpCollection(Context& context)
+    {
+        ASSERT_EQ(fs::Result::success, metrics::Format(context, config));
+        {
+            metrics::NorSweepVolume volume{ context, config };
+            ASSERT_EQ(fs::Result::success, volume.Mount());
+            for (std::size_t index = 0; index != collectedDirectories; ++index)
+                ASSERT_EQ(fs::Result::success, volume.MakeDirectory(CollectedName(index)));
+            ASSERT_EQ(fs::Result::success, volume.MakeDirectory("/d0/e"));
+            ASSERT_EQ(fs::Result::success, volume.OpenFile("/f", fs::OpenMode::write));
+            ASSERT_EQ(fs::Result::success, volume.Write(FileBytes(0, CollectedSize())));
+            ASSERT_EQ(fs::Result::success, volume.Close());
+            removedDirectories.clear();
+            FillJournalAndSettle(volume, "/p");
+            FillJournalAndSettle(volume, "/q");
+            ASSERT_EQ(fs::Result::success, volume.Unmount());
+        }
+
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        ASSERT_EQ(std::nullopt, check.problem);
+
+        setUpNodeBlocks.clear();
+        for (uint32_t block = 2; block != check.blocks.size(); ++block)
+            if (check.blocks[block] == metrics::NorBlockUse::node)
+                setUpNodeBlocks.emplace_back(block, AllocationOf(image, block));
+        ASSERT_FALSE(setUpNodeBlocks.empty());
+    }
+
+    void CollectInBackground(Context& context) const
+    {
+        metrics::NorSweepVolume volume{ context, config };
+        if (volume.Mount() != fs::Result::success || volume.MakeDirectory("/n") != fs::Result::success)
+            return;
+
+        for (const auto& path : removedDirectories)
+            if (volume.Remove(path) != fs::Result::success)
+                return;
+
+        volume.Settle();
+        if (volume.MakeDirectory("/m") != fs::Result::success)
+            return;
+
+        volume.Unmount();
+    }
+
+    std::optional<std::string> VerifyCollected(Context& context, bool uncut) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        for (std::size_t index = 0; index != collectedDirectories; ++index)
+            if (check.Find(CollectedName(index)) == nullptr)
+                return CollectedName(index) + " is lost";
+
+        if (check.Find("/d0/e") == nullptr)
+            return "/d0/e is lost";
+
+        const auto* file = check.Find("/f");
+        if (file == nullptr || metrics::ReadContents(image, check, *file) != FileBytes(0, CollectedSize()))
+            return "/f does not hold its contents";
+
+        auto madeFirst = check.Find("/n") != nullptr;
+        auto madeSecond = check.Find("/m") != nullptr;
+        if (madeSecond && !madeFirst)
+            return "/m was made before /n";
+
+        if (uncut && !madeSecond)
+            return "the run without a cut did not make /m";
+
+        auto removed = static_cast<std::size_t>(std::ranges::find_if(removedDirectories, [&check](const std::string& path)
+                                                    {
+                                                        return check.Find(path) != nullptr;
+                                                    }) -
+                                                removedDirectories.begin());
+        for (auto index = removed; index != removedDirectories.size(); ++index)
+            if (check.Find(removedDirectories[index]) == nullptr)
+                return removedDirectories[index] + " was removed before " + removedDirectories[removed];
+
+        if ((removed != 0 && !madeFirst) || (madeSecond && removed != removedDirectories.size()))
+            return "the removes did not happen between /n and /m";
+
+        auto collected = [&](const auto& setUp)
+        {
+            return check.blocks[setUp.first] != metrics::NorBlockUse::node || AllocationOf(image, setUp.first) != setUp.second;
+        };
+        if (uncut && std::ranges::none_of(setUpNodeBlocks, collected))
+            return "the run without a cut collected no node block of the set-up";
+
+        {
+            metrics::NorSweepVolume volume{ context, config };
+            if (volume.Mount() != fs::Result::success)
+                return "the volume does not mount";
+
+            if (volume.ReadFile("/f") != FileBytes(0, CollectedSize()) || volume.TypeOf("/d0/e") != fs::EntryType::directory || volume.TypeOf("/n").has_value() != madeFirst)
+                return "the library and the checker disagree";
+
+            if (volume.MakeDirectory("/z") != fs::Result::success || volume.Unmount() != fs::Result::success)
+                return "a change after the mount fails";
+        }
+
+        auto after = metrics::CheckImage(context, model);
+        if (after.problem.has_value())
+            return "after a change after the mount: " + *after.problem;
+
+        return std::nullopt;
+    }
+
     void SweepAppendAfterLoss(const std::string& caseName, std::size_t writes)
     {
         auto committed = SizeAfter(writes - 1);
@@ -1464,6 +1605,23 @@ TEST_P(NorAppendPowerCut, the_background_erases_free_blocks_and_writes_a_checkpo
         [this](Context& context, bool uncut)
         {
             return VerifySettled(context, uncut);
+        });
+}
+
+TEST_P(NorAppendPowerCut, the_collection_of_node_blocks_moves_the_used_nodes_and_a_cut_leaves_consistent)
+{
+    SweepEveryMode(
+        model, "collection", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpCollection(context);
+        },
+        [this](Context& context)
+        {
+            CollectInBackground(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return VerifyCollected(context, uncut);
         });
 }
 

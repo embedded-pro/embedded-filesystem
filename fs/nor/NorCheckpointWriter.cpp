@@ -2,6 +2,7 @@
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorVolume.hpp"
 #include <algorithm>
+#include <utility>
 
 namespace fs
 {
@@ -19,6 +20,7 @@ namespace fs
     void NorCheckpointWriter::Write(const infra::Function<void(Result result)>& onWritten)
     {
         onDone = onWritten;
+        collect = volume.Collector().Due();
         WriteNextNode();
     }
 
@@ -28,7 +30,12 @@ namespace fs
         const auto& geometry = volume.Geometry();
         auto next = WriteBack().Next();
 
-        if (!next.has_value())
+        if (!next.has_value() && std::exchange(collect, false))
+            volume.Collector().Collect([this]
+                {
+                    WriteNextNode();
+                });
+        else if (!next.has_value())
             volume.Allocator().Allocate(NorBlockType::checkpoint, {}, NorReserve::used, [this](std::optional<uint32_t> allocated)
                 {
                     CheckpointBlockAllocated(allocated);
@@ -56,6 +63,7 @@ namespace fs
 
         auto& state = volume.State();
         state.blocks.Set(allocated.value_or(0), NorBlockState::inUse);
+        state.nodeBlocks.Add(allocated.value_or(0));
         state.nodeBlock = allocated;
         state.nodeOffset = volume.Geometry().NodeSlotsOffset();
         ProgramNode();
@@ -131,6 +139,7 @@ namespace fs
         for (auto epochBlock : state.epoch)
             state.blocks.Set(epochBlock, NorBlockState::freeNotErased);
 
+        volume.Collector().Committed();
         state.liveNodes = checkpoint.liveNodes;
         volume.Cache().ClearReleasedNodes();
         state.checkpoint = checkpoint;

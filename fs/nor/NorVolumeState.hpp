@@ -6,6 +6,7 @@
 #include "fs/nor/NorEraseCounts.hpp"
 #include "fs/nor/NorGeometry.hpp"
 #include "fs/nor/NorNode.hpp"
+#include "fs/nor/NorNodeBlocks.hpp"
 #include "infra/util/BoundedVector.hpp"
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
@@ -24,11 +25,12 @@ namespace fs
 
     struct NorVolumeState
     {
-        NorVolumeState(infra::ByteRange blockStates, infra::ByteRange eraseCountStorage);
+        NorVolumeState(infra::ByteRange blockStates, infra::ByteRange eraseCountStorage, infra::ByteRange nodeBlockStorage);
 
         std::optional<NorGeometry> geometry;
         NorBlockStates blocks;
         NorEraseCounts eraseCounts;
+        NorNodeBlocks nodeBlocks;
         NorCheckpoint checkpoint;
         NorMapRoot inodeTable;
         uint32_t checkpointBlock{ 0 };

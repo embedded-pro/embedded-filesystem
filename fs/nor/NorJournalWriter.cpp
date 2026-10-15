@@ -29,12 +29,22 @@ namespace fs
         return 2 * used > uint64_t{ volume.Config().journalBlocks } * geometry.PayloadSize();
     }
 
+    bool NorJournalWriter::NeedsCheckpointFor(std::size_t entryBytes) const
+    {
+        return !FitsInBlock(static_cast<uint32_t>(CrcRecord::overhead + entryBytes)) && volume.State().epoch.size() == volume.Config().journalBlocks;
+    }
+
+    bool NorJournalWriter::FitsInBlock(uint32_t bytes) const
+    {
+        const auto& state = volume.State();
+        return !state.startNewJournalBlock && state.journal.end + volume.Geometry().RoundToProgramUnit(bytes) <= volume.Geometry().BlockSize();
+    }
+
     void NorJournalWriter::Place()
     {
         const auto& state = volume.State();
-        const auto& geometry = volume.Geometry();
 
-        if (!state.startNewJournalBlock && state.journal.end + geometry.RoundToProgramUnit(recordBytes) <= geometry.BlockSize())
+        if (FitsInBlock(recordBytes))
         {
             link = std::nullopt;
             Write();

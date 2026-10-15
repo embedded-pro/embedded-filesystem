@@ -105,7 +105,8 @@ namespace
         std::optional<fs::NorImageBuilder> builder;
         std::array<uint8_t, fs::NorBlockStateBytes(48)> stateStorage{};
         std::array<uint8_t, 48> countStorage{};
-        fs::NorVolumeState volume{ infra::MakeRange(stateStorage), infra::MakeRange(countStorage) };
+        std::array<uint8_t, fs::NorNodeBlockBytes(48)> nodeBlockStorage{};
+        fs::NorVolumeState volume{ infra::MakeRange(stateStorage), infra::MakeRange(countStorage), infra::MakeRange(nodeBlockStorage) };
         std::array<uint8_t, largestRecord> buffer{};
     };
 }
@@ -321,6 +322,39 @@ TEST_F(NorMountTest, marks_the_blocks_that_the_checkpoint_uses_in_use)
 
     EXPECT_EQ(fs::Result::success, Mount());
     EXPECT_EQ(State::inUse, StateOf(9));
+}
+
+TEST_F(NorMountTest, marks_the_node_block_of_a_formatted_volume_as_node_block)
+{
+    Mount();
+
+    EXPECT_EQ(1, volume.nodeBlocks.Count());
+    EXPECT_TRUE(volume.nodeBlocks.Contains(2));
+}
+
+TEST_F(NorMountTest, marks_the_node_blocks_that_the_checkpoint_uses_and_no_other_block)
+{
+    Builder().Allocate(8, fs::NorBlockType::node);
+    Builder().Allocate(9, fs::NorBlockType::node);
+    Builder().Allocate(10, fs::NorBlockType::data, { 4, 0 });
+    WriteNewCheckpoint([](fs::NorCheckpoint&) {}, { 0, 1, 2, 5, 9, 10 });
+
+    EXPECT_EQ(fs::Result::success, Mount());
+    EXPECT_EQ(2, volume.nodeBlocks.Count());
+    EXPECT_TRUE(volume.nodeBlocks.Contains(2));
+    EXPECT_FALSE(volume.nodeBlocks.Contains(8));
+    EXPECT_TRUE(volume.nodeBlocks.Contains(9));
+    EXPECT_FALSE(volume.nodeBlocks.Contains(10));
+}
+
+TEST_F(NorMountTest, forgets_the_node_blocks_of_an_earlier_mount)
+{
+    volume.nodeBlocks.Reset(32);
+    volume.nodeBlocks.Add(7);
+
+    Mount();
+
+    EXPECT_FALSE(volume.nodeBlocks.Contains(7));
 }
 
 TEST_F(NorMountTest, never_skips_a_valid_checkpoint_that_is_not_consistent)

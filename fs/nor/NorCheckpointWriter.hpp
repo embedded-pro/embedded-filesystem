@@ -46,6 +46,7 @@ namespace fs
         std::array<uint8_t, norCheckpointFixedBytes> fixedPart{};
         uint32_t written{ 0 };
         uint32_t chunk{ 0 };
+        bool collect{ false };
         infra::Crc32 crc;
         infra::AutoResetFunction<void(Result result)> onDone;
     };

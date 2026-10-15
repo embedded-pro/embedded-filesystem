@@ -9,6 +9,7 @@
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/Function.hpp"
+#include <cstddef>
 #include <cstdint>
 
 namespace fs
@@ -40,6 +41,7 @@ namespace fs
         void AddEntries(CrcRecord& record) const;
         void Committed(Result result);
         void Finish(Result result);
+        std::size_t RecordBytes() const;
         NorMapId InodeTable() const;
         NorMapId DirectoryMap(uint32_t directory) const;
 

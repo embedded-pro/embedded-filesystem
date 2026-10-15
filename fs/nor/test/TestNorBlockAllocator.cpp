@@ -177,7 +177,7 @@ TEST_F(NorBlockAllocatorTest, an_allocation_that_erased_its_own_block_erases_not
 
 namespace
 {
-    constexpr fs::NorConfig twoSectorWideUnit{ .maxBlocks = 20, .sectorsPerBlock = 2, .programUnit = 16, .pageSize = 16, .cachedNodes = 15 };
+    constexpr fs::NorConfig twoSectorWideUnit{ .maxBlocks = 22, .sectorsPerBlock = 2, .programUnit = 16, .pageSize = 16, .cachedNodes = 15 };
 
     class NorBlockAllocatorOnMockTest
         : public testing::Test
@@ -188,9 +188,9 @@ namespace
         {
             auto& state = volume.State();
             state.geometry = fs::MakeNorGeometry(twoSectorWideUnit, flash);
-            state.blocks.Reset(20);
-            state.eraseCounts.Reset(20);
-            for (uint32_t block = 2; block != 20; ++block)
+            state.blocks.Reset(22);
+            state.eraseCounts.Reset(22);
+            for (uint32_t block = 2; block != 22; ++block)
             {
                 state.eraseCounts.Record(block, block == 6 ? 4 : 5);
                 state.blocks.Set(block, fs::NorBlockState::inUse);
@@ -205,14 +205,15 @@ namespace
                 flash.done();
         }
 
-        testing::StrictMock<hal::FlashMock> flash{ 40, 2048 };
+        testing::StrictMock<hal::FlashMock> flash{ 44, 2048 };
         fs::DeferredCompletions::WithMaxSize<2> deferred;
-        std::array<uint8_t, fs::NorBlockStateBytes(20)> states{};
-        std::array<uint8_t, 20> counts{};
+        std::array<uint8_t, fs::NorBlockStateBytes(22)> states{};
+        std::array<uint8_t, 22> counts{};
+        std::array<uint8_t, fs::NorNodeBlockBytes(22)> nodeBlocks{};
         std::array<uint8_t, 256> journal{};
         std::array<uint8_t, 15 * 512> nodes{};
         std::array<fs::NorNodeCache::Slot, 15> slots{};
-        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots) }, twoSectorWideUnit, std::chrono::milliseconds(10) };
+        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots) }, twoSectorWideUnit, std::chrono::milliseconds(10) };
         testing::StrictMock<infra::MockCallback<void(std::optional<uint32_t>)>> done;
     };
 }

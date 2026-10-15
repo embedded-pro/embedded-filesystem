@@ -41,7 +41,9 @@ target_sources(fs.nor_test PRIVATE
     TestNorMount.cpp
     TestNorInodeRecord.cpp
     TestNorNode.cpp
+    TestNorNodeBlocks.cpp
     TestNorNodeCache.cpp
+    TestNorNodeCollector.cpp
     TestNorNodeWriteBack.cpp
     TestNorOverwrite.cpp
     TestNorRadixTree.cpp
