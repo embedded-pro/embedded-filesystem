@@ -1,6 +1,7 @@
 #include "fs/nor/NorCheckpointWriter.hpp"
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorVolume.hpp"
+#include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 #include <utility>
 
@@ -164,6 +165,7 @@ namespace fs
         state.checkpointBlock = block;
         if (replayRecords.has_value())
         {
+            really_assert(kept != state.epoch.end());
             state.epoch.erase(state.epoch.begin(), kept);
             state.journal.blocks = static_cast<uint32_t>(state.epoch.size());
         }

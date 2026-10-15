@@ -28,6 +28,8 @@ namespace fs
     private:
         void ReadRecord();
         void OnRecord(const std::optional<OpenedRecord>& record);
+        void ReadLaterRecord();
+        void ReserveBlocksOf(const std::optional<OpenedRecord>& record);
         void WriteCheckpoint();
         void Apply(const OpenedRecord& record);
         void Applied(Result result);
@@ -39,8 +41,9 @@ namespace fs
         uint32_t offset{ 0 };
         bool linked{ false };
         std::optional<NorRecordPosition> checkpointBefore;
-        std::optional<NorRecordPosition> checkpointed;
         NorRecordPosition current;
+        std::size_t laterIndex{ 0 };
+        uint32_t laterOffset{ 0 };
         infra::AutoResetFunction<void(Result result, std::optional<NorRecordPosition> overflow)> onDone;
     };
 }

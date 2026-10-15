@@ -242,7 +242,7 @@ WL-3 is reported, and `merge_report.py` adds its ratio to the best littlefs subj
 The sweep is described in [Testing.md](Testing.md).
 
 On NOR, every case of the sweep holds at 100 % on the three sweep models, with the interrupted program or erase not started, partial and completed.
-The cut points of a case are the programs and sector erases of its swept phase, and each is cut in the three modes, 18,138 cuts in all:
+The cut points of a case are the programs and sector erases of its swept phase, and each is cut in the three modes, 18,150 cuts in all:
 
 | Case                                           | `nor-128k` | `internal-96k` | `nor-128k-two-sector-blocks` |
 |------------------------------------------------|------------|----------------|------------------------------|
@@ -266,8 +266,8 @@ The cut points of a case are the programs and sector erases of its swept phase, 
 | leveling-fallback                              | 83         | 291            | 90                           |
 | leveling-fallback-nodes                        | 57         | 271            | 63                           |
 | unmount with an open file                      | 37         | 283            | 40                           |
-| replay with a smaller cache                    | 31         | 42             | 31                           |
-| Total                                          | 1240       | 3384           | 1422                         |
+| replay with a smaller cache                    | 33         | 37             | 38                           |
+| Total                                          | 1242       | 3379           | 1429                         |
 
 M-2 counts blocks rather than requests, and every block of a request after its first follows the block before it, so writing the same blocks in fewer, larger requests leaves the share unchanged; only a block that neither starts an allocation unit nor follows the previous one counts against it.
 Counted by requests, a filesystem that coalesces small writes would lower its share by sending fewer data requests next to the same number of metadata requests.

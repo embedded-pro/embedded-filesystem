@@ -109,6 +109,8 @@ namespace fs
         really_assert(opened.has_value());
         volume.RecordApply().Apply(opened.value_or(OpenedRecord{}), link.has_value(), [this](Result result)
             {
+                // Every operation makes room in the cache before it commits its record
+                really_assert(result != Result::unsupported);
                 onDone(result);
             });
     }

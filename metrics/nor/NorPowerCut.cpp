@@ -461,22 +461,31 @@ public:
 
     void SetUpReplay(Context& context)
     {
-        auto larger = WithCache(config, largerCache);
+        auto larger = WithCache(longJournal, largerCache);
         ASSERT_EQ(fs::Result::success, metrics::Format(context, larger));
-        metrics::NorSweepVolume volume{ context, larger };
-        ASSERT_EQ(fs::Result::success, volume.Mount());
-        replayedDirectories = 0;
-        while (volume.ModifiedNodes() <= config.cachedNodes)
-            ASSERT_EQ(fs::Result::success, volume.MakeDirectory(ReplayedName(replayedDirectories++)));
+        {
+            metrics::NorSweepVolume volume{ context, larger };
+            ASSERT_EQ(fs::Result::success, volume.Mount());
+            replayedDirectories = 0;
+            while (volume.ModifiedNodes() <= config.cachedNodes)
+                ASSERT_EQ(fs::Result::success, volume.MakeDirectory(ReplayedName(replayedDirectories++)));
+
+            ASSERT_EQ(fs::Result::success, volume.OpenFile("/g", fs::OpenMode::write));
+            ASSERT_EQ(fs::Result::success, volume.Write(FileBytes(0, payload / 2)));
+            ASSERT_EQ(fs::Result::success, volume.Close());
+        }
+
+        WearFreeBlocks(context, 0, std::nullopt, wornEraseCount);
     }
 
     void ReplayWithTheSmallerCache(Context& context)
     {
-        metrics::NorSweepVolume volume{ context, config };
+        replayCheckpointed = false;
+        metrics::NorSweepVolume volume{ context, longJournal };
         if (volume.Mount() != fs::Result::success)
             return;
 
-        replayCheckpointed = replayCheckpointed || volume.RecordsStartOutsideTheCheckpointBlock();
+        replayCheckpointed = volume.RecordsStartOutsideTheCheckpointBlock();
         if (volume.MakeDirectory("/m") != fs::Result::success)
             return;
 
@@ -485,7 +494,8 @@ public:
 
     std::optional<std::string> VerifyReplayed(Context& context, bool uncut) const
     {
-        auto check = metrics::CheckImage(context, model);
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
         if (check.problem.has_value())
             return check.problem;
 
@@ -493,11 +503,15 @@ public:
             if (check.Find(ReplayedName(index)) == nullptr)
                 return ReplayedName(index) + " is lost";
 
-        if (uncut && check.Find("/m") == nullptr)
-            return "the run without a cut did not make /m";
+        const auto* file = check.Find("/g");
+        if (file == nullptr || metrics::ReadContents(image, check, *file) != FileBytes(0, payload / 2))
+            return "/g is lost";
+
+        if (uncut && (!replayCheckpointed || check.Find("/m") == nullptr))
+            return "the run without a cut did not checkpoint during replay and make /m";
 
         {
-            metrics::NorSweepVolume volume{ context, config };
+            metrics::NorSweepVolume volume{ context, longJournal };
             if (volume.Mount() != fs::Result::success)
                 return "the volume does not mount with the smaller cache";
 
@@ -507,6 +521,9 @@ public:
 
             if (volume.TypeOf("/m").has_value() != (check.Find("/m") != nullptr))
                 return "the library and the checker disagree on /m";
+
+            if (volume.ReadFile("/g") != FileBytes(0, payload / 2))
+                return "the library reads other contents of /g than the checker";
 
             if (volume.MakeDirectory("/z") != fs::Result::success || volume.Unmount() != fs::Result::success)
                 return "a change after the mount fails";
@@ -2043,7 +2060,6 @@ TEST_P(NorAppendPowerCut, an_unmount_commits_a_file_left_open_completely_or_not_
 
 TEST_P(NorAppendPowerCut, a_mount_with_a_smaller_cache_than_the_writer_checkpoints_during_replay_and_a_cut_leaves_consistent)
 {
-    replayCheckpointed = false;
     SweepEveryMode(
         model, "replay with a smaller cache", metrics::SweepRamBytes(model), [this](Context& context)
         {
@@ -2057,8 +2073,6 @@ TEST_P(NorAppendPowerCut, a_mount_with_a_smaller_cache_than_the_writer_checkpoin
         {
             return VerifyReplayed(context, uncut);
         });
-
-    EXPECT_TRUE(replayCheckpointed);
 }
 
 INSTANTIATE_TEST_SUITE_P(Nor, NorAppendPowerCut, testing::Values(&metrics::norSweep128k, &metrics::internalSweep96k, &metrics::norSweep128kTwoSectors), ParameterName);

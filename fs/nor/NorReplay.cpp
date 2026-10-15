@@ -1,6 +1,8 @@
 #include "fs/nor/NorReplay.hpp"
+#include "fs/nor/NorInodeRecord.hpp"
+#include "fs/nor/NorRecord.hpp"
 #include "fs/nor/NorVolume.hpp"
-#include <utility>
+#include <variant>
 
 namespace fs
 {
@@ -40,15 +42,51 @@ namespace fs
             ReadRecord();
         }
         else if (checkpointBefore == NorRecordPosition{ volume.State().epoch[index], offset })
-            WriteCheckpoint();
+        {
+            laterIndex = index;
+            laterOffset = offset;
+            ReserveBlocksOf(record);
+        }
         else
             Apply(*record);
     }
 
+    void NorReplay::ReadLaterRecord()
+    {
+        records.Read(volume.Geometry(), volume.State().epoch[laterIndex], laterOffset, [this](const std::optional<OpenedRecord>& record)
+            {
+                ReserveBlocksOf(record);
+            });
+    }
+
+    void NorReplay::ReserveBlocksOf(const std::optional<OpenedRecord>& record)
+    {
+        auto& state = volume.State();
+        if (!record.has_value() && ++laterIndex == state.epoch.size())
+        {
+            WriteCheckpoint();
+            return;
+        }
+
+        if (!record.has_value())
+            laterOffset = volume.Geometry().HeaderSize();
+        else
+        {
+            laterOffset += volume.Geometry().RoundToProgramUnit(static_cast<uint32_t>(record->size));
+            NorEntryReader entries{ *record, NorInodeRecordBytes(volume.Config()) };
+            for (auto entry = entries.Next(); entry.has_value(); entry = entries.Next())
+                if (const auto* set = std::get_if<NorBlockSet>(&*entry); set != nullptr && set->block < volume.Geometry().blocks && state.blocks.State(set->block) != NorBlockState::inUse)
+                    state.blocks.Set(set->block, NorBlockState::pending);
+        }
+
+        ReadLaterRecord();
+    }
+
     void NorReplay::WriteCheckpoint()
     {
-        checkpointed = std::exchange(checkpointBefore, std::nullopt);
-        volume.Checkpoints().WriteBefore(checkpointed.value_or(NorRecordPosition{}), [this](Result result)
+        auto records = checkpointBefore.value_or(NorRecordPosition{});
+        checkpointBefore = std::nullopt;
+        volume.Checkpoints().WriteBefore(records, [this](Result result)
             {
                 if (result != Result::success)
                     onDone(result, std::nullopt);
@@ -73,7 +111,8 @@ namespace fs
 
     void NorReplay::Applied(Result result)
     {
-        if (result == Result::unsupported && checkpointed != current)
+        const auto& checkpoint = volume.State().checkpoint;
+        if (result == Result::unsupported && current != NorRecordPosition{ checkpoint.recordsBlock, checkpoint.recordsOffset })
             onDone(result, current);
         else if (result != Result::success)
             onDone(result, std::nullopt);

@@ -39,10 +39,10 @@ namespace
             }
         }
 
-        void FillCacheWithModifiedNodes(uint32_t highestDirectory)
+        void FillCacheWithModifiedNodes(uint32_t highestDirectory, std::size_t leftFree = 0)
         {
             auto record = Directory("x");
-            for (uint32_t inode = highestDirectory; Volume().Cache().ModifiedNodes() != Volume().Cache().Capacity(); inode -= 3)
+            for (uint32_t inode = highestDirectory; Volume().Cache().ModifiedNodes() != Volume().Cache().Capacity() - leftFree; inode -= 3)
                 ASSERT_EQ(fs::Result::success, Apply({ fs::NorInodePut{ inode, infra::MakeRange(record) } })) << inode;
         }
     };
@@ -499,18 +499,44 @@ TEST_F(NorRecordApplyTest, a_path_that_does_not_fit_in_the_cache_is_unsupported)
 
 TEST_F(NorRecordApplyTest, an_inode_put_whose_split_the_cache_has_no_room_for_is_unsupported)
 {
-    AddNumberedDirectories(47);
+    AddNumberedDirectories(46);
     Builder().Commit();
     Mount();
-    FillCacheWithModifiedNodes(48);
+    FillCacheWithModifiedNodes(47);
 
     auto record = Directory("x");
     fs::NorBTree inodes{ Volume().Cache(), InodeTableId() };
-    uint32_t inode = 49;
+    uint32_t inode = 48;
     while (inodes.NodesModifiedByInsert(State().inodeTable, inode) == inodes.NodesModifiedByChange(State().inodeTable, inode))
         ASSERT_EQ(fs::Result::success, Apply({ fs::NorInodePut{ inode++, infra::MakeRange(record) } }));
+    ASSERT_LT(48, inode);
 
     EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorInodePut{ inode, infra::MakeRange(record) } }));
+}
+
+TEST_F(NorRecordApplyTest, an_inode_put_into_an_unmodified_leaf_with_room_fits_a_cache_with_room_for_that_leaf)
+{
+    AddNumberedDirectories(46);
+    Builder().Commit();
+    Mount();
+    FillCacheWithModifiedNodes(44, 1);
+    auto record = Directory("x");
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorInodePut{ 48, infra::MakeRange(record) } }));
+    EXPECT_EQ(Volume().Cache().Capacity(), Volume().Cache().ModifiedNodes());
+}
+
+TEST_F(NorRecordApplyTest, a_directory_entry_put_into_an_unmodified_leaf_with_room_fits_a_cache_with_room_for_that_leaf)
+{
+    AddNumberedDirectories(60);
+    auto directory = Builder().AddDirectory(root, "d");
+    Builder().AddDirectory(directory, "e");
+    Builder().Commit();
+    Mount();
+    FillCacheWithModifiedNodes(60, 2);
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorDirectoryEntryPut{ directory, 1, 3 } }));
+    EXPECT_EQ(Volume().Cache().Capacity(), Volume().Cache().ModifiedNodes());
 }
 
 TEST_F(NorRecordApplyTest, a_directory_entry_put_whose_split_the_cache_has_no_room_for_is_unsupported)
@@ -530,6 +556,7 @@ TEST_F(NorRecordApplyTest, a_directory_entry_put_whose_split_the_cache_has_no_ro
     uint32_t key = 1;
     while (entries.NodesModifiedByInsert(map(), key) == entries.NodesModifiedByChange(map(), key))
         ASSERT_EQ(fs::Result::success, Apply({ fs::NorDirectoryEntryPut{ 2, key++, 3 } }));
+    ASSERT_LT(1, key);
 
     EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorDirectoryEntryPut{ 2, key, 3 } }));
 }
@@ -545,6 +572,29 @@ TEST_F(NorRecordApplyTest, a_block_set_whose_new_map_node_the_cache_has_no_room_
     FillCacheWithModifiedNodes(60);
 
     EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorBlockSet{ file, 0, 0, 9 } }));
+}
+
+TEST_F(NorRecordApplyTest, a_block_set_counts_the_unmodified_node_of_its_inode_as_taken)
+{
+    AddNumberedDirectories(60);
+    auto file = Builder().AddFile(root, "f", Bytes("abc"));
+    Builder().Commit();
+    Mount();
+    FillCacheWithModifiedNodes(60, 1);
+
+    EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorBlockSet{ file, 0, 0, 9 } }));
+}
+
+TEST_F(NorRecordApplyTest, a_block_set_fits_a_cache_with_room_for_the_node_of_its_inode_and_its_new_map_node)
+{
+    AddNumberedDirectories(60);
+    auto file = Builder().AddFile(root, "f", Bytes("abc"));
+    Builder().Commit();
+    Mount();
+    FillCacheWithModifiedNodes(60, 2);
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorBlockSet{ file, 0, 0, 9 } }));
+    EXPECT_EQ(Volume().Cache().Capacity(), Volume().Cache().ModifiedNodes());
 }
 
 namespace
