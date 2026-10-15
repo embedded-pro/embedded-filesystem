@@ -23,9 +23,10 @@ namespace metrics
         }
     }
 
-    NorSubject::NorSubject(fs::NorFileSystem& fileSystem, std::size_t ramBytes)
+    NorSubject::NorSubject(fs::NorFileSystem& fileSystem, std::size_t ramBytes, uint32_t sectorsPerBlock)
         : fileSystem(fileSystem)
         , ramBytes(ramBytes)
+        , sectorsPerBlock(sectorsPerBlock)
     {}
 
     std::string_view NorSubject::Name() const
@@ -176,6 +177,16 @@ namespace metrics
             {
                 Finish(call, fs::Result::success);
             });
+    }
+
+    std::optional<double> NorSubject::LevelingOverhead() const
+    {
+        auto counters = fileSystem.Counters();
+        auto erasedBlocks = counters.erasedSectors / sectorsPerBlock;
+        if (erasedBlocks == 0)
+            return 0.0;
+
+        return static_cast<double>(counters.movedBlocks) / erasedBlocks;
     }
 
     NorSubject::Call& NorSubject::Start(std::string_view path)

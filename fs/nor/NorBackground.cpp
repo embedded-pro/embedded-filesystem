@@ -17,12 +17,13 @@ namespace fs
 
     void NorBackground::Start()
     {
+        urgent = false;
         machine.Dispatch(NorBackgroundStart{});
     }
 
     void NorBackground::Stop()
     {
-        really_assert(std::holds_alternative<NorBackgroundWaiting>(machine.CurrentState()) || std::holds_alternative<NorBackgroundStopped>(machine.CurrentState()));
+        really_assert(!std::holds_alternative<NorBackgroundWorking>(machine.CurrentState()));
         machine.Dispatch(NorBackgroundStop{});
     }
 
@@ -31,9 +32,36 @@ namespace fs
         machine.Dispatch(NorBackgroundIdle{});
     }
 
+    void NorBackground::Urge()
+    {
+        if (!claimer.IsClaimed() && volume.Leveler().FallbackDue())
+            urgent = true;
+    }
+
+    void NorBackground::CallReleased()
+    {
+        if (FallbackDue())
+            machine.Dispatch(NorBackgroundUrge{});
+    }
+
     bool NorBackground::HasWork() const
     {
-        return CheckpointDue() || volume.Eraser().HasWork();
+        return FallbackDue() || CheckpointDue() || volume.Eraser().HasWork() || MoveDue();
+    }
+
+    bool NorBackground::FallbackDue() const
+    {
+        return urgent && PoolHoldsAMove() && volume.Leveler().FallbackDue();
+    }
+
+    bool NorBackground::MoveDue() const
+    {
+        return PoolHoldsAMove() && volume.Leveler().Due();
+    }
+
+    bool NorBackground::PoolHoldsAMove() const
+    {
+        return volume.State().blocks.Count(NorBlockState::freeErased) > 2 * volume.Geometry().NodeBlocksPerCheckpoint();
     }
 
     bool NorBackground::CheckpointDue() const
@@ -57,7 +85,7 @@ namespace fs
 
     bool NorBackground::ShouldStop() const
     {
-        return claimer.ShouldYield() || !HasWork();
+        return (claimer.ShouldYield() && !FallbackDue()) || !HasWork();
     }
 
     void NorBackground::Claim()
@@ -68,24 +96,51 @@ namespace fs
             }));
     }
 
+    void NorBackground::ClaimAhead()
+    {
+        claimer.ClaimUrgent(machine.CompletionWith<void()>([]
+            {
+                return NorBackgroundGranted{};
+            }));
+    }
+
     void NorBackground::Work()
     {
-        erasing = !CheckpointDue();
-        if (erasing)
+        auto fallback = FallbackDue();
+        urgent = false;
+        erasing = false;
+
+        if (!fallback && CheckpointDue())
+            WriteCheckpoint();
+        else if (!fallback && volume.Eraser().HasWork())
+        {
+            erasing = true;
             volume.Eraser().Step(machine.CompletionWith<void()>([]
                 {
                     return NorBackgroundUnitDone{};
                 }));
-        else
-        {
-            StartRound();
-            volume.Checkpoints().Write(machine.CompletionWith<void(Result result)>([](Result result)
-                {
-                    // The pool holds every block that the checkpoint may take
-                    really_assert(result == Result::success);
-                    return NorBackgroundUnitDone{};
-                }));
         }
+        else
+            MoveBlock();
+    }
+
+    void NorBackground::WriteCheckpoint()
+    {
+        StartRound();
+        volume.Checkpoints().Write(machine.CompletionWith<void(Result result)>([](Result result)
+            {
+                // The pool holds every block that the checkpoint may take
+                really_assert(result == Result::success);
+                return NorBackgroundUnitDone{};
+            }));
+    }
+
+    void NorBackground::MoveBlock()
+    {
+        volume.Leveler().Move(machine.CompletionWith<void()>([]
+            {
+                return NorBackgroundUnitDone{};
+            }));
     }
 
     void NorBackground::StartRound()
@@ -105,6 +160,7 @@ namespace fs
             volume.Eraser().CountAsRefill();
 
         erasing = false;
+        urgent = false;
         claimer.Release();
     }
 }

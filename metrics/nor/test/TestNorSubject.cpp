@@ -16,6 +16,7 @@ namespace
 {
     const metrics::NorModel testNor{ "test-nor", 64, 4096, 256, 1, { 400us, 45ms, 50'000'000 }, { 3ms, 400ms, 50'000'000 } };
     constexpr fs::NorConfig testConfig{ .maxBlocks = 64 };
+    constexpr fs::NorConfig levelingConfig{ .maxBlocks = 64, .staticWearLevelingThreshold = 1, .staticWearLevelingInterval = 1 };
 
     std::vector<uint8_t> Pattern(std::size_t size, uint32_t fileId)
     {
@@ -72,6 +73,35 @@ TEST_F(NorSubjectTest, is_named_after_the_nor_filesystem)
 TEST_F(NorSubjectTest, ram_is_that_of_a_volume_with_one_open_file)
 {
     EXPECT_EQ((sizeof(fs::NorFileSystem::WithStorage<testConfig, 1>)), subject.RamBytes());
+}
+
+TEST_F(NorSubjectTest, leveling_overhead_is_the_share_of_block_erases_that_moves_caused)
+{
+    metrics::NorSubject::WithConfig<levelingConfig> leveling{ metered };
+    metrics::Runner levelingRunner{ time, leveling, probe };
+    ASSERT_EQ(fs::Result::success, levelingRunner.Format());
+    ASSERT_EQ(fs::Result::success, levelingRunner.Mount());
+    EXPECT_EQ(0.0, leveling.LevelingOverhead());
+
+    auto still = Pattern(20000, 1);
+    auto file = levelingRunner.Open("/static", metrics::OpenMode::write);
+    ASSERT_TRUE(file.has_value());
+    ASSERT_EQ(fs::Result::success, levelingRunner.Write(*file, infra::MakeRange(still)));
+    ASSERT_EQ(fs::Result::success, levelingRunner.Close(*file));
+    auto hot = Pattern(6000, 2);
+    for (int rewrite = 0; rewrite != 100; ++rewrite)
+    {
+        auto rewritten = levelingRunner.Open("/hot", metrics::OpenMode::write);
+        ASSERT_TRUE(rewritten.has_value());
+        ASSERT_EQ(fs::Result::success, levelingRunner.Write(*rewritten, infra::MakeRange(hot)));
+        ASSERT_EQ(fs::Result::success, levelingRunner.Close(*rewritten));
+        levelingRunner.Idle(std::chrono::seconds(1));
+    }
+
+    auto overhead = leveling.LevelingOverhead();
+    ASSERT_TRUE(overhead.has_value());
+    EXPECT_LT(0.0, overhead.value_or(0.0));
+    EXPECT_GT(0.5, overhead.value_or(1.0));
 }
 
 TEST_F(NorSubjectTest, mount_of_an_erased_device_reports_corruption)

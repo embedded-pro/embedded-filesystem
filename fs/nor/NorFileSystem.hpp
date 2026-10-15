@@ -43,6 +43,7 @@ namespace fs
         static constexpr Machine::Rules Rules();
 
         void Format(const infra::Function<void(Result result)>& onDone);
+        NorCounters Counters() const;
 
         void Mount(const infra::Function<void(Result result)>& onDone) override;
         void Unmount(const infra::Function<void(Result result)>& onDone) override;

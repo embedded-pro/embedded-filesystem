@@ -25,8 +25,10 @@ namespace fs
         bool Due() const;
         uint32_t CollectableBlocks() const;
         uint32_t LeftBlocks() const;
+        bool Moving() const;
         void Reset();
-        void Collect(const infra::Function<void()>& onCollected);
+        void Move(uint32_t block);
+        void Collect(bool collectionDue, const infra::Function<void()>& onCollected);
         void Committed();
 
     private:
@@ -56,6 +58,9 @@ namespace fs
         NorVolume& volume;
         std::optional<uint32_t> block;
         uint32_t slot{ 0 };
+        std::optional<uint32_t> moving;
+        bool movePassed{ false };
+        bool collecting{ false };
         uint32_t left{ 0 };
         uint32_t leftByStep{ 0 };
         uint32_t freeSlots{ 0 };

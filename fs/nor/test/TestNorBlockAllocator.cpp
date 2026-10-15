@@ -32,6 +32,18 @@ namespace
             return allocated.value_or(std::nullopt);
         }
 
+        std::optional<uint32_t> AllocateMostWorn()
+        {
+            std::optional<std::optional<uint32_t>> allocated;
+            Volume().Allocator().Allocate(fs::NorBlockType::node, {}, fs::NorReserve::used, fs::NorWear::most, [&allocated](std::optional<uint32_t> block)
+                {
+                    allocated = block;
+                });
+            ExecuteAllActions();
+            EXPECT_TRUE(allocated.has_value());
+            return allocated.value_or(std::nullopt);
+        }
+
         void LeaveFree(uint32_t free)
         {
             for (uint32_t block = 2; block != 32; ++block)
@@ -68,12 +80,45 @@ TEST_F(NorBlockAllocatorTest, takes_the_free_and_erased_block_with_the_lowest_er
     EXPECT_EQ(9, Allocate());
 }
 
+TEST_F(NorBlockAllocatorTest, counts_the_blocks_it_allocates)
+{
+    Mount();
+
+    Allocate();
+    Allocate();
+    LeaveFree(0);
+    Allocate();
+
+    EXPECT_EQ(2, Volume().Counters().allocatedBlocks);
+}
+
 TEST_F(NorBlockAllocatorTest, takes_the_lowest_block_among_equally_worn_ones)
 {
     Mount();
 
     EXPECT_EQ(4, Allocate());
     EXPECT_EQ(5, Allocate());
+}
+
+TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_takes_the_free_and_erased_block_with_the_highest_erase_count)
+{
+    Builder().SetEraseCount(9, 5);
+    Builder().SetEraseCount(12, 5);
+    Builder().SetEraseCount(13, 4);
+    Mount();
+
+    EXPECT_EQ(9, AllocateMostWorn());
+    EXPECT_EQ(12, AllocateMostWorn());
+    EXPECT_EQ(fs::NorBlockState::pending, State().blocks.State(12));
+}
+
+TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_without_an_erased_block_erases_the_least_worn_free_block)
+{
+    Builder().SetEraseCount(12, 0);
+    Mount();
+    MarkEveryFreeBlockNotErased();
+
+    EXPECT_EQ(12, AllocateMostWorn());
 }
 
 TEST_F(NorBlockAllocatorTest, programs_part_b_with_the_type_the_next_sequence_and_the_owner)

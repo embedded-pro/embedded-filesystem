@@ -35,6 +35,7 @@ namespace fs
 
         volume.Flash().EraseSectors(sector, sector + 1, [this]
             {
+                ++volume.Counters().erasedSectors;
                 ++sector;
                 if (sector == volume.Geometry().FirstSectorOfBlock(block.value_or(0) + 1))
                     ProgramPartA();
@@ -88,7 +89,7 @@ namespace fs
             {
                 auto& state = volume.State();
                 auto programmed = block.value_or(0);
-                state.eraseCounts.Record(programmed, state.eraseCounts.Count(programmed) + 1);
+                state.eraseCounts.Raise(programmed, superblocks);
                 state.blocks.Set(programmed, NorBlockState::freeErased);
                 block = std::nullopt;
                 onStepped();

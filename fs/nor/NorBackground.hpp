@@ -60,7 +60,12 @@ namespace fs
         static constexpr const char* name{ "UnitDone" };
     };
 
-    using NorBackgroundEvent = std::variant<NorBackgroundStart, NorBackgroundStop, NorBackgroundIdle, NorBackgroundGranted, NorBackgroundUnitDone>;
+    struct NorBackgroundUrge
+    {
+        static constexpr const char* name{ "Urge" };
+    };
+
+    using NorBackgroundEvent = std::variant<NorBackgroundStart, NorBackgroundStop, NorBackgroundIdle, NorBackgroundGranted, NorBackgroundUnitDone, NorBackgroundUrge>;
 
     class NorBackground
     {
@@ -68,7 +73,7 @@ namespace fs
         using Machine = services::TableStateMachine<NorBackgroundState, NorBackgroundEvent, NorBackground>;
         using Initial = NorBackgroundStopped;
 
-        static constexpr std::array<Machine::Transition, 7> Rows();
+        static constexpr std::array<Machine::Transition, 9> Rows();
         static constexpr Machine::Rules Rules();
 
         explicit NorBackground(NorVolume& volume);
@@ -79,15 +84,23 @@ namespace fs
         void Start();
         void Stop();
         void Idle();
+        void Urge();
+        void CallReleased();
 
     private:
         bool HasWork() const;
         bool CheckpointDue() const;
+        bool FallbackDue() const;
+        bool MoveDue() const;
+        bool PoolHoldsAMove() const;
         bool RoundLeft() const;
         bool CalledSinceRound() const;
         bool ShouldStop() const;
         void Claim();
+        void ClaimAhead();
         void Work();
+        void WriteCheckpoint();
+        void MoveBlock();
         void StartRound();
         void Release();
 
@@ -95,13 +108,14 @@ namespace fs
         NorVolume& volume;
         OperationQueue::BackgroundClaimer claimer;
         bool erasing{ false };
+        bool urgent{ false };
         std::optional<uint32_t> roundReleases;
         uint32_t roundStart{ 0 };
         uint32_t roundBlocks{ 0 };
         Machine::WithStorage<2> machine;
     };
 
-    constexpr std::array<NorBackground::Machine::Transition, 7> NorBackground::Rows()
+    constexpr std::array<NorBackground::Machine::Transition, 9> NorBackground::Rows()
     {
         return {
             Machine::Row<NorBackgroundStopped, NorBackgroundStart, NorBackgroundWaiting>(),
@@ -114,7 +128,17 @@ namespace fs
                     background.Claim();
                     return NorBackgroundClaiming{};
                 }),
+            Machine::Row<NorBackgroundWaiting, NorBackgroundUrge, NorBackgroundClaiming>(nullptr, [](NorBackground& background, NorBackgroundWaiting&, const NorBackgroundUrge&)
+                {
+                    background.ClaimAhead();
+                    return NorBackgroundClaiming{};
+                }),
             Machine::Row<NorBackgroundWaiting, NorBackgroundStop, NorBackgroundStopped>(),
+            Machine::Row<NorBackgroundClaiming, NorBackgroundStop, NorBackgroundStopped>(nullptr, [](NorBackground& background, NorBackgroundClaiming&, const NorBackgroundStop&)
+                {
+                    background.Release();
+                    return NorBackgroundStopped{};
+                }),
             Machine::Row<NorBackgroundClaiming, NorBackgroundGranted, NorBackgroundWaiting>([](const NorBackground& background, const NorBackgroundClaiming&, const NorBackgroundGranted&)
                 {
                     return background.ShouldStop();
@@ -150,7 +174,7 @@ namespace fs
         return Machine::Rules{}
             .Allow<NorBackgroundStopped, NorBackgroundWaiting>()
             .Allow<NorBackgroundWaiting, NorBackgroundClaiming, NorBackgroundStopped>()
-            .Allow<NorBackgroundClaiming, NorBackgroundWaiting, NorBackgroundWorking>()
+            .Allow<NorBackgroundClaiming, NorBackgroundWaiting, NorBackgroundWorking, NorBackgroundStopped>()
             .Allow<NorBackgroundWorking, NorBackgroundWaiting>();
     }
 }

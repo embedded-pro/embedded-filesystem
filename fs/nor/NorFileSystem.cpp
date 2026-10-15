@@ -42,6 +42,11 @@ namespace fs
             volume.Defer(onDone, Result::busy);
     }
 
+    NorCounters NorFileSystem::Counters() const
+    {
+        return volume.Counters();
+    }
+
     void NorFileSystem::Mount(const infra::Function<void(Result result)>& onDone)
     {
         if (lifecycle.Dispatch(NorMountRequested{}) == services::DispatchResult::transitioned)

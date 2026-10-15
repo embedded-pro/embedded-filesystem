@@ -42,15 +42,30 @@ namespace fs
         return left;
     }
 
+    bool NorNodeCollector::Moving() const
+    {
+        return moving.has_value();
+    }
+
     void NorNodeCollector::Reset()
     {
         block = std::nullopt;
         slot = 0;
+        moving = std::nullopt;
+        movePassed = false;
         awaitingCommit = 0;
     }
 
-    void NorNodeCollector::Collect(const infra::Function<void()>& onCollected)
+    void NorNodeCollector::Move(uint32_t moved)
     {
+        moving = moved;
+        block = moved;
+        slot = 0;
+    }
+
+    void NorNodeCollector::Collect(bool collectionDue, const infra::Function<void()>& onCollected)
+    {
+        collecting = collectionDue;
         onDone = onCollected;
         leftByStep = 0;
         freeSlots = FreeSlots();
@@ -60,6 +75,10 @@ namespace fs
 
     void NorNodeCollector::Committed()
     {
+        if (movePassed)
+            ++volume.Counters().movedBlocks;
+
+        movePassed = false;
         auto& state = volume.State();
         for (uint32_t candidate = superblocks; awaitingCommit != 0 && candidate != state.blocks.Blocks(); ++candidate)
             if (state.nodeBlocks.Contains(candidate) && state.blocks.State(candidate) == NorBlockState::pending)
@@ -73,7 +92,7 @@ namespace fs
     void NorNodeCollector::Examine()
     {
         const auto& geometry = volume.Geometry();
-        if (leftByStep == 2 * geometry.NodeBlocksPerCheckpoint() || !HasRoom())
+        if (leftByStep == 2 * geometry.NodeBlocksPerCheckpoint() || !HasRoom() || (!collecting && !moving.has_value()))
         {
             onDone();
             return;
@@ -236,11 +255,15 @@ namespace fs
     {
         volume.State().blocks.Set(block.value_or(0), NorBlockState::pending);
         ++awaitingCommit;
+        movePassed = movePassed || block == moving;
         Leave();
     }
 
     void NorNodeCollector::Leave()
     {
+        if (block == moving)
+            moving = std::nullopt;
+
         ++left;
         ++leftByStep;
     }

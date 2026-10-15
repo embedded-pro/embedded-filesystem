@@ -117,3 +117,44 @@ TEST_F(NorEraseCountsTest, normalize_from_beyond_the_last_block_keeps_the_base)
     EXPECT_EQ(base, counts.Base());
     EXPECT_EQ(300, counts.Count(2));
 }
+
+TEST_F(NorEraseCountsTest, raising_the_last_block_at_the_lowest_count_moves_the_base_up)
+{
+    for (uint32_t block = 0; block != 8; ++block)
+        counts.Record(block, 300);
+    counts.Normalize(2);
+    for (uint32_t block = 2; block != 7; ++block)
+        counts.Raise(block, 2);
+    auto base = counts.Base();
+
+    counts.Raise(7, 2);
+
+    EXPECT_EQ(base + 1, counts.Base());
+    EXPECT_EQ(301, counts.Count(7));
+    EXPECT_EQ(301, counts.Count(2));
+}
+
+TEST_F(NorEraseCountsTest, raising_a_block_while_others_remain_at_the_lowest_count_keeps_the_base)
+{
+    for (uint32_t block = 0; block != 8; ++block)
+        counts.Record(block, 300);
+    counts.Normalize(2);
+
+    counts.Raise(4, 2);
+
+    EXPECT_EQ(300, counts.Base());
+    EXPECT_EQ(301, counts.Count(4));
+}
+
+TEST_F(NorEraseCountsTest, raising_keeps_a_spread_of_more_than_255_from_saturating_once_the_lowest_count_rises)
+{
+    counts.Record(2, 0);
+    for (uint32_t block = 3; block != 8; ++block)
+        counts.Record(block, 255);
+    counts.Normalize(2);
+
+    counts.Raise(2, 2);
+    counts.Raise(7, 2);
+
+    EXPECT_EQ(256, counts.Count(7));
+}

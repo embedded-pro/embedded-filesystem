@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -70,6 +71,11 @@ namespace metrics
 
         virtual void QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone) = 0;
         virtual void IdleHint(const std::function<void()>& onDone) = 0;
+
+        virtual std::optional<double> LevelingOverhead() const
+        {
+            return std::nullopt;
+        }
     };
 }
 

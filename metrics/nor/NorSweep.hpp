@@ -66,6 +66,7 @@ namespace metrics
         fs::Result Rename(const std::string& from, const std::string& to);
         void Settle();
         bool JournalMoreThanHalfFull();
+        fs::NorCounters Counters() const;
         std::optional<fs::EntryType> TypeOf(const std::string& path);
         fs::Result OpenFile(const std::string& path, fs::OpenMode mode);
         fs::Result Write(const std::vector<uint8_t>& data);

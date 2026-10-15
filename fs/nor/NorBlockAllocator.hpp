@@ -17,6 +17,12 @@ namespace fs
         used
     };
 
+    enum class NorWear : uint8_t
+    {
+        least,
+        most
+    };
+
     class NorBlockAllocator
     {
     public:
@@ -26,9 +32,10 @@ namespace fs
         ~NorBlockAllocator();
 
         void Allocate(NorBlockType type, const NorBlockOwner& owner, NorReserve reserve, const infra::Function<void(std::optional<uint32_t> block)>& onDone);
+        void Allocate(NorBlockType type, const NorBlockOwner& owner, NorReserve reserve, NorWear wear, const infra::Function<void(std::optional<uint32_t> block)>& onDone);
 
     private:
-        std::optional<uint32_t> LeastWornErased() const;
+        std::optional<uint32_t> ErasedOfWear() const;
         void TakeErased();
         void ProgramPartB();
 
@@ -37,6 +44,7 @@ namespace fs
         uint32_t block{ 0 };
         NorBlockType type{ NorBlockType::data };
         NorBlockOwner owner;
+        NorWear wear{ NorWear::least };
         infra::AutoResetFunction<void(std::optional<uint32_t> block)> onDone;
     };
 }

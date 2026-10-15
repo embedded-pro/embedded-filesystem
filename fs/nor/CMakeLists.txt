@@ -30,6 +30,7 @@ target_sources(fs.nor PRIVATE
     NorCheckpointWriter.cpp
     NorCheckpointWriter.hpp
     NorConfig.hpp
+    NorCounters.hpp
     NorCreate.cpp
     NorCreate.hpp
     NorDirectoryKey.cpp
@@ -124,6 +125,8 @@ target_sources(fs.nor PRIVATE
     NorVolume.hpp
     NorVolumeState.cpp
     NorVolumeState.hpp
+    NorWearLeveler.cpp
+    NorWearLeveler.hpp
     NorWrite.cpp
     NorWrite.hpp
 )

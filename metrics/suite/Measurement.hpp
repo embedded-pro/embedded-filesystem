@@ -14,6 +14,7 @@
 #include "gtest/gtest.h"
 #include <functional>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <set>
 #include <string>
@@ -59,6 +60,7 @@ namespace metrics
         Runner& Workloads();
         MetricRecorder& Recorder();
         const MeteredFlash& Flash() const;
+        std::optional<double> LevelingOverhead() const;
         WorkloadParameters Parameters(uint8_t fillPercent = 0) const;
 
     private:

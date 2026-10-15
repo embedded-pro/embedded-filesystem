@@ -132,6 +132,9 @@ TEST_P(NorMetrics, L5_static_fill)
             return flash.Counters().sectorsErased < erases;
         });
     RecordWear(measurement, "L5", std::nullopt);
+    auto overhead = measurement.LevelingOverhead();
+    if (overhead.has_value())
+        measurement.Recorder().Record("WL-4", "L5", "share", metrics::Better::lower, overhead.value_or(0.0));
 
     EXPECT_EQ(std::nullopt, metrics::UnexpectedResult(measurement.Workloads()));
 }

@@ -94,6 +94,11 @@ TEST_P(LittleFsSubjectTest, ram_counts_the_filesystem_its_buffers_and_one_open_f
     EXPECT_EQ(sizeof(lfs_t) + 3 * cache + GetParam()->lookaheadSize + sizeof(lfs_file_t), subject.RamBytes());
 }
 
+TEST_P(LittleFsSubjectTest, reports_no_leveling_overhead)
+{
+    EXPECT_EQ(std::nullopt, subject.LevelingOverhead());
+}
+
 TEST(LittleFsConfigurationTest, the_ram_matched_configuration_uses_the_ram_budget)
 {
     EXPECT_EQ(7680, 3 * metrics::littleFsRamMatched.cacheSize + metrics::littleFsRamMatched.lookaheadSize);

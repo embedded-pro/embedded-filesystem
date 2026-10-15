@@ -2,6 +2,7 @@
 #define FS_NOR_NOR_CHECKPOINT_WRITER_HPP
 
 #include "fs/interfaces/Result.hpp"
+#include "fs/nor/NorBlockAllocator.hpp"
 #include "fs/nor/NorCheckpoint.hpp"
 #include "fs/nor/NorLayout.hpp"
 #include "fs/nor/NorNodeWriteBack.hpp"
@@ -46,7 +47,9 @@ namespace fs
         std::array<uint8_t, norCheckpointFixedBytes> fixedPart{};
         uint32_t written{ 0 };
         uint32_t chunk{ 0 };
+        bool collectionDue{ false };
         bool collect{ false };
+        NorWear wear{ NorWear::least };
         infra::Crc32 crc;
         infra::AutoResetFunction<void(Result result)> onDone;
     };

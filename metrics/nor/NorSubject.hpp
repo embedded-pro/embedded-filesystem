@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <functional>
 #include <list>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -45,8 +46,10 @@ namespace metrics
         void QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone) override;
         void IdleHint(const std::function<void()>& onDone) override;
 
+        std::optional<double> LevelingOverhead() const override;
+
     protected:
-        NorSubject(fs::NorFileSystem& fileSystem, std::size_t ramBytes);
+        NorSubject(fs::NorFileSystem& fileSystem, std::size_t ramBytes, uint32_t sectorsPerBlock);
 
     private:
         struct Call
@@ -75,6 +78,7 @@ namespace metrics
     private:
         fs::NorFileSystem& fileSystem;
         std::size_t ramBytes;
+        uint32_t sectorsPerBlock;
         std::array<infra::SharedPtr<fs::File>, 2> files;
         std::list<Call> calls;
     };
@@ -100,7 +104,7 @@ namespace metrics
     public:
         explicit WithConfig(hal::Flash& flash)
             : detail::NorSubjectStorage<Config>(flash)
-            , NorSubject(this->storedFileSystem, sizeof(fs::NorFileSystem::WithStorage<Config, 1>))
+            , NorSubject(this->storedFileSystem, sizeof(fs::NorFileSystem::WithStorage<Config, 1>), Config.sectorsPerBlock)
         {}
     };
 }
