@@ -98,6 +98,12 @@ namespace fs
             return;
         }
 
+        if (!existing.has_value() && !HasRoomFor(inodes.NodesModifiedByInsert(state.inodeTable, inodePut.inode).value_or(0) - inodes.NodesModifiedByChange(state.inodeTable, inodePut.inode)))
+        {
+            onDone(Result::unsupported);
+            return;
+        }
+
         auto map = existing.has_value() ? MapOf(*existing) : NorMapRoot{};
         auto record = existing.has_value() ? inodes.Modify(state.inodeTable, inodePut.inode) : inodes.Insert(state.inodeTable, inodePut.inode);
         std::ranges::copy(inodePut.record, record.begin());
@@ -163,6 +169,12 @@ namespace fs
         if (entries.Find(directoryMap, entryPut.key).has_value() || !entries.NodesModifiedByInsert(directoryMap, entryPut.key).has_value())
         {
             onDone(Result::corrupted);
+            return;
+        }
+
+        if (!HasRoomFor(entries.NodesModifiedByInsert(directoryMap, entryPut.key).value_or(0) - entries.NodesModifiedByChange(directoryMap, entryPut.key)))
+        {
+            onDone(Result::unsupported);
             return;
         }
 
@@ -250,6 +262,12 @@ namespace fs
         if (data.Find(dataMap, blockSet.index) != blockSet.previous || (blockSet.previous != 0 && !IsInVolume(blockSet.previous)) || (sets && ((!IsFreeBlock(blockSet.block) && !ofEpoch) || !data.NodesModifiedBySet(dataMap, blockSet.index).has_value())))
         {
             onDone(Result::corrupted);
+            return;
+        }
+
+        if (sets && !HasRoomFor(data.NodesCreatedBySet(dataMap, blockSet.index).value_or(0)))
+        {
+            onDone(Result::unsupported);
             return;
         }
 
@@ -387,6 +405,12 @@ namespace fs
             return std::nullopt;
 
         return record;
+    }
+
+    bool NorRecordApply::HasRoomFor(uint32_t createdNodes) const
+    {
+        const auto& cache = volume.Cache();
+        return cache.ModifiedNodes() + cache.UnmodifiedPinnedNodes() + createdNodes <= cache.Capacity();
     }
 
     bool NorRecordApply::IsInVolume(uint32_t block) const

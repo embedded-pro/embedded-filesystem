@@ -1,4 +1,5 @@
 #include "fs/nor/NorFileSystem.hpp"
+#include "infra/event/EventDispatcher.hpp"
 #include <algorithm>
 #include <utility>
 
@@ -236,6 +237,7 @@ namespace fs
     {
         lifecycleClaimer.Claim([this]
             {
+                replayCheckpointBefore = std::nullopt;
                 StartMount();
             });
     }
@@ -247,6 +249,7 @@ namespace fs
                 return NorMountDone{ result };
             });
         volume.Cache().Clear();
+        volume.Collector().Reset();
         volume.Operation().emplace<NorMount>(volume.Flash(), volume.Config(), volume.State(), volume.JournalBuffer(), [this](Result result)
                               {
                                   if (result == Result::success)
@@ -259,9 +262,18 @@ namespace fs
 
     void NorFileSystem::Replay()
     {
-        volume.Operation().emplace<NorReplay>(volume, [this](Result result)
+        volume.Operation().emplace<NorReplay>(volume, replayCheckpointBefore, [this](Result result, std::optional<NorRecordPosition> overflow)
                               {
-                                  LifecycleOperationDone(result);
+                                  if (!overflow.has_value())
+                                      LifecycleOperationDone(result);
+                                  else
+                                  {
+                                      replayCheckpointBefore = overflow;
+                                      infra::EventDispatcher::Instance().Schedule([this]
+                                          {
+                                              StartMount();
+                                          });
+                                  }
                               })
             .Start();
     }

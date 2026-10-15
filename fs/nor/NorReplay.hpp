@@ -4,6 +4,7 @@
 #include "fs/common/CrcRecord.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorRecordReader.hpp"
+#include "fs/nor/NorVolumeState.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/Function.hpp"
 #include <cstddef>
@@ -17,7 +18,7 @@ namespace fs
     class NorReplay
     {
     public:
-        NorReplay(NorVolume& volume, const infra::Function<void(Result result)>& onDone);
+        NorReplay(NorVolume& volume, std::optional<NorRecordPosition> checkpointBefore, const infra::Function<void(Result result, std::optional<NorRecordPosition> overflow)>& onDone);
         NorReplay(const NorReplay& other) = delete;
         NorReplay& operator=(const NorReplay& other) = delete;
         ~NorReplay();
@@ -27,6 +28,8 @@ namespace fs
     private:
         void ReadRecord();
         void OnRecord(const std::optional<OpenedRecord>& record);
+        void WriteCheckpoint();
+        void Apply(const OpenedRecord& record);
         void Applied(Result result);
 
     private:
@@ -35,7 +38,10 @@ namespace fs
         std::size_t index{ 0 };
         uint32_t offset{ 0 };
         bool linked{ false };
-        infra::AutoResetFunction<void(Result result)> onDone;
+        std::optional<NorRecordPosition> checkpointBefore;
+        std::optional<NorRecordPosition> checkpointed;
+        NorRecordPosition current;
+        infra::AutoResetFunction<void(Result result, std::optional<NorRecordPosition> overflow)> onDone;
     };
 }
 

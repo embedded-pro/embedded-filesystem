@@ -51,6 +51,7 @@ target_sources(fs.nor_test PRIVATE
     TestNorRecordApply.cpp
     TestNorRemove.cpp
     TestNorRename.cpp
+    TestNorReplay.cpp
     TestNorSuperblock.cpp
     TestNorTruncate.cpp
     TestNorWearLeveler.cpp

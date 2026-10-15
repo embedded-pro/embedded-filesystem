@@ -6,6 +6,7 @@
 #include "fs/nor/NorCheckpoint.hpp"
 #include "fs/nor/NorLayout.hpp"
 #include "fs/nor/NorNodeWriteBack.hpp"
+#include "fs/nor/NorVolumeState.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/Crc.hpp"
 #include "infra/util/Function.hpp"
@@ -27,8 +28,10 @@ namespace fs
         ~NorCheckpointWriter();
 
         void Write(const infra::Function<void(Result result)>& onDone);
+        void WriteBefore(const NorRecordPosition& records, const infra::Function<void(Result result)>& onDone);
 
     private:
+        void Start(const infra::Function<void(Result result)>& onDone);
         void WriteNextNode();
         void NodeBlockAllocated(std::optional<uint32_t> block);
         void ProgramNode();
@@ -44,6 +47,7 @@ namespace fs
         std::size_t slot{ 0 };
         uint32_t block{ 0 };
         NorCheckpoint checkpoint;
+        std::optional<NorRecordPosition> replayRecords;
         std::array<uint8_t, norCheckpointFixedBytes> fixedPart{};
         uint32_t written{ 0 };
         uint32_t chunk{ 0 };

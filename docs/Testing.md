@@ -101,7 +101,7 @@ After each cut, the sweep checks that:
 * a file or directory that was being created or removed exists with its previous contents or not at all, one that was being renamed exists under exactly one of its old and new names with its contents, and no other entry appeared or disappeared;
 * the volume takes a new change after the mount, and the checker accepts the image again after it.
 
-The cases cover every operation that writes, the start of a new journal block after a mount, checkpoints, the background work of erasing, collecting node blocks and moving blocks, and chains of a cut, a mount, an append and another cut.
+The cases cover every operation that writes, the start of a new journal block after a mount, checkpoints, an unmount that commits a file left open, a mount whose smaller cache writes a checkpoint during replay, the background work of erasing, collecting node blocks and moving blocks, and chains of a cut, a mount, an append and another cut.
 The background runs inside the swept phase: the case lets the volume settle, forwarding time until no work is left, so cuts land in its sector erases, its part A programs and its checkpoints; the run without a cut must leave no free block unerased.
 In the collection case, the swept phase removes the directories that an earlier mount made, so that the node blocks of that mount hold mostly unused nodes, and lets the volume settle; the run without a cut must have freed one of those node blocks, which also held nodes of the file, of the directories and of the inode table that were still in use.
 In the four leveling cases, with a threshold of 2 and an interval of 1 erased block, the set-up wears every free block beyond the blocks in use.
@@ -109,6 +109,8 @@ In the first two, the swept phase lets the volume settle and makes a directory; 
 In the last two, every free block is left not erased, and the swept phase writes a file of three blocks without letting the volume settle, so the pool stays empty and the fallback erases its destination.
 In the third, the set-up also wears the node blocks and leaves a few young free blocks, so that the data blocks of a file are the least worn; the run without a cut must have moved a data block of the file, and into a block more worn than the set-up made any free block, not into a young one.
 In the fourth, without the file, the fallback moves node blocks; the run without a cut must no longer use a node block of the set-up as it was.
+In the replay case, the set-up writes directories with a cache of 24 nodes, without unmounting, until replaying its journal needs more than the 15 nodes of the sweep configuration.
+The swept phase mounts with 15 nodes, makes a directory and unmounts; the run without a cut must have written a checkpoint whose records start in an older journal block, and after every cut the volume must mount with 15 nodes and hold every directory of the set-up.
 The first cut of a chain is fixed where it leaves the most behind: after pages programmed beyond the last commit, after a new data block that no record commits, and after the copy of an overwritten block that no record commits; the second cut is swept.
 `Format` is swept too: after a cut, the mount finds the previous volume as long as its second superblock is not erased, completes with `corrupted`, or finds the new, empty volume with every other block in the pre-erased pool.
 Small configurations, with a few cached nodes and a short journal, make the sweep cross journal blocks and checkpoints within a few operations.
