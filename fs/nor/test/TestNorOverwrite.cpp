@@ -10,7 +10,7 @@ namespace
     using fs::Bytes;
     using fs::Pattern;
 
-    constexpr fs::NorConfig config{ .maxBlocks = 32, .cachedNodes = 15 };
+    constexpr fs::NorConfig config{ .maxBlocks = 48, .cachedNodes = 15 };
     constexpr uint32_t payload = 4096 - 36;
     constexpr uint32_t root = fs::NorImageBuilder::rootInode;
 
@@ -22,7 +22,7 @@ namespace
     }
 
     class NorOverwriteTest
-        : public fs::NorFilesFixture<config, 32, 4096>
+        : public fs::NorFilesFixture<config, 48, 4096>
     {
     public:
         NorOverwriteTest()

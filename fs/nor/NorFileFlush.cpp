@@ -11,7 +11,7 @@ namespace fs
 
     NorFileFlush::~NorFileFlush() = default;
 
-    void NorFileFlush::Flush(NorOpenFile& flushed, uint32_t flushTo, const infra::Function<void(Result result)>& onFlushed)
+    void NorFileFlush::Flush(NorOpenFile& flushed, uint32_t flushTo, NorReserve reserve, const infra::Function<void(Result result)>& onFlushed)
     {
         really_assert(flushed.tailBlock.has_value() && flushTo > flushed.programmed && flushTo <= flushed.size);
 
@@ -22,7 +22,7 @@ namespace fs
         if (file->ownsTailBlock)
             Program();
         else
-            volume.Allocator().Allocate(NorBlockType::data, NorBlockOwner{ file->inode, Index() }, [this](std::optional<uint32_t> block)
+            volume.Allocator().Allocate(NorBlockType::data, NorBlockOwner{ file->inode, Index() }, reserve, [this](std::optional<uint32_t> block)
                 {
                     Copied(block);
                 });

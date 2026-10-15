@@ -1,4 +1,5 @@
 #include "fs/nor/NorFileSystem.hpp"
+#include <algorithm>
 #include <utility>
 
 namespace fs
@@ -196,12 +197,14 @@ namespace fs
     void NorFileSystem::ReportUsage(NorPathSlot& slot, NorUsageCall& call)
     {
         const auto& blocks = volume.State().blocks;
-        uint64_t payload = volume.Geometry().PayloadSize();
-        uint64_t total = uint64_t{ volume.Geometry().blocks - superblocks } * payload;
-        uint64_t free = uint64_t{ blocks.Count(NorBlockState::freeErased) + blocks.Count(NorBlockState::freeNotErased) } * payload;
+        const auto& geometry = volume.Geometry();
+        uint64_t payload = geometry.PayloadSize();
+        uint64_t total = uint64_t{ geometry.blocks - superblocks - geometry.ReserveBlocks() } * payload;
+        auto free = blocks.Count(NorBlockState::freeErased) + blocks.Count(NorBlockState::freeNotErased);
+        uint64_t freeBeyondReserve = uint64_t{ free - std::min(free, geometry.ReserveBlocks()) } * payload;
 
         slot.claimer.Release();
-        call.onDone(Result::success, VolumeUsage{ total - free, total });
+        call.onDone(Result::success, VolumeUsage{ total - freeBeyondReserve, total });
     }
 
     void NorFileSystem::BeginFormat()

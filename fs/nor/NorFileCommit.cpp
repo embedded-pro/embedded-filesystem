@@ -20,9 +20,10 @@ namespace fs
 
     NorFileCommit::~NorFileCommit() = default;
 
-    void NorFileCommit::Commit(NorOpenFile& committed, const infra::Function<void(Result result)>& onCommitted)
+    void NorFileCommit::Commit(NorOpenFile& committed, NorReserve commitReserve, const infra::Function<void(Result result)>& onCommitted)
     {
         file = &committed;
+        reserve = commitReserve;
         onDone = onCommitted;
 
         if (!file->Uncommitted())
@@ -33,7 +34,7 @@ namespace fs
 
         auto whole = file->size / volume.Geometry().programUnit * volume.Geometry().programUnit;
         if (file->tailBlock.has_value() && whole > file->programmed)
-            volume.FileFlush().Flush(*file, whole, [this](Result result)
+            volume.FileFlush().Flush(*file, whole, reserve, [this](Result result)
                 {
                     if (result == Result::success)
                         FetchPaths();

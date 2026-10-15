@@ -226,3 +226,18 @@ TEST_F(OperationQueueTest, releasing_a_queued_claim_withdraws_it)
     EXPECT_CALL(idle, callback());
     ForwardTime(1s);
 }
+
+TEST_F(OperationQueueTest, counts_the_releases_of_granted_foreground_claims)
+{
+    EXPECT_EQ(0, queue.ForegroundReleases());
+    ClaimAndGrantFirst();
+    first.Release();
+    Grant(second, 2);
+    second.Release();
+    GrantBackground();
+    EXPECT_CALL(granted, callback(0));
+    ExecuteAllActions();
+    background.Release();
+
+    EXPECT_EQ(1, queue.ForegroundReleases());
+}

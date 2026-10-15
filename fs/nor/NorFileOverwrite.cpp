@@ -103,7 +103,7 @@ namespace fs
         sourceUncommitted = uncommitted;
 
         if (!sourceUncommitted && !file->Admits(index, volume.Geometry().PayloadSize(), NorRadixFanout(volume.Geometry().nodeSize)))
-            volume.FileCommit().Commit(*file, [this](Result result)
+            volume.FileCommit().Commit(*file, NorReserve::kept, [this](Result result)
                 {
                     if (result == Result::success)
                         CopyBlock();
@@ -111,7 +111,7 @@ namespace fs
                         onDone(result);
                 });
         else
-            volume.Allocator().Allocate(NorBlockType::data, NorBlockOwner{ file->inode, index }, [this](std::optional<uint32_t> allocated)
+            volume.Allocator().Allocate(NorBlockType::data, NorBlockOwner{ file->inode, index }, NorReserve::kept, [this](std::optional<uint32_t> allocated)
                 {
                     Allocated(allocated);
                 });

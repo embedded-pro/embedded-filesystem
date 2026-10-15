@@ -30,6 +30,12 @@ namespace metrics
 
     void MetricRecorder::Record(std::string_view metric, std::string_view workload, std::string_view unit, Better better, double value, std::optional<uint8_t> fill)
     {
+        if (diagnostic)
+        {
+            RecordDiagnostic(metric, workload, unit, better, value, fill);
+            return;
+        }
+
         auto target = targets != nullptr ? targets->For(metric, workload) : std::nullopt;
         report.Add({ std::string{ metric }, std::string{ workload }, subject, device, std::string{ unit }, fill, value, std::move(target), ramBytes, better });
     }
@@ -39,6 +45,11 @@ namespace metrics
         MetricResult result{ std::string{ metric }, std::string{ workload }, subject, device, std::string{ unit }, fill, value, std::nullopt, ramBytes, better };
         result.diagnostic = true;
         report.Add(std::move(result));
+    }
+
+    void MetricRecorder::RecordEveryResultAsDiagnostic()
+    {
+        diagnostic = true;
     }
 
     std::optional<std::string> UnexpectedResult(const Runner& runner)

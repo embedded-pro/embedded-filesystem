@@ -87,7 +87,7 @@ namespace fs
         if (!NorRadixTree::CanMap(index, volume.Geometry().nodeSize))
             onDone(Result::noSpace);
         else if (!file.Admits(index, volume.Geometry().PayloadSize(), NorRadixFanout(volume.Geometry().nodeSize)))
-            volume.FileCommit().Commit(file, [this, index](Result result)
+            volume.FileCommit().Commit(file, NorReserve::kept, [this, index](Result result)
                 {
                     if (result == Result::success)
                         AllocateTail(index);
@@ -95,7 +95,7 @@ namespace fs
                         onDone(result);
                 });
         else
-            volume.Allocator().Allocate(NorBlockType::data, NorBlockOwner{ file.inode, index }, [this, index](std::optional<uint32_t> block)
+            volume.Allocator().Allocate(NorBlockType::data, NorBlockOwner{ file.inode, index }, NorReserve::kept, [this, index](std::optional<uint32_t> block)
                 {
                     TailAllocated(block, index);
                 });
@@ -122,7 +122,7 @@ namespace fs
 
     void NorWrite::FlushTo(uint32_t to, uint32_t appended)
     {
-        volume.FileFlush().Flush(file, to, [this, appended](Result result)
+        volume.FileFlush().Flush(file, to, NorReserve::kept, [this, appended](Result result)
             {
                 if (result == Result::success)
                     Next();

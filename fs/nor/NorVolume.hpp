@@ -6,7 +6,9 @@
 #include "fs/common/OperationQueue.hpp"
 #include "fs/common/Path.hpp"
 #include "fs/interfaces/Result.hpp"
+#include "fs/nor/NorBackground.hpp"
 #include "fs/nor/NorBlockAllocator.hpp"
+#include "fs/nor/NorBlockEraser.hpp"
 #include "fs/nor/NorCheckpointWriter.hpp"
 #include "fs/nor/NorConfig.hpp"
 #include "fs/nor/NorDirectoryRead.hpp"
@@ -82,6 +84,7 @@ namespace fs
         NorPathWalk& Walk();
         NorDirectoryRead& DirectoryRead();
         NorNameLookup& NameLookup();
+        NorBlockEraser& Eraser();
         NorBlockAllocator& Allocator();
         NorRecordApply& RecordApply();
         NorCheckpointWriter& Checkpoints();
@@ -117,6 +120,7 @@ namespace fs
         NorNameLookup nameLookup{ inodeRead, entrySeek };
         NorPathWalk walk{ inodeRead, nameLookup };
         NorDirectoryRead directoryRead{ inodeRead, entrySeek };
+        NorBlockEraser eraser{ *this };
         NorBlockAllocator allocator{ *this };
         NorRecordApply recordApply{ *this };
         NorCheckpointWriter checkpoints{ *this };
@@ -128,6 +132,7 @@ namespace fs
         infra::IntrusiveList<NorFile> openFiles;
         infra::IntrusiveList<NorDirectory> openDirectories;
         OperationQueue queue;
+        NorBackground background{ *this };
         NorOperation operation;
         uint32_t generation{ 0 };
         bool mounted{ false };

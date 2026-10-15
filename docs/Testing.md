@@ -102,6 +102,7 @@ After each cut, the sweep checks that:
 * the volume takes a new change after the mount, and the checker accepts the image again after it.
 
 The cases cover every operation that writes, the start of a new journal block after a mount, checkpoints, the background work of erasing, collecting node blocks and moving blocks, and chains of a cut, a mount, an append and another cut.
+The background runs inside the swept phase: the case lets the volume settle, forwarding time until no work is left, so cuts land in its sector erases, its part A programs and its checkpoints; the run without a cut must leave no free block unerased.
 The first cut of a chain is fixed where it leaves the most behind: after pages programmed beyond the last commit, after a new data block that no record commits, and after the copy of an overwritten block that no record commits; the second cut is swept.
 `Format` is swept too: after a cut, the mount finds the previous volume as long as its second superblock is not erased, completes with `corrupted`, or finds the new, empty volume with every other block in the pre-erased pool.
 Small configurations, with a few cached nodes and a short journal, make the sweep cross journal blocks and checkpoints within a few operations.

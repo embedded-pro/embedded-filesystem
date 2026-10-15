@@ -331,14 +331,17 @@ The erase count of every block is kept in RAM as one byte, relative to the lowes
 
 Allocation takes the free erased block with the lowest erase count; this is dynamic wear leveling, and it needs no flash access.
 Erasing a block erases one sector per request, then programs part A with the erase count, so an erase in the background keeps a foreground call waiting for at most one sector erase.
+The background and the calls share one block in erasure: a call that finds the pool empty finishes the block that the background started before it takes another one, and a mount forgets it, because the block is no longer erased in part.
 The background erases every free block that is not erased, lowest erase count first, so when the volume has been idle long enough, every free block is in the pre-erased pool.
 
 The pre-erased pool also has a watermark: the blocks one call may take, which is two data blocks, the node blocks and the checkpoint block of one checkpoint, one journal block and the destination of one block move.
 A foreground call that finds the pool below the watermark erases one sector of a free block before it completes, unless it waited for an erase of the background.
+The refill follows the allocation that leaves the pool below the watermark, and a call refills at most once: the volume counts the calls by the releases of the operation queue, and a call that erased the block it needed, or that waited for a sector erase of the background, has had its refill.
 When the pool is empty and a call needs a block, the call erases one itself.
 
 A reserve of free blocks is kept for the checkpoints and the garbage collection: twice the node blocks of one checkpoint, plus one checkpoint block and one journal block, 8 blocks on SPI NOR with the defaults.
-A write that would allocate a data block into the reserve completes with `noSpace`; `Sync`, `Close`, `Truncate` and `Remove` may use the reserve, because they write only records and checkpoints, and the last two free space.
+A write that would allocate a data block into the reserve completes with `noSpace`, also for the copy of a last block or a commit that the write makes on its way; `Sync`, `Close`, `Truncate` and `Remove` may use the reserve, because they write only records and checkpoints, and the last two free space.
+Records and checkpoints may always use it, and so do the commit of `Open` in `write` mode of an existing file and the commits of `Unmount`.
 `Usage` reports as total the payload of every block except the superblocks and the reserve, and as used the total minus the payload of the free blocks beyond the reserve.
 
 ## Garbage collection
@@ -415,14 +418,15 @@ The journal is more than half full when the blocks of its epoch before the curre
 
 Background work runs when the volume has been idle for the idle delay, 10 ms by default, as described in [Architecture.md](Architecture.md#operation-queue).
 Its lifecycle is a `services::TableStateMachine` with the states `Stopped`, `Waiting`, `Claiming` and `Working`.
-Each time it holds the queue, it does one unit of work, in this order of priority:
+While it holds the queue, it does one unit of work at a time, in this order of priority:
 
-1. A checkpoint, when the journal is more than half full, when more than half the cache holds modified nodes, or when the node blocks could hold more than twice the live nodes, and only when the pool holds every block it needs.
+1. A checkpoint, when the journal is more than half full, when more than half the cache holds modified nodes, or when the node blocks could hold more than twice the live nodes, and only when the pool holds every block it may need: more erased blocks than the node blocks of a checkpoint of the whole cache.
 2. One sector erase of the free block that is not erased and has the lowest erase count, followed by its part A once its last sector is erased.
 3. A static wear leveling move, when one is due.
 
 A checkpoint and a move are units that are not interrupted; an erase is one device request.
-After each unit, the background releases the queue when a foreground operation waits, and continues after the next idle delay.
+After each unit, the background releases the queue when a foreground operation waits, and continues after the next idle delay; it also releases it when no work is left, and the next idle delay looks again.
+The machine starts when the volume is mounted and stops when it is unmounted.
 
 ## Power-fail safety
 

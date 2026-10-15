@@ -21,7 +21,7 @@ namespace fs
         for (auto& file : volume.OpenFiles())
             if (file.State().Writable() && file.State().Uncommitted())
             {
-                volume.FileCommit().Commit(file.State(), [this](Result result)
+                volume.FileCommit().Commit(file.State(), NorReserve::used, [this](Result result)
                     {
                         if (result == Result::success)
                             CommitNextFile();

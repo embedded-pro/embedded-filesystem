@@ -7,6 +7,11 @@ namespace fs
         , onIdle(onIdle)
     {}
 
+    uint32_t OperationQueue::ForegroundReleases() const
+    {
+        return foregroundReleases;
+    }
+
     void OperationQueue::ForegroundClaiming()
     {
         idleTimer.Cancel();
@@ -14,6 +19,8 @@ namespace fs
 
     void OperationQueue::ForegroundReleased()
     {
+        ++foregroundReleases;
+
         if (!resource.ClaimsPending())
             idleTimer.Start(idleDelay, [this]
                 {

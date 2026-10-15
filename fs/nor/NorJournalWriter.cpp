@@ -48,7 +48,7 @@ namespace fs
                         onDone(result);
                 });
         else
-            volume.Allocator().Allocate(NorBlockType::journal, {}, [this](std::optional<uint32_t> block)
+            volume.Allocator().Allocate(NorBlockType::journal, {}, NorReserve::used, [this](std::optional<uint32_t> block)
                 {
                     BlockAllocated(block);
                 });

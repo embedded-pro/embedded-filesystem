@@ -29,7 +29,7 @@ namespace fs
         auto next = WriteBack().Next();
 
         if (!next.has_value())
-            volume.Allocator().Allocate(NorBlockType::checkpoint, {}, [this](std::optional<uint32_t> allocated)
+            volume.Allocator().Allocate(NorBlockType::checkpoint, {}, NorReserve::used, [this](std::optional<uint32_t> allocated)
                 {
                     CheckpointBlockAllocated(allocated);
                 });
@@ -39,7 +39,7 @@ namespace fs
             if (state.nodeBlock.has_value() && state.nodeOffset + geometry.nodeSize <= geometry.BlockSize())
                 ProgramNode();
             else
-                volume.Allocator().Allocate(NorBlockType::node, {}, [this](std::optional<uint32_t> allocated)
+                volume.Allocator().Allocate(NorBlockType::node, {}, NorReserve::used, [this](std::optional<uint32_t> allocated)
                     {
                         NodeBlockAllocated(allocated);
                     });

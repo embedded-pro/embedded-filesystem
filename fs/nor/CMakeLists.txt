@@ -13,10 +13,14 @@ target_link_libraries(fs.nor PUBLIC
 target_sources(fs.nor PRIVATE
     NorBlockAllocator.cpp
     NorBlockAllocator.hpp
+    NorBlockEraser.cpp
+    NorBlockEraser.hpp
     NorBlockHeader.cpp
     NorBlockHeader.hpp
     NorBTree.cpp
     NorBTree.hpp
+    NorBackground.cpp
+    NorBackground.hpp
     NorBlockStates.cpp
     NorBlockStates.hpp
     NorCheckpoint.cpp

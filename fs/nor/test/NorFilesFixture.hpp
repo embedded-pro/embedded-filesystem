@@ -121,6 +121,17 @@ namespace fs
             return this->BlockInVolume(InodeOf(path), index);
         }
 
+        void LeaveFreeBlocks(uint32_t free)
+        {
+            for (uint32_t block = 2; block != this->State().blocks.Blocks(); ++block)
+                if (this->State().blocks.State(block) != NorBlockState::freeErased && this->State().blocks.State(block) != NorBlockState::freeNotErased)
+                    continue;
+                else if (free == 0)
+                    this->State().blocks.Set(block, NorBlockState::inUse);
+                else
+                    --free;
+        }
+
         void UseEveryFreeBlock()
         {
             for (uint32_t block = 2; block != this->State().blocks.Blocks(); ++block)

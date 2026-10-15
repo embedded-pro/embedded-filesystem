@@ -18,6 +18,7 @@ namespace metrics
 
         void Record(std::string_view metric, std::string_view workload, std::string_view unit, Better better, double value, std::optional<uint8_t> fill = std::nullopt);
         void RecordDiagnostic(std::string_view metric, std::string_view workload, std::string_view unit, Better better, double value, std::optional<uint8_t> fill = std::nullopt);
+        void RecordEveryResultAsDiagnostic();
 
     private:
         Report& report;
@@ -25,6 +26,7 @@ namespace metrics
         std::string device;
         std::size_t ramBytes;
         const Targets* targets;
+        bool diagnostic{ false };
     };
 
     std::optional<std::string> UnexpectedResult(const Runner& runner);

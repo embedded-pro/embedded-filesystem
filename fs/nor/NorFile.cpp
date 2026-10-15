@@ -209,7 +209,7 @@ namespace fs
                     Done(result);
                 });
         else
-            volume.FileCommit().Commit(state, [this](Result result)
+            volume.FileCommit().Commit(state, NorReserve::used, [this](Result result)
                 {
                     Done(result);
                 });

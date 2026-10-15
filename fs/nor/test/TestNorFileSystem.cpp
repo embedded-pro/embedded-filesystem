@@ -271,15 +271,16 @@ TEST_F(NorFileSystemTest, lookups_on_a_mounted_volume_find_nothing_on_a_new_volu
     ExpectLookupsCompleteWith(fs::Result::notFound);
 }
 
-TEST_F(NorFileSystemTest, usage_counts_the_payload_of_every_block_but_the_superblocks_and_uses_all_but_the_free_blocks)
+TEST_F(NorFileSystemTest, usage_counts_the_payload_of_every_block_but_the_superblocks_and_the_reserve_and_uses_all_but_the_free_blocks_beyond_the_reserve)
 {
     constexpr uint64_t payload = 4096 - fs::NorHeaderSize(1);
+    constexpr uint64_t reserve = 8;
     ExpectFormat();
     ExpectMount();
 
-    ExpectUsage(fs::Result::success, fs::VolumeUsage{ 2 * payload, 30 * payload });
+    ExpectUsage(fs::Result::success, fs::VolumeUsage{ 2 * payload, (30 - reserve) * payload });
     ExpectMakeDirectory("/a", fs::Result::success);
-    ExpectUsage(fs::Result::success, fs::VolumeUsage{ 3 * payload, 30 * payload });
+    ExpectUsage(fs::Result::success, fs::VolumeUsage{ 3 * payload, (30 - reserve) * payload });
 }
 
 TEST_F(NorFileSystemTest, makes_a_directory_that_a_lookup_then_finds)

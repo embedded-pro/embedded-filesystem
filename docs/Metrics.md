@@ -83,6 +83,7 @@ The subjects of embedded-filesystem measure the defaults a product gets, such as
 On `internal-flash`, the NOR subject divides the file sizes of the workloads by 64, as littlefs does.
 Until garbage collection, the NOR subject skips L4 and L5, which rewrite the volume many times, and L6 on `internal-flash`, whose directory of 1000 files fills the device with node blocks that only garbage collection frees.
 Until its targets, it skips the call latency of L2 and L3 on `nor-qspi-16m`: formatting 4096 blocks at the maximum erase time takes 27 minutes, longer than the 10 minutes the runner allows a call.
+Its results are diagnostic until then too, so they are not compared with `main`: the erases and checkpoints of its background count in the phase where the volume settles or idles, which changes W-1, W-2, W-5 and W-6 with every step that changes the background, until the charge of erases described below replaces them.
 P-1 is recorded from the power-cut sweep of each filesystem, on the small device models of the sweep.
 
 ### Erases on NOR

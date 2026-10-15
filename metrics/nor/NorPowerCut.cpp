@@ -569,6 +569,7 @@ public:
             ASSERT_EQ(fs::Result::success, volume.Close());
         }
 
+        WearFreeBlocks(context, 0, releasedTail);
         check = metrics::CheckImage(context, model);
         ASSERT_EQ(std::nullopt, check.problem);
         ASSERT_EQ(metrics::NorBlockUse::free, check.blocks[releasedTail]);
@@ -1198,6 +1199,75 @@ public:
         return std::nullopt;
     }
 
+    static constexpr std::size_t settledDirectories = 40;
+
+    static std::string SettledName(std::size_t index)
+    {
+        return "/d" + std::to_string(index / 10) + std::to_string(index % 10);
+    }
+
+    void SettleInBackground(Context& context) const
+    {
+        metrics::NorSweepVolume volume{ context, config };
+        if (volume.Mount() != fs::Result::success)
+            return;
+
+        for (std::size_t index = 0; index != settledDirectories && !volume.JournalMoreThanHalfFull(); ++index)
+            if (volume.MakeDirectory(SettledName(index)) != fs::Result::success)
+                return;
+
+        volume.Settle();
+        if (volume.MakeDirectory("/n") != fs::Result::success)
+            return;
+
+        volume.Unmount();
+    }
+
+    std::optional<std::string> VerifySettled(Context& context, bool uncut) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        std::size_t made = 0;
+        while (made != settledDirectories && check.Find(SettledName(made)) != nullptr)
+            ++made;
+
+        for (auto index = made; index != settledDirectories; ++index)
+            if (check.Find(SettledName(index)) != nullptr)
+                return SettledName(index) + " was made before " + SettledName(made);
+
+        auto madeAfter = check.Find("/n") != nullptr;
+        if (uncut && !madeAfter)
+            return "the run without a cut did not make /n";
+
+        if (uncut && std::ranges::find(check.blocks, metrics::NorBlockUse::free) != check.blocks.end())
+            return "the run without a cut left a free block that is not erased";
+
+        {
+            metrics::NorSweepVolume volume{ context, config };
+            if (volume.Mount() != fs::Result::success)
+                return "the volume does not mount";
+
+            for (std::size_t index = 0; index != made; ++index)
+                if (volume.TypeOf(SettledName(index)) != fs::EntryType::directory)
+                    return "the library and the checker disagree about " + SettledName(index);
+
+            if (volume.TypeOf("/n").has_value() != madeAfter)
+                return "the library and the checker disagree about /n";
+
+            if (volume.MakeDirectory("/z") != fs::Result::success || volume.Unmount() != fs::Result::success)
+                return "a change after the mount fails";
+        }
+
+        auto after = metrics::CheckImage(context, model);
+        if (after.problem.has_value())
+            return "after a change after the mount: " + *after.problem;
+
+        return std::nullopt;
+    }
+
     void SweepAppendAfterLoss(const std::string& caseName, std::size_t writes)
     {
         auto committed = SizeAfter(writes - 1);
@@ -1377,6 +1447,23 @@ TEST_P(NorAppendPowerCut, renames_happen_in_order_and_leave_each_entry_under_exa
         [this](Context& context, bool uncut)
         {
             return VerifyRenamed(context, uncut);
+        });
+}
+
+TEST_P(NorAppendPowerCut, the_background_erases_free_blocks_and_writes_a_checkpoint_that_a_cut_leaves_consistent)
+{
+    SweepEveryMode(
+        model, "background", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpFiles(context, { { "/f", 2 * std::size_t{ payload } + 100 } });
+        },
+        [this](Context& context)
+        {
+            SettleInBackground(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return VerifySettled(context, uncut);
         });
 }
 

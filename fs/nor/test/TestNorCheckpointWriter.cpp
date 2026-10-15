@@ -235,6 +235,7 @@ namespace
             state.nextInode = 2;
             state.liveNodes = 1;
             state.nextSequence = 20;
+            volume.Eraser().CountAsRefill();
         }
 
         std::vector<uint8_t> ExpectedCheckpoint() const
