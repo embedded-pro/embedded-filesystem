@@ -145,6 +145,60 @@ What the baselines show:
 * littlefs levels wear only dynamically: with 70 % static data, the most erased block is erased 13.8 times as often as the average one.
 * `littlefs/default` programs 16 B at a time, and the model charges every program request a whole page program, which is why it writes three times slower than `littlefs/ram-matched`; this is a pessimistic assumption until the models are calibrated on hardware.
 
+### NOR results
+
+The results of `embedded-filesystem/nor`, from the same run as the littlefs baselines, on the typical timings except W-6, which uses the maximum timings.
+
+On `nor-qspi-16m`:
+
+| Metric | Measurement                                           | `embedded-filesystem/nor` | `littlefs/default` | `littlefs/ram-matched` |
+|--------|-------------------------------------------------------|---------------------------|--------------------|------------------------|
+| W-1    | Sequential write of 4 MiB in 4 KiB chunks (kB/s)      | 77.4                      | 27.7               | 79.4                   |
+| W-2    | Append and sync at 4 MiB against 4 KiB, 50 % full     | 1.05                      | 1.01               | 1                      |
+| W-3    | Append and sync on a 90 % against a 10 % full volume  | 1                         | 1                  | 1                      |
+| W-4    | Write amplification of the data logger, 50 % full     | 1.99                      | 33.6               | 35.1                   |
+| W-5    | Overwrite in a 4 MiB against a 64 KiB file, 50 % full | 1.04                      | 64.2               | 60.2                   |
+| W-6    | Longest append and sync at maximum timings (ms)       | not measured              | 1653               | 851                    |
+| R-1    | Sequential read (MB/s)                                | 50                        | 49.2               | 48.9                   |
+| R-2    | Device reads for a random 512 B read in a 4 MiB file  | 1.19                      | 39.6               | 7.86                   |
+| R-4    | Mount of a 90 % full volume (ms)                      | 3.17                      | 0.3                | 0.33                   |
+| WL-1   | Erase spread with 70 % static data, short run         | 2.75                      | 13.8               | 13.8                   |
+|        | RAM (B)                                               | 19544                     | 328                | 13064                  |
+
+On `internal-flash`, with the file sizes divided by 64:
+
+| Metric | Measurement                                           | `embedded-filesystem/nor` | `littlefs/default` | `littlefs/ram-matched` |
+|--------|-------------------------------------------------------|---------------------------|--------------------|------------------------|
+| W-1    | Sequential write of 64 KiB in 4 KiB chunks (kB/s)     | 91.9                      | 94.5               | 94.5                   |
+| W-2    | Append and sync at 64 KiB against 4 KiB, 50 % full    | 0.708                     | 1                  | 1                      |
+| W-3    | Append and sync on a 90 % against a 10 % full volume  | 0.907                     | 1                  | 1                      |
+| W-4    | Write amplification of the data logger, 50 % full     | 1.76                      | 17.5               | 18.9                   |
+| W-5    | Overwrite in a 64 KiB against a 1 KiB file, 50 % full | 1.18                      | 18.5               | 18.5                   |
+| W-6    | Longest append and sync at maximum timings (ms)       | 14                        | 41.1               | 42                     |
+| R-1    | Sequential read (MB/s)                                | 100                       | 97.2               | 79.2                   |
+| R-2    | Device reads for a random 512 B read in a 64 KiB file | 1.11                      | 35.8               | 4.03                   |
+| R-4    | Mount of a 90 % full volume (ms)                      | 0.0783                    | 0.127              | 0.146                  |
+| WL-1   | Erase spread with 70 % static data, short run         | 2.75                      | 3                  | 3                      |
+|        | RAM (B)                                               | 14080                     | 328                | 6440                   |
+
+On the lifetime run of L5 on `nor-qspi-1m`, until a block reaches 1000 erases:
+
+| Metric | Measurement                                               | `embedded-filesystem/nor` | `littlefs/default` | `littlefs/ram-matched` |
+|--------|-----------------------------------------------------------|---------------------------|--------------------|------------------------|
+| WL-1   | Erase spread                                              | 1.02                      | 3.15               | 3.15                   |
+| WL-2   | Leveling efficiency                                       | 0.977                     | 0.318              | 0.318                  |
+| WL-3   | User data written (MiB)                                   | 935                       | 315                | 315                    |
+| WL-4   | Blocks moved by static wear leveling per erased block (%) | 0.918                     | not measured       | not measured           |
+
+What the NOR results show:
+
+* An append with `Sync` programs what it adds and one journal record, so the data logger writes about twice its data, against 17 to 35 times for littlefs, and an overwrite costs about the same in a large file as in a small one.
+* A random read follows the radix map of the file, cached after the first reads, so it takes about one device read in any file size.
+* The mount reads the header of every block, so it is the one metric where littlefs is faster on a large device: 3.17 ms against 0.3 ms on `nor-qspi-16m`.
+* With static wear leveling, the erase spread stays near 1 over the life of the device, and the volume takes almost three times as much user data before a block reaches 1000 erases.
+* On `internal-flash`, W-2 is below 1, because the 64 KiB log holds about 8 checkpoint periods and collection runs in bursts further apart than its windows; it is reported there, as is W-1 on the smaller files of L1.
+* The NOR subject uses more RAM than `littlefs/ram-matched` for its block states, erase counts and node cache, as [NorFilesystem.md](NorFilesystem.md#ram-use) details.
+
 ## Workloads
 
 All workloads use a fixed random seed.
