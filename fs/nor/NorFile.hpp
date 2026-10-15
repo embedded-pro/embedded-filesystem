@@ -53,6 +53,7 @@ namespace fs
             none,
             read,
             write,
+            truncate,
             sync,
             close,
             implicitClose

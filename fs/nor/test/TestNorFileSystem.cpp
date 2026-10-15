@@ -61,6 +61,7 @@ namespace
         void ExpectLookupsCompleteWith(fs::Result result)
         {
             testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
+            EXPECT_CALL(done, callback(result)).Times(3);
             volume.OpenDirectory("/a", [&done](fs::Result opened, infra::SharedPtr<fs::Directory> directory)
                 {
                     EXPECT_EQ(nullptr, directory);
@@ -70,18 +71,17 @@ namespace
                 {
                     done.callback(found);
                 });
-
-            EXPECT_CALL(done, callback(result)).Times(2);
+            ExecuteAllActions();
+            volume.Remove("/a", [&done](fs::Result removed)
+                {
+                    done.callback(removed);
+                });
             ExecuteAllActions();
         }
 
         void ExpectChangesCompleteWith(fs::Result result)
         {
             testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
-            volume.Remove("/a", [&done](fs::Result removed)
-                {
-                    done.callback(removed);
-                });
             volume.Rename("/a", "/b", [&done](fs::Result renamed)
                 {
                     done.callback(renamed);
@@ -92,7 +92,7 @@ namespace
                     done.callback(measured);
                 });
 
-            EXPECT_CALL(done, callback(result)).Times(3);
+            EXPECT_CALL(done, callback(result)).Times(2);
             ExecuteAllActions();
         }
 

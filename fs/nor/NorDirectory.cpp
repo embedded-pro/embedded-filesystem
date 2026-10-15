@@ -17,6 +17,19 @@ namespace fs
         nextKey = 0;
         ended = false;
         generation = volume.Generation();
+        open = true;
+        volume.OpenDirectories().push_back(*this);
+    }
+
+    uint32_t NorDirectory::Inode() const
+    {
+        return inode;
+    }
+
+    void NorDirectory::Detach()
+    {
+        volume.OpenDirectories().erase(*this);
+        open = false;
     }
 
     void NorDirectory::Next(const infra::Function<void(Result result, std::optional<EntryInfo> entry)>& onNext)
@@ -36,6 +49,9 @@ namespace fs
 
     void NorDirectory::UnReferenced()
     {
+        if (open)
+            Detach();
+
         Release();
     }
 

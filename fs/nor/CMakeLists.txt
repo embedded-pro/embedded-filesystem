@@ -43,6 +43,10 @@ target_sources(fs.nor PRIVATE
     NorFileCommit.hpp
     NorFileFlush.cpp
     NorFileFlush.hpp
+    NorFileOverwrite.cpp
+    NorFileOverwrite.hpp
+    NorFileTruncate.cpp
+    NorFileTruncate.hpp
     NorFile.hpp
     NorFileSystem.cpp
     NorFileSystem.hpp
@@ -94,6 +98,8 @@ target_sources(fs.nor PRIVATE
     NorRadixTree.hpp
     NorRecordApply.cpp
     NorRecordApply.hpp
+    NorRemove.cpp
+    NorRemove.hpp
     NorRecordReader.cpp
     NorRecordReader.hpp
     NorReplay.cpp

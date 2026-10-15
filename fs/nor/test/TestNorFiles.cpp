@@ -172,12 +172,15 @@ TEST_F(NorFilesTest, open_of_a_directory_or_the_root_is_a_directory)
     Open("/", fs::Result::isADirectory);
 }
 
-TEST_F(NorFilesTest, open_in_write_mode_of_a_file_that_is_not_empty_is_unsupported_until_truncation)
+TEST_F(NorFilesTest, open_in_write_mode_of_a_file_that_is_not_empty_empties_it)
 {
     Builder().AddFile(root, "a", Bytes("x"));
     Mount();
 
-    Open("/a", fs::Result::unsupported, fs::OpenMode::write);
+    auto file = Open("/a", fs::Result::success, fs::OpenMode::write);
+
+    ASSERT_NE(nullptr, file);
+    EXPECT_EQ(0, file->Size());
 }
 
 TEST_F(NorFilesTest, open_checks_the_path_and_the_volume)

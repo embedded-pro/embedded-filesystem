@@ -112,7 +112,7 @@ TEST_F(NorJournalTest, the_record_is_applied_when_it_is_written)
 
 TEST_F(NorJournalTest, completes_with_the_result_of_applying_the_record)
 {
-    EXPECT_EQ(fs::Result::unsupported, Commit({ fs::NorInodeRemove{ 2 } }));
+    EXPECT_EQ(fs::Result::corrupted, Commit({ fs::NorInodeRemove{ 2 } }));
 }
 
 TEST_F(NorJournalTest, a_record_that_does_not_fit_in_the_checkpoint_block_starts_a_journal_block)
@@ -214,12 +214,12 @@ TEST_F(NorJournalTest, a_record_that_cannot_be_applied_makes_the_mount_corrupted
     Mount(fs::Result::corrupted);
 }
 
-TEST_F(NorJournalTest, a_record_with_an_entry_of_a_later_step_makes_the_mount_unsupported)
+TEST_F(NorJournalTest, a_record_that_removes_a_missing_inode_makes_the_mount_corrupted)
 {
     Unmount();
     Builder().AppendRecord({ fs::NorInodeRemove{ 7 } });
 
-    Mount(fs::Result::unsupported);
+    Mount(fs::Result::corrupted);
 }
 
 TEST_F(NorJournalTest, unmount_writes_a_checkpoint_when_the_journal_is_more_than_half_full)

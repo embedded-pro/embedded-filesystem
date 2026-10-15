@@ -1,4 +1,5 @@
 #include "fs/nor/NorVolume.hpp"
+#include "fs/nor/NorDirectory.hpp"
 #include "fs/nor/NorFile.hpp"
 #include "infra/util/ReallyAssert.hpp"
 
@@ -108,6 +109,16 @@ namespace fs
         return fileFlush;
     }
 
+    NorFileOverwrite& NorVolume::FileOverwrite()
+    {
+        return fileOverwrite;
+    }
+
+    NorFileTruncate& NorVolume::FileTruncate()
+    {
+        return fileTruncate;
+    }
+
     NorFileCommit& NorVolume::FileCommit()
     {
         return fileCommit;
@@ -116,6 +127,11 @@ namespace fs
     infra::IntrusiveList<NorFile>& NorVolume::OpenFiles()
     {
         return openFiles;
+    }
+
+    infra::IntrusiveList<NorDirectory>& NorVolume::OpenDirectories()
+    {
+        return openDirectories;
     }
 
     OperationQueue& NorVolume::Queue()
@@ -150,5 +166,8 @@ namespace fs
 
         while (!openFiles.empty())
             openFiles.front().Detach();
+
+        while (!openDirectories.empty())
+            openDirectories.front().Detach();
     }
 }

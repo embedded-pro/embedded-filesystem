@@ -69,9 +69,9 @@ namespace fs
         StartPathCall(path, NorStatCall{ path, onDone });
     }
 
-    void NorFileSystem::Remove(infra::BoundedConstString, const infra::Function<void(Result result)>& onDone)
+    void NorFileSystem::Remove(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        Refuse(onDone);
+        StartPathCall(path, NorRemoveCall{ path, onDone });
     }
 
     void NorFileSystem::Rename(infra::BoundedConstString, infra::BoundedConstString, const infra::Function<void(Result result)>& onDone)
@@ -171,8 +171,10 @@ namespace fs
                                   },
                                   finished)
                 .Start();
+        else if (auto* makeDirectory = std::get_if<NorMakeDirectoryCall>(&call))
+            volume.Operation().emplace<NorMakeDirectory>(volume, std::move(*makeDirectory), finished).Start();
         else
-            volume.Operation().emplace<NorMakeDirectory>(volume, std::move(std::get<NorMakeDirectoryCall>(call)), finished).Start();
+            volume.Operation().emplace<NorRemove>(volume, std::move(std::get<NorRemoveCall>(call)), finished).Start();
     }
 
     void NorFileSystem::BeginFormat()

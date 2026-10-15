@@ -13,6 +13,8 @@
 #include "fs/nor/NorEntrySeek.hpp"
 #include "fs/nor/NorFileCommit.hpp"
 #include "fs/nor/NorFileFlush.hpp"
+#include "fs/nor/NorFileOverwrite.hpp"
+#include "fs/nor/NorFileTruncate.hpp"
 #include "fs/nor/NorFormatter.hpp"
 #include "fs/nor/NorInodeRead.hpp"
 #include "fs/nor/NorJournalWriter.hpp"
@@ -26,6 +28,7 @@
 #include "fs/nor/NorPathWalk.hpp"
 #include "fs/nor/NorRead.hpp"
 #include "fs/nor/NorRecordApply.hpp"
+#include "fs/nor/NorRemove.hpp"
 #include "fs/nor/NorReplay.hpp"
 #include "fs/nor/NorStat.hpp"
 #include "fs/nor/NorUnmount.hpp"
@@ -41,6 +44,7 @@
 
 namespace fs
 {
+    class NorDirectory;
     class NorFile;
 
     struct NorVolumeParts
@@ -54,7 +58,7 @@ namespace fs
         infra::MemoryRange<NorNodeCache::Slot> nodeSlots;
     };
 
-    using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorReplay, NorUnmount, NorStat, NorOpenDirectory, NorOpen, NorRead, NorWrite, NorMakeDirectory>;
+    using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorReplay, NorUnmount, NorStat, NorOpenDirectory, NorOpen, NorRead, NorWrite, NorMakeDirectory, NorRemove>;
 
     class NorVolume
     {
@@ -82,8 +86,11 @@ namespace fs
         NorCheckpointWriter& Checkpoints();
         NorJournalWriter& Journal();
         NorFileFlush& FileFlush();
+        NorFileOverwrite& FileOverwrite();
+        NorFileTruncate& FileTruncate();
         NorFileCommit& FileCommit();
         infra::IntrusiveList<NorFile>& OpenFiles();
+        infra::IntrusiveList<NorDirectory>& OpenDirectories();
         OperationQueue& Queue();
         NorOperation& Operation();
 
@@ -114,8 +121,11 @@ namespace fs
         NorCheckpointWriter checkpoints{ *this };
         NorJournalWriter journal{ *this };
         NorFileFlush fileFlush{ *this };
+        NorFileOverwrite fileOverwrite{ *this };
+        NorFileTruncate fileTruncate{ *this };
         NorFileCommit fileCommit{ *this };
         infra::IntrusiveList<NorFile> openFiles;
+        infra::IntrusiveList<NorDirectory> openDirectories;
         OperationQueue queue;
         NorOperation operation;
         uint32_t generation{ 0 };

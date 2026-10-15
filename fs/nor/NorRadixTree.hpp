@@ -27,6 +27,7 @@ namespace fs
 
         static bool Covers(const NorMapRoot& root, uint32_t index, uint32_t nodeSize);
         static bool CanMap(uint32_t index, uint32_t nodeSize);
+        static uint32_t IndicesCovered(const NorMapRoot& root, uint32_t nodeSize);
         static uint32_t ChildFor(infra::ConstByteRange node, uint32_t index);
         static uint32_t FirstIndexOfChild(infra::ConstByteRange node, uint32_t index);
         static bool HasValidCount(infra::ConstByteRange node);
