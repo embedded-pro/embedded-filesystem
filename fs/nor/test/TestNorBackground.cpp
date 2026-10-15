@@ -11,6 +11,7 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 using namespace std::chrono_literals;
@@ -306,6 +307,13 @@ namespace
             ForwardTime(10ms);
         }
 
+        void FillJournalOverHalf()
+        {
+            auto record = Serialized(fs::NorInodeRecord{ root, fs::NorInodeType::directory, 0, 0, 0, {}, infra::StringAsByteRange(infra::BoundedConstString("m")) });
+            while (!Volume().Journal().IsMoreThanHalfFull())
+                ASSERT_EQ(fs::Result::success, Commit({ fs::NorInodePut{ 2, infra::MakeRange(record) } }));
+        }
+
         void KeepErased(uint32_t erased)
         {
             for (uint32_t block = 2; block != 32; ++block)
@@ -317,12 +325,27 @@ namespace
     };
 }
 
-TEST_F(NorBackgroundCollectionTest, writes_a_checkpoint_when_a_collection_is_due)
+TEST_F(NorBackgroundCollectionTest, writes_no_checkpoint_for_a_collection_alone)
 {
     Builder().AddDirectory(root, "a");
     Builder().Commit();
     Mount();
     ASSERT_TRUE(Volume().Collector().Due());
+    auto checkpointBlock = State().checkpointBlock;
+
+    Idle();
+
+    EXPECT_EQ(checkpointBlock, State().checkpointBlock);
+    EXPECT_TRUE(Volume().Collector().Due());
+}
+
+TEST_F(NorBackgroundCollectionTest, a_due_checkpoint_collects)
+{
+    Builder().AddDirectory(root, "a");
+    Builder().Commit();
+    Mount();
+    ASSERT_TRUE(Volume().Collector().Due());
+    FillJournalOverHalf();
     auto checkpointBlock = State().checkpointBlock;
 
     Idle();
@@ -338,6 +361,7 @@ TEST_F(NorBackgroundCollectionTest, a_checkpoint_with_a_collection_waits_for_the
     Builder().Commit();
     Mount();
     ASSERT_TRUE(Volume().Collector().Due());
+    FillJournalOverHalf();
     KeepErased(2 * Volume().Geometry().NodeBlocksPerCheckpoint());
     auto checkpointBlock = State().checkpointBlock;
 
@@ -349,51 +373,6 @@ TEST_F(NorBackgroundCollectionTest, a_checkpoint_with_a_collection_waits_for_the
     Idle();
 
     EXPECT_NE(checkpointBlock, State().checkpointBlock);
-}
-
-TEST_F(NorBackgroundCollectionTest, collects_at_most_one_round_of_the_node_blocks_between_two_calls)
-{
-    AddDirectories(root, 40);
-    Mount();
-    State().liveNodes = 0;
-    auto passed = Volume().Collector().LeftBlocks();
-    auto round = Volume().Collector().CollectableBlocks();
-
-    Idle();
-
-    EXPECT_TRUE(Volume().Collector().Due());
-    EXPECT_LE(passed + round, Volume().Collector().LeftBlocks());
-    EXPECT_GT(passed + round + 2 * Volume().Geometry().NodeBlocksPerCheckpoint(), Volume().Collector().LeftBlocks());
-
-    passed = Volume().Collector().LeftBlocks();
-    ForwardTime(1s);
-
-    EXPECT_EQ(passed, Volume().Collector().LeftBlocks());
-
-    Idle();
-
-    EXPECT_LT(passed, Volume().Collector().LeftBlocks());
-}
-
-TEST_F(NorBackgroundCollectionTest, a_block_whose_nodes_cannot_be_checked_counts_in_the_round)
-{
-    AddDirectories(root, 40);
-    std::array<uint8_t, 512> rootNode{};
-    Builder().Read(Builder().InodeTable().address, infra::MakeRange(rootNode));
-    Builder().Corrupt(fs::NorBTree::ChildFor(infra::MakeRange(rootNode), 4) + 12);
-    Mount();
-    State().liveNodes = 0;
-    auto left = Volume().Collector().LeftBlocks();
-
-    Idle();
-
-    EXPECT_TRUE(Volume().Collector().Due());
-    EXPECT_LT(left, Volume().Collector().LeftBlocks());
-
-    left = Volume().Collector().LeftBlocks();
-    ForwardTime(1s);
-
-    EXPECT_EQ(left, Volume().Collector().LeftBlocks());
 }
 
 namespace
@@ -476,6 +455,13 @@ TEST_F(NorBackgroundMoveTest, after_a_mount_moves_a_block_as_soon_as_the_spread_
 
 TEST_F(NorBackgroundMoveTest, after_a_move_makes_no_move_before_the_interval_of_erases)
 {
+    std::optional<fs::Result> written;
+    Volume().Checkpoints().Write([&written](fs::Result result)
+        {
+            written = result;
+        });
+    ExecuteAllActions();
+    ASSERT_EQ(fs::Result::success, written);
     Idle();
     ASSERT_EQ(1, Volume().Counters().movedBlocks);
     for (uint32_t block = 2; block != 48; ++block)
@@ -627,4 +613,37 @@ TEST_F(NorBackgroundMoveTest, the_fallback_moves_into_the_most_worn_free_block_w
     EXPECT_EQ(1, Volume().Counters().movedBlocks);
     EXPECT_EQ(target, BlockInVolume(file, 0));
     Close(*created);
+}
+
+TEST_F(NorBackgroundMoveTest, the_fallback_moves_a_node_block_when_the_pool_is_empty)
+{
+    auto source = State().inodeTable.address / 4096;
+    State().eraseCounts.Record(BlockInVolume(file, 0), 10);
+    State().eraseCounts.Record(source, 1);
+    auto created = OpenNewFile();
+    KeepErased(0);
+    Volume().Counters().erasedSectors = 4;
+
+    ASSERT_EQ(fs::Result::success, Write(*created, infra::MakeRange(written)));
+
+    EXPECT_NE(0, Volume().Counters().movedBlocks);
+    EXPECT_NE(source, State().inodeTable.address / 4096);
+    EXPECT_FALSE(State().nodeBlocks.Contains(source));
+    Close(*created);
+}
+
+TEST_F(NorBackgroundMoveTest, no_fallback_while_the_free_blocks_cannot_hold_twice_the_node_blocks_of_a_checkpoint)
+{
+    State().eraseCounts.Record(BlockInVolume(file, 0), 10);
+    State().eraseCounts.Record(State().inodeTable.address / 4096, 1);
+    auto created = OpenNewFile();
+    Volume().Counters().erasedSectors = 4;
+
+    created->Write(infra::MakeRange(written), [this](fs::Result)
+        {
+            LeaveFreeBlocks(2 * Volume().Geometry().NodeBlocksPerCheckpoint());
+        });
+    ExecuteAllActions();
+
+    EXPECT_EQ(0, Volume().Counters().movedBlocks);
 }

@@ -6,6 +6,7 @@
 #include "metrics/workload/Pattern.hpp"
 #include "metrics/workload/Runner.hpp"
 #include "gmock/gmock.h"
+#include <algorithm>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -99,6 +100,22 @@ TEST_F(NorSubjectTest, counters_keep_growing_across_mounts)
 
     auto after = subject.Counters().value_or(metrics::VolumeCounters{});
     EXPECT_LT(before.allocatedSectors, after.allocatedSectors);
+    EXPECT_LE(before.checkpoints, after.checkpoints);
+}
+
+TEST_F(NorSubjectTest, a_failed_mount_keeps_the_counts_of_the_earlier_mounts)
+{
+    FormatAndMount();
+    WriteFile("/file", Pattern(10000, 1));
+    ASSERT_EQ(fs::Result::success, runner.Unmount());
+    auto before = subject.Counters().value_or(metrics::VolumeCounters{});
+    for (auto& sector : stub.sectors)
+        std::ranges::fill(sector, uint8_t{ 0xff });
+
+    ASSERT_EQ(fs::Result::corrupted, runner.Mount());
+
+    auto after = subject.Counters().value_or(metrics::VolumeCounters{});
+    EXPECT_LE(before.allocatedSectors, after.allocatedSectors);
     EXPECT_LE(before.checkpoints, after.checkpoints);
 }
 

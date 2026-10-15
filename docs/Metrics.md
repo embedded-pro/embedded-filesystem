@@ -149,15 +149,15 @@ What the baselines show:
 
 All workloads use a fixed random seed.
 
-| Workload | Description                                                                                                                                     |
-|----------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| L1       | Write one file of 1 MiB and one of 4 MiB sequentially, in chunks of 64 B, 512 B and 4 KiB, after announcing the size with `ExpectSize`          |
-| L2       | Data logger: append 64 B and call `Sync`, until the file reaches 4 MiB, with a 100 ms idle period after each append                             |
-| L3       | Overwrite 512 B at random offsets in a file of 64 KiB, 1 MiB and 4 MiB                                                                          |
-| L4       | Create, write, close and remove many small files of 100 B to 8 KiB                                                                              |
-| L5       | Fill 70 % of the volume with files that are never changed, then rewrite a 4 KiB configuration file repeatedly                                   |
-| L6       | Read sequentially, read at random offsets, seek to the end, list a directory, and open files by path in directories of 10, 100 and 1000 entries |
-| L7       | Mount the volume when it is 10 %, 50 % and 90 % full                                                                                            |
+| Workload | Description                                                                                                                                                            |
+|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| L1       | Write one file of 1 MiB and one of 4 MiB sequentially, in chunks of 64 B, 512 B and 4 KiB, after announcing the size with `ExpectSize`                                 |
+| L2       | Data logger: append 64 B and call `Sync`, until the file reaches 4 MiB, with a 100 ms idle period after each append; then the same into a second file of up to 128 KiB |
+| L3       | Overwrite 512 B at random offsets in a file of 64 KiB, 1 MiB and 4 MiB                                                                                                 |
+| L4       | Create, write, close and remove many small files of 100 B to 8 KiB                                                                                                     |
+| L5       | Fill 70 % of the volume with files that are never changed, then rewrite a 4 KiB configuration file repeatedly                                                          |
+| L6       | Read sequentially, read at random offsets, seek to the end, list a directory, and open files by path in directories of 10, 100 and 1000 entries                        |
+| L7       | Mount the volume when it is 10 %, 50 % and 90 % full                                                                                                                   |
 
 Workloads L2, L3 and L4 are run on volumes that are 10 %, 50 % and 90 % full, to measure the effect of the fill level.
 The fill level is the share of the space that the workload does not need for its own files: static files take that share of the capacity left after the largest size the workload's files reach, so that the workload still fits on a volume that is 90 % full.
@@ -166,26 +166,29 @@ The volume is filled until the usage reported by the filesystem reaches the fill
 
 ## Write metrics
 
-| Id  | Metric                      | Definition                                                                                              | Workloads | Target                                                                                                                    |
-|-----|-----------------------------|---------------------------------------------------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------------------------------------------|
-| W-1 | Sequential write throughput | User bytes written divided by total device time                                                         | L1        | At least the best baseline; on NOR at least 0.97 times it                                                                 |
-| W-2 | Append scaling              | Device time of one append and `Sync` when the file holds 4 MiB, divided by the same when it holds 4 KiB | L2        | At most 1.1, for NOR and FAT                                                                                              |
-| W-3 | Fill scaling                | Device time of one append and `Sync` on a 90 % full volume, divided by the same on a 10 % full volume   | L2        | At most 1.2                                                                                                               |
-| W-4 | Write amplification         | Bytes programmed on the device divided by user bytes written                                            | L1, L2    | At most 1.1 for L1; reported for L2                                                                                       |
-| W-5 | Overwrite scaling           | Device time of one overwrite in a 4 MiB file, divided by the same in a 64 KiB file                      | L3        | At most 1.2 on NOR                                                                                                        |
-| W-6 | Call latency                | 99th percentile and maximum of the simulated latency of one call                                        | L2, L3    | Maximum at maximum timings, independent of file size and fill level: at most one commit, as defined below for FAT and NOR |
+| Id  | Metric                      | Definition                                                                                                           | Workloads | Target                                                                                                                    |
+|-----|-----------------------------|----------------------------------------------------------------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------------------------------------------|
+| W-1 | Sequential write throughput | User bytes written divided by total device time                                                                      | L1        | At least the best baseline; on NOR at least 0.97 times it                                                                 |
+| W-2 | Append scaling              | Device time of one append and `Sync` when the file holds 4 MiB, divided by the same when the second file holds 4 KiB | L2        | At most 1.1, for NOR and FAT                                                                                              |
+| W-3 | Fill scaling                | Device time of one append and `Sync` on a 90 % full volume, divided by the same on a 10 % full volume                | L2        | At most 1.2                                                                                                               |
+| W-4 | Write amplification         | Bytes programmed on the device divided by user bytes written                                                         | L1, L2    | At most 1.1 for L1; reported for L2                                                                                       |
+| W-5 | Overwrite scaling           | Device time of one overwrite in a 4 MiB file, divided by the same in a 64 KiB file                                   | L3        | At most 1.2 on NOR                                                                                                        |
+| W-6 | Call latency                | 99th percentile and maximum of the simulated latency of one call                                                     | L2, L3    | Maximum at maximum timings, independent of file size and fill level: at most one commit, as defined below for FAT and NOR |
 
 On FAT, one commit is 2 block writes plus one per copy of the FAT, 3 flushes and two allocation unit openings, plus the one background read that a call may wait for.
 The card keeps only its most recently written allocation units open, so the first commit after writes elsewhere opens both the unit of its data and the unit of the FAT and the directory, whichever filesystem makes it; with 2 FAT copies on `sd-card-256m` the bound is 1021.0 ms.
 
 On NOR, one commit is one sector erase, either of the background or of the call itself when the pre-erased pool is below its watermark, plus one checkpoint or one static wear leveling move, whichever takes longer, plus the copy-on-write of two blocks with their part B, one record and the start of a new journal block.
-A checkpoint is the programming of twice `cachedNodes` nodes, the most that a checkpoint with its collection step writes, of part B of the node blocks they need, and of the checkpoint block; a move is the erase of its destination, the copy of one block and one record.
-`metrics::NorTargets` computes the bound from the maximum timings of the model and the configuration of the subject: 67.0 ms on `internal-flash`.
+A checkpoint is the programming of twice `cachedNodes` nodes, the most that a checkpoint with its collection step writes, of part B of the node blocks they need, and of the checkpoint block; a move is the erase of its destination after finishing a block that the eraser started, `2 × sectorsPerBlock - 1` sectors, the copy of one block and one record.
+`metrics::NorTargets` computes the bound from the maximum timings of the model and the configuration of the subject: 87.0 ms on `internal-flash`.
 The bound assumes that the background keeps the pre-erased pool, as it does in the idle periods of the data logger, so W-6 is asserted on L2.
 L3 overwrites without idle periods: the background never runs, the pool empties, and a call erases the blocks it allocates itself, up to 4 sectors for an overwrite that straddles two blocks, so W-6 is reported on L3.
 The 0.97 of W-1 on NOR allows for the header of every block, which leaves 4060 of 4096 bytes for data on `nor-qspi-16m`, where littlefs writes all of them.
 W-4 on the first phase of L1 is reported for NOR on `internal-flash`: its file of 16 KiB pays the first checkpoint after the mount, about 1.7 KB, as the FAT subject pays the clean-shutdown bit on M-2 of that phase.
+W-1 on the three phases of L1 with the file of 16 KiB is reported for NOR on `internal-flash` too, and asserted on the phases with the file of 64 KiB: the cost that every file pays once, its first checkpoint after the mount and the commit of its close, weighs on a file divided by 64 more than the 0.97 allows.
+W-2 measures its 4 KiB window on a second file, which L2 starts once the first holds 4 MiB, so that both windows see a volume of the same age: at 4 KiB into the first file, a fresh volume has not yet reached the steady state of its garbage collection and checkpoints.
 W-2 on NOR averages windows that start after a checkpoint and span 4 whole checkpoint periods, counted by the volume, instead of 64 appends: a checkpoint costs more than 64 appends of 64 bytes, so a window of 64 appends would measure whether it holds a checkpoint rather than the size of the file.
+A window that the run cannot fill makes W-2 infinite, which fails its target.
 
 ## Read metrics
 
@@ -215,7 +218,7 @@ For SD cards and eMMC, wear leveling is done by the card, and the device metrics
 The short run of L5 on `nor-qspi-16m` stops at a mean of 4 erases per sector.
 That is too short to level 70 % of static data cheaply: keeping the highest count within 1.2 times the mean after 4 erases per block takes about three moves per static block, about half of all erases.
 On a long run, a static block moves once every `staticWearLevelingThreshold` erases of the others, so the moves cost about 0.7 divided by the threshold of all erases, and the spread stays within the threshold.
-So every NOR subject also records WL-1 and WL-2 on the lifetime run of L5 on `nor-qspi-1m`, which reaches a mean of several hundred erases, and the targets apply there; on L4 and on the short run of L5 they are reported.
+So every NOR subject also records WL-1 and WL-2 on the lifetime run of L5 on `nor-qspi-1m`, which reaches a mean of several hundred erases, and the targets apply there, through the `metrics::NorTargets` of that run, made with `metrics::WearTargets::asserted`; on L4 and on the short run of L5 they are reported.
 WL-4 counts the moves of static wear leveling and the erased blocks from the counters of the volume, and is recorded only for `embedded-filesystem/nor`, with its target on the lifetime run; on the short run of L5 it is reported.
 L5 has no idle periods, so the background never runs there, and the moves on the lifetime run are those of the foreground fallback, which erases its destination when the pool is empty.
 WL-3 is reported, and `merge_report.py` adds its ratio to the best littlefs subject to the summary.

@@ -11,7 +11,8 @@ namespace fs
     enum class NorWear : uint8_t
     {
         least,
-        most
+        most,
+        mostFree
     };
 
     std::optional<uint32_t> WornBlock(const NorBlockStates& blocks, const NorEraseCounts& counts, NorBlockState state, NorWear wear);

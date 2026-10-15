@@ -2,6 +2,7 @@
 #include "metrics/workload/test/FakeSubjectFixture.hpp"
 #include "gmock/gmock.h"
 #include <algorithm>
+#include <limits>
 #include <string>
 
 namespace
@@ -78,6 +79,15 @@ TEST_F(MeasurementsTest, data_logger_of_a_subject_that_counts_averages_whole_che
     metrics::MeasureDataLogger(runner, recorder, parameters);
 
     EXPECT_DOUBLE_EQ(1.0, Find("W-2", "L2", 0).value);
+}
+
+TEST_F(MeasurementsTest, data_logger_of_a_subject_that_counts_fails_the_append_scaling_without_whole_checkpoint_periods)
+{
+    subject.counters = metrics::VolumeCounters{};
+
+    metrics::MeasureDataLogger(runner, recorder, parameters);
+
+    EXPECT_EQ(std::numeric_limits<double>::infinity(), Find("W-2", "L2", 0).value);
 }
 
 TEST_F(MeasurementsTest, random_read_ratio_divides_the_reads_in_the_largest_file_by_those_in_the_smallest)

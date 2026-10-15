@@ -6,7 +6,6 @@
 #include "services/fsm/TableStateMachine.hpp"
 #include <array>
 #include <cstdint>
-#include <optional>
 #include <variant>
 
 namespace fs
@@ -93,15 +92,12 @@ namespace fs
         bool FallbackDue() const;
         bool MoveDue() const;
         bool PoolHoldsAMove() const;
-        bool RoundLeft() const;
-        bool CalledSinceRound() const;
         bool ShouldStop() const;
         void Claim();
         void ClaimAhead();
         void Work();
         void WriteCheckpoint();
         void MoveBlock();
-        void StartRound();
         void Release();
 
     private:
@@ -109,9 +105,6 @@ namespace fs
         OperationQueue::BackgroundClaimer claimer;
         bool erasing{ false };
         bool urgent{ false };
-        std::optional<uint32_t> roundReleases;
-        uint32_t roundStart{ 0 };
-        uint32_t roundBlocks{ 0 };
         Machine::WithStorage<2> machine;
     };
 

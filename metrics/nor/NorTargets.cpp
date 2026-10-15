@@ -13,11 +13,12 @@ namespace metrics
         constexpr std::string_view randomReadRatio{ "L6 random ratio" };
     }
 
-    NorTargets::NorTargets(const NorModel& model, const fs::NorConfig& config, uint32_t scaleDivisor)
+    NorTargets::NorTargets(const NorModel& model, const fs::NorConfig& config, uint32_t scaleDivisor, WearTargets wear)
         : model(model)
         , config(config)
         , scaleDivisor(scaleDivisor)
-        , firstPhaseOfL1("L1 " + std::to_string(mebibyte / scaleDivisor) + " 64")
+        , wear(wear)
+        , smallerFilesOfL1("L1 " + std::to_string(mebibyte / scaleDivisor) + " ")
     {}
 
     std::optional<Target> NorTargets::For(std::string_view metric, std::string_view workload) const
@@ -54,7 +55,7 @@ namespace metrics
         auto nodes = static_cast<infra::Duration::rep>(2 * config.cachedNodes);
         auto nodeBlocks = static_cast<infra::Duration::rep>(2 * geometry->NodeBlocksPerCheckpoint() + 1);
         infra::Duration checkpoint = program(geometry->nodeSize) * nodes + partB * nodeBlocks + program(geometry->RoundToProgramUnit(geometry->CheckpointBytes()));
-        auto move = EraseTime(model, timing, config.sectorsPerBlock) + blockCopy + record;
+        auto move = EraseTime(model, timing, 2 * config.sectorsPerBlock - 1) + blockCopy + record;
         auto newJournalBlock = partB + record;
         auto commit = EraseTime(model, timing, 1) + std::max(checkpoint, move) + 2 * blockCopy + record + newJournalBlock;
 
@@ -63,7 +64,9 @@ namespace metrics
 
     std::optional<Target> NorTargets::WriteTarget(std::string_view metric, std::string_view workload) const
     {
-        if (metric == "W-1")
+        auto divided = scaleDivisor != 1 && workload.starts_with(smallerFilesOfL1);
+
+        if (metric == "W-1" && !divided)
             return AtLeastOf(std::string{ allBaselines }, 0.97);
 
         if (metric == "W-2")
@@ -72,7 +75,7 @@ namespace metrics
         if (metric == "W-3" || metric == "W-5")
             return AtMost(1.2);
 
-        if (metric == "W-4" && workload.starts_with("L1") && (scaleDivisor == 1 || workload != firstPhaseOfL1))
+        if (metric == "W-4" && workload.starts_with("L1") && !(divided && workload.ends_with(" 64")))
             return AtMost(1.1);
 
         if (metric == "W-6" && workload == "L2 maximum")
@@ -100,7 +103,7 @@ namespace metrics
 
     std::optional<Target> NorTargets::WearTarget(std::string_view metric) const
     {
-        if (model.name != norQspi1m.name)
+        if (wear == WearTargets::reported)
             return std::nullopt;
 
         if (metric == "WL-1")

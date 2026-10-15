@@ -2,6 +2,7 @@
 #include "gmock/gmock.h"
 #include <chrono>
 #include <limits>
+#include <optional>
 #include <vector>
 
 using namespace std::chrono_literals;
@@ -97,8 +98,15 @@ TEST(MetricComputationsTest, amplification_divides_device_bytes_by_user_bytes)
 TEST(MetricComputationsTest, ratio_of_two_durations)
 {
     EXPECT_DOUBLE_EQ(1.25, metrics::Ratio(5ms, 4ms));
-    EXPECT_DOUBLE_EQ(1.0, metrics::Ratio({}, {}));
-    EXPECT_EQ(std::numeric_limits<double>::infinity(), metrics::Ratio(1ms, {}));
+    EXPECT_DOUBLE_EQ(1.0, metrics::Ratio(infra::Duration{}, infra::Duration{}));
+    EXPECT_EQ(std::numeric_limits<double>::infinity(), metrics::Ratio(1ms, infra::Duration{}));
+}
+
+TEST(MetricComputationsTest, ratio_of_two_counts)
+{
+    EXPECT_DOUBLE_EQ(1.5, metrics::Ratio(3.0, 2.0));
+    EXPECT_DOUBLE_EQ(1.0, metrics::Ratio(0.0, 0.0));
+    EXPECT_EQ(std::numeric_limits<double>::infinity(), metrics::Ratio(1.0, 0.0));
 }
 
 TEST(MetricComputationsTest, latencies_leave_out_idle_periods)
@@ -206,11 +214,11 @@ TEST(MetricComputationsTest, mean_append_device_time_stays_in_its_phase)
     EXPECT_EQ(1ms, metrics::MeanAppendDeviceTime(records, "L2", 0, 2));
 }
 
-TEST(MetricComputationsTest, mean_append_device_time_without_appends_is_zero)
+TEST(MetricComputationsTest, mean_append_device_time_without_appends_is_absent)
 {
     std::vector<metrics::CallRecord> records{ Record(metrics::Operation::write, "L2", DeviceTime(1ms), 64, 0) };
 
-    EXPECT_EQ(infra::Duration{}, metrics::MeanAppendDeviceTime(records, "L2", 4096, 2));
+    EXPECT_EQ(std::nullopt, metrics::MeanAppendDeviceTime(records, "L2", 4096, 2));
 }
 
 TEST(MetricComputationsTest, charged_device_time_of_a_subject_that_does_not_count_is_its_device_time)
@@ -279,6 +287,23 @@ TEST(MetricComputationsTest, the_last_checkpoint_periods_end_at_the_last_checkpo
     EXPECT_EQ(&records[4], window.back());
 }
 
+TEST(MetricComputationsTest, the_last_checkpoint_periods_count_every_checkpoint_of_a_call)
+{
+    std::vector<metrics::CallRecord> records{
+        Checkpoint(metrics::Operation::idle, 1ms),
+        Record(metrics::Operation::write, "L2", DeviceTime(2ms), 64, 64),
+        Checkpoint(metrics::Operation::idle, 3ms),
+        Record(metrics::Operation::write, "L2", DeviceTime(4ms), 64, 128),
+        Counted(metrics::Operation::idle, "L2", DeviceTime(5ms), { .checkpoints = 2 }),
+    };
+
+    auto window = metrics::LastCheckpointPeriods(records, "L2", 2);
+
+    ASSERT_EQ(2, window.size());
+    EXPECT_EQ(&records[3], window.front());
+    EXPECT_EQ(&records[4], window.back());
+}
+
 TEST(MetricComputationsTest, checkpoint_periods_are_empty_without_enough_checkpoints)
 {
     std::vector<metrics::CallRecord> records{
@@ -303,7 +328,7 @@ TEST(MetricComputationsTest, mean_append_time_spreads_the_charged_time_of_append
     EXPECT_EQ(15ms, metrics::MeanAppendTime(metrics::Select(records, "L2"), 10ms));
 }
 
-TEST(MetricComputationsTest, mean_append_time_without_writes_is_zero)
+TEST(MetricComputationsTest, mean_append_time_without_writes_is_absent)
 {
-    EXPECT_EQ(infra::Duration{}, metrics::MeanAppendTime({}, 10ms));
+    EXPECT_EQ(std::nullopt, metrics::MeanAppendTime({}, 10ms));
 }

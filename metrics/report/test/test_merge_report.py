@@ -98,6 +98,11 @@ class MergeTest(unittest.TestCase):
 
         self.assertFalse(self.find(results, "embedded-filesystem/nor")["pass"])
 
+    def test_a_factor_in_exponent_notation_scales_the_best_baseline(self):
+        results = self.merged([result(value=1500.0, target=">= 1e+01 baselines")], [result(subject="littlefs/default", value=100.0)])
+
+        self.assertTrue(self.find(results, "embedded-filesystem/nor")["pass"])
+
     def test_at_most_a_family_compares_with_its_lowest_member(self):
         results = self.merged(
             [result(metric="M-3", value=4.0, target="<= fatfs", better="lower")],

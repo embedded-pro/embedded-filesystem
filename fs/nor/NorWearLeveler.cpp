@@ -180,7 +180,7 @@ namespace fs
             return;
         }
 
-        volume.Allocator().Allocate(NorBlockType::data, owner, NorReserve::kept, NorWear::most, [this](std::optional<uint32_t> allocated)
+        volume.Allocator().Allocate(NorBlockType::data, owner, NorReserve::kept, NorWear::mostFree, [this](std::optional<uint32_t> allocated)
             {
                 Allocated(allocated);
             });

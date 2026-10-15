@@ -32,10 +32,10 @@ namespace
             return allocated.value_or(std::nullopt);
         }
 
-        std::optional<uint32_t> AllocateMostWorn()
+        std::optional<uint32_t> AllocateOfWear(fs::NorWear wear)
         {
             std::optional<std::optional<uint32_t>> allocated;
-            Volume().Allocator().Allocate(fs::NorBlockType::node, {}, fs::NorReserve::used, fs::NorWear::most, [&allocated](std::optional<uint32_t> block)
+            Volume().Allocator().Allocate(fs::NorBlockType::node, {}, fs::NorReserve::used, wear, [&allocated](std::optional<uint32_t> block)
                 {
                     allocated = block;
                 });
@@ -107,8 +107,8 @@ TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_takes_the_free_and_erased_b
     Builder().SetEraseCount(13, 4);
     Mount();
 
-    EXPECT_EQ(9, AllocateMostWorn());
-    EXPECT_EQ(12, AllocateMostWorn());
+    EXPECT_EQ(9, AllocateOfWear(fs::NorWear::most));
+    EXPECT_EQ(12, AllocateOfWear(fs::NorWear::most));
     EXPECT_EQ(fs::NorBlockState::pending, State().blocks.State(12));
 }
 
@@ -119,22 +119,45 @@ TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_without_an_erased_block_era
     Mount();
     MarkEveryFreeBlockNotErased();
 
-    EXPECT_EQ(20, AllocateMostWorn());
+    EXPECT_EQ(20, AllocateOfWear(fs::NorWear::most));
     EXPECT_EQ(10, HeaderOf(20).eraseCount);
 }
 
-TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_erases_a_free_block_more_worn_than_every_erased_one)
+TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_takes_an_erased_block_before_a_more_worn_one_that_is_not_erased)
+{
+    Builder().SetEraseCount(9, 5);
+    Builder().SetEraseCount(20, 8);
+    Mount();
+    State().blocks.Set(20, fs::NorBlockState::freeNotErased);
+    device.recording = true;
+
+    EXPECT_EQ(9, AllocateOfWear(fs::NorWear::most));
+    EXPECT_EQ(0, Erases());
+}
+
+TEST_F(NorBlockAllocatorTest, a_most_worn_free_allocation_without_an_erased_block_erases_the_most_worn_free_block)
+{
+    Builder().SetEraseCount(12, 0);
+    Builder().SetEraseCount(20, 9);
+    Mount();
+    MarkEveryFreeBlockNotErased();
+
+    EXPECT_EQ(20, AllocateOfWear(fs::NorWear::mostFree));
+    EXPECT_EQ(10, HeaderOf(20).eraseCount);
+}
+
+TEST_F(NorBlockAllocatorTest, a_most_worn_free_allocation_erases_a_free_block_more_worn_than_every_erased_one)
 {
     Builder().SetEraseCount(9, 5);
     Builder().SetEraseCount(20, 8);
     Mount();
     State().blocks.Set(20, fs::NorBlockState::freeNotErased);
 
-    EXPECT_EQ(20, AllocateMostWorn());
+    EXPECT_EQ(20, AllocateOfWear(fs::NorWear::mostFree));
     EXPECT_EQ(9, HeaderOf(20).eraseCount);
 }
 
-TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_takes_an_erased_block_as_worn_as_every_free_one)
+TEST_F(NorBlockAllocatorTest, a_most_worn_free_allocation_takes_an_erased_block_as_worn_as_every_free_one)
 {
     Builder().SetEraseCount(9, 8);
     Builder().SetEraseCount(20, 8);
@@ -142,7 +165,7 @@ TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_takes_an_erased_block_as_wo
     State().blocks.Set(20, fs::NorBlockState::freeNotErased);
     device.recording = true;
 
-    EXPECT_EQ(9, AllocateMostWorn());
+    EXPECT_EQ(9, AllocateOfWear(fs::NorWear::mostFree));
     EXPECT_EQ(0, Erases());
 }
 
@@ -328,6 +351,36 @@ TEST_F(NorBlockAllocatorOnMockTest, an_empty_pool_finishes_the_block_that_the_er
     EXPECT_CALL(done, callback(std::optional<uint32_t>(6)));
 
     volume.Allocator().Allocate(fs::NorBlockType::node, {}, fs::NorReserve::used, [this](std::optional<uint32_t> block)
+        {
+            done.callback(block);
+        });
+    CompleteRequests();
+}
+
+TEST_F(NorBlockAllocatorOnMockTest, a_most_worn_free_allocation_finishes_the_block_that_the_eraser_started_then_erases_the_most_worn_block)
+{
+    volume.State().blocks.Set(9, fs::NorBlockState::freeNotErased);
+    volume.State().eraseCounts.Record(9, 7);
+    EXPECT_CALL(flash, eraseSectorsMock(12, 13));
+    volume.Eraser().Step([] {});
+    CompleteRequests();
+
+    std::array<uint8_t, 16> partAOf6{};
+    fs::SerializeNorHeaderA(5, infra::MakeRange(partAOf6));
+    std::array<uint8_t, 16> partAOf9{};
+    fs::SerializeNorHeaderA(8, infra::MakeRange(partAOf9));
+    std::array<uint8_t, 32> partB{};
+    fs::SerializeNorHeaderB(fs::NorAllocation{ fs::NorBlockType::node, 9, {} }, infra::MakeRange(partB));
+    testing::InSequence sequence;
+    EXPECT_CALL(flash, eraseSectorsMock(13, 14));
+    EXPECT_CALL(flash, writeBufferMock(std::vector<uint8_t>(partAOf6.begin(), partAOf6.end()), 6 * 4096));
+    EXPECT_CALL(flash, eraseSectorsMock(18, 19));
+    EXPECT_CALL(flash, eraseSectorsMock(19, 20));
+    EXPECT_CALL(flash, writeBufferMock(std::vector<uint8_t>(partAOf9.begin(), partAOf9.end()), 9 * 4096));
+    EXPECT_CALL(flash, writeBufferMock(std::vector<uint8_t>(partB.begin(), partB.end()), 9 * 4096 + 16));
+    EXPECT_CALL(done, callback(std::optional<uint32_t>(9)));
+
+    volume.Allocator().Allocate(fs::NorBlockType::node, {}, fs::NorReserve::used, fs::NorWear::mostFree, [this](std::optional<uint32_t> block)
         {
             done.callback(block);
         });

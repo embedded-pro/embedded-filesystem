@@ -11,7 +11,6 @@ OWN_SUBJECT_PREFIX = "embedded-filesystem"
 ALL_BASELINES = "baselines"
 REGRESSION_TOLERANCE = 0.05
 TARGET_PATTERN = re.compile(r"^(<=|>=) (.+)$")
-FACTOR_PATTERN = re.compile(r"^(\d+(?:\.\d+)?) (.+)$")
 LIFETIME_METRIC = "WL-3"
 LIFETIME_FAMILY = "littlefs"
 METRIC_PATTERN = re.compile(r"^([A-Z]+)-(\d+)$")
@@ -41,10 +40,11 @@ def parse_target(text):
         return comparison, float(reference), 1.0
     except ValueError:
         pass
-    factor = FACTOR_PATTERN.match(reference)
-    if factor is None:
+    factor, _, family = reference.partition(" ")
+    try:
+        return comparison, family, float(factor)
+    except ValueError:
         return comparison, reference, 1.0
-    return comparison, factor.group(2), float(factor.group(1))
 
 
 def comparison_key(result):

@@ -2,6 +2,8 @@
 #include "metrics/workload/MetricComputations.hpp"
 #include <algorithm>
 #include <chrono>
+#include <limits>
+#include <optional>
 
 namespace metrics
 {
@@ -20,6 +22,14 @@ namespace metrics
         std::array<uint32_t, 3> OverwriteSizes(const WorkloadParameters& parameters)
         {
             return { std::max(Scaled(64 * 1024, parameters), overwriteSize), std::max(Scaled(mebibyte, parameters), overwriteSize), std::max(Scaled(4 * mebibyte, parameters), overwriteSize) };
+        }
+
+        double WindowRatio(const std::optional<infra::Duration>& numerator, const std::optional<infra::Duration>& denominator)
+        {
+            if (!numerator.has_value() || !denominator.has_value())
+                return std::numeric_limits<double>::infinity();
+
+            return Ratio(numerator.value_or(infra::Duration{}), denominator.value_or(infra::Duration{}));
         }
 
         double Milliseconds(infra::Duration duration)
@@ -87,15 +97,15 @@ namespace metrics
         if (runner.Subject().Counters().has_value())
         {
             auto fullLog = MeanAppendTime(LastCheckpointPeriods(records, "L2", checkpointPeriods), sectorErase);
-            auto smallLog = MeanAppendTime(CheckpointPeriodsFrom(records, "L2", smallLogSize, checkpointPeriods), sectorErase);
-            recorder.Record("W-2", "L2", "ratio", Better::lower, Ratio(fullLog, smallLog), parameters.fillPercent);
+            auto smallLog = MeanAppendTime(CheckpointPeriodsFrom(records, secondLogPhase, smallLogSize, checkpointPeriods), sectorErase);
+            recorder.Record("W-2", "L2", "ratio", Better::lower, WindowRatio(fullLog, smallLog), parameters.fillPercent);
         }
         else
         {
             auto logSize = Scaled(4 * mebibyte, parameters);
             auto fullLog = MeanAppendDeviceTime(records, "L2", logSize - appendWindow * appendSize, appendWindow);
-            auto smallLog = MeanAppendDeviceTime(records, "L2", smallLogSize, appendWindow);
-            recorder.Record("W-2", "L2", "ratio", Better::lower, Ratio(fullLog, smallLog), parameters.fillPercent);
+            auto smallLog = MeanAppendDeviceTime(records, secondLogPhase, smallLogSize, appendWindow);
+            recorder.Record("W-2", "L2", "ratio", Better::lower, WindowRatio(fullLog, smallLog), parameters.fillPercent);
         }
 
         auto phase = Select(records, "L2");
@@ -155,7 +165,7 @@ namespace metrics
         auto sizes = OverwriteSizes(parameters);
         auto largest = ReadRequestsPerOperation(Select(runner.Records(), Phase("L6 random", sizes.back())), Operation::read);
         auto smallest = ReadRequestsPerOperation(Select(runner.Records(), Phase("L6 random", sizes.front())), Operation::read);
-        recorder.Record("R-2", "L6 random ratio", "ratio", Better::lower, smallest == 0 ? 1.0 : largest / smallest);
+        recorder.Record("R-2", "L6 random ratio", "ratio", Better::lower, Ratio(largest, smallest));
     }
 
     void MeasureMount(Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters)

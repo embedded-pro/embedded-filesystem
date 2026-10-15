@@ -113,6 +113,11 @@ namespace metrics
         return Quotient(Seconds(numerator), Seconds(denominator), 1);
     }
 
+    double Ratio(double numerator, double denominator)
+    {
+        return Quotient(numerator, denominator, 1);
+    }
+
     std::vector<infra::Duration> Latencies(const RecordSelection& records)
     {
         std::vector<infra::Duration> latencies;
@@ -157,7 +162,7 @@ namespace metrics
         return Quotient(static_cast<double>(TotalDevice(records).readRequests), static_cast<double>(Count(records, operation)), 0);
     }
 
-    infra::Duration MeanAppendDeviceTime(const std::vector<CallRecord>& records, std::string_view phase, uint32_t fromFileSize, std::size_t window)
+    std::optional<infra::Duration> MeanAppendDeviceTime(const std::vector<CallRecord>& records, std::string_view phase, uint32_t fromFileSize, std::size_t window)
     {
         auto first = std::find_if(records.begin(), records.end(), [phase, fromFileSize](const CallRecord& record)
             {
@@ -177,7 +182,7 @@ namespace metrics
 
         appends = std::min(appends, window);
         if (appends == 0)
-            return infra::Duration{};
+            return std::nullopt;
 
         return total / static_cast<infra::Duration::rep>(appends);
     }
@@ -219,18 +224,22 @@ namespace metrics
 
     RecordSelection LastCheckpointPeriods(const std::vector<CallRecord>& records, std::string_view phase, std::size_t periods)
     {
-        std::vector<std::vector<CallRecord>::const_iterator> checkpoints;
-        for (auto record = records.begin(); record != records.end(); ++record)
-            if (record->phase == phase && Checkpoints(*record) != 0)
-                checkpoints.push_back(record);
+        uint64_t counted = 0;
+        for (auto record = records.rbegin(); record != records.rend(); ++record)
+        {
+            if (record->phase != phase || Checkpoints(*record) == 0)
+                continue;
 
-        if (checkpoints.size() <= periods)
-            return {};
+            if (counted >= periods)
+                return PeriodsAfter(record.base(), records.end(), phase, periods);
 
-        return PeriodsAfter(std::next(checkpoints[checkpoints.size() - 1 - periods]), records.end(), phase, periods);
+            counted += Checkpoints(*record);
+        }
+
+        return {};
     }
 
-    infra::Duration MeanAppendTime(const RecordSelection& records, infra::Duration sectorErase)
+    std::optional<infra::Duration> MeanAppendTime(const RecordSelection& records, infra::Duration sectorErase)
     {
         infra::Duration total{};
         for (const auto* record : records)
@@ -239,7 +248,7 @@ namespace metrics
 
         auto writes = Count(records, Operation::write);
         if (writes == 0)
-            return infra::Duration{};
+            return std::nullopt;
 
         return total / static_cast<infra::Duration::rep>(writes);
     }

@@ -9,7 +9,8 @@ namespace
 {
     const metrics::NorTargets norQspi16m{ metrics::norQspi16m, metrics::norQspi16mConfig, 1 };
     const metrics::NorTargets internalFlash{ metrics::internalFlash, metrics::internalFlashConfig, 64 };
-    const metrics::NorTargets lifetime{ metrics::norQspi1m, metrics::norQspi1mConfig, 1 };
+    const metrics::NorTargets lifetime{ metrics::norQspi1m, metrics::norQspi1mConfig, 1, metrics::WearTargets::asserted };
+    const metrics::NorTargets shortRunOnNorQspi1m{ metrics::norQspi1m, metrics::norQspi1mConfig, 1 };
 
     std::string TargetOf(const metrics::NorTargets& targets, std::string_view metric, std::string_view workload)
     {
@@ -28,6 +29,12 @@ TEST(NorTargetsTest, sequential_writes_reach_0_97_times_the_best_baseline)
 {
     EXPECT_EQ(">= 0.97 baselines", TargetOf(norQspi16m, "W-1", "L1 1048576 64"));
     EXPECT_EQ(">= 0.97 baselines", TargetOf(internalFlash, "W-1", "L1 65536 4096"));
+}
+
+TEST(NorTargetsTest, sequential_writes_of_the_smaller_files_are_reported_where_the_files_are_divided)
+{
+    EXPECT_EQ("reported", TargetOf(internalFlash, "W-1", "L1 16384 64"));
+    EXPECT_EQ("reported", TargetOf(internalFlash, "W-1", "L1 16384 4096"));
 }
 
 TEST(NorTargetsTest, appends_and_overwrites_scale_with_the_file_size_and_the_fill_level)
@@ -56,9 +63,9 @@ TEST(NorTargetsTest, the_longest_append_is_bounded_by_one_commit_and_overwrites_
     EXPECT_EQ("reported", TargetOf(internalFlash, "W-6", "L3 maximum"));
 }
 
-TEST(NorTargetsTest, one_commit_is_a_sector_erase_a_move_that_erases_its_destination_the_copy_of_two_blocks_and_two_records)
+TEST(NorTargetsTest, one_commit_is_a_sector_erase_a_move_that_finishes_a_block_and_erases_its_destination_the_copy_of_two_blocks_and_two_records)
 {
-    EXPECT_NEAR(67.03, internalFlash.CommitMilliseconds(), 0.05);
+    EXPECT_NEAR(87.03, internalFlash.CommitMilliseconds(), 0.05);
 }
 
 TEST(NorTargetsTest, reads_reach_the_best_baseline_with_at_most_4_requests_per_random_read)
@@ -90,4 +97,5 @@ TEST(NorTargetsTest, wear_on_short_runs_is_reported)
     EXPECT_EQ("reported", TargetOf(norQspi16m, "WL-1", "L5"));
     EXPECT_EQ("reported", TargetOf(norQspi16m, "WL-2", "L4"));
     EXPECT_EQ("reported", TargetOf(internalFlash, "WL-4", "L5"));
+    EXPECT_EQ("reported", TargetOf(shortRunOnNorQspi1m, "WL-1", "L5"));
 }

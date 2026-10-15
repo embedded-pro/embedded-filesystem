@@ -51,7 +51,9 @@ namespace fs
 
     bool NorBackground::FallbackDue() const
     {
-        return urgent && volume.Leveler().FallbackDue();
+        const auto& blocks = volume.State().blocks;
+        auto free = blocks.Count(NorBlockState::freeErased) + blocks.Count(NorBlockState::freeNotErased);
+        return urgent && volume.Leveler().FallbackDue() && free > 2 * volume.Geometry().NodeBlocksPerCheckpoint();
     }
 
     bool NorBackground::MoveDue() const
@@ -67,20 +69,9 @@ namespace fs
     bool NorBackground::CheckpointDue() const
     {
         const auto& cache = volume.Cache();
-        auto collection = volume.Collector().Due();
-        auto due = volume.Journal().IsMoreThanHalfFull() || 2 * cache.ModifiedNodes() > cache.Capacity() || (collection && RoundLeft());
-        auto nodeBlocks = (collection ? 2 : 1) * volume.Geometry().NodeBlocksPerCheckpoint();
+        auto due = volume.Journal().IsMoreThanHalfFull() || 2 * cache.ModifiedNodes() > cache.Capacity();
+        auto nodeBlocks = (volume.Collector().Due() ? 2 : 1) * volume.Geometry().NodeBlocksPerCheckpoint();
         return due && volume.State().blocks.Count(NorBlockState::freeErased) > nodeBlocks;
-    }
-
-    bool NorBackground::RoundLeft() const
-    {
-        return CalledSinceRound() || volume.Collector().LeftBlocks() - roundStart < roundBlocks;
-    }
-
-    bool NorBackground::CalledSinceRound() const
-    {
-        return !roundReleases.has_value() || roundReleases.value_or(0) != volume.Queue().ForegroundReleases();
     }
 
     bool NorBackground::ShouldStop() const
@@ -126,7 +117,6 @@ namespace fs
 
     void NorBackground::WriteCheckpoint()
     {
-        StartRound();
         volume.Checkpoints().Write(machine.CompletionWith<void(Result result)>([](Result result)
             {
                 // The pool holds every block that the checkpoint may take
@@ -141,17 +131,6 @@ namespace fs
             {
                 return NorBackgroundUnitDone{};
             }));
-    }
-
-    void NorBackground::StartRound()
-    {
-        const auto& collector = volume.Collector();
-        if (collector.Due() && CalledSinceRound())
-        {
-            roundReleases = volume.Queue().ForegroundReleases();
-            roundStart = collector.LeftBlocks();
-            roundBlocks = collector.CollectableBlocks();
-        }
     }
 
     void NorBackground::Release()

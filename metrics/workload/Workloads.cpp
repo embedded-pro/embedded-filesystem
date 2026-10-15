@@ -14,6 +14,7 @@ namespace metrics
         constexpr uint32_t mebibyte = 1024 * kibibyte;
         constexpr uint32_t chunkSize = 4 * kibibyte;
         constexpr std::chrono::milliseconds loggerIdle{ 100 };
+        constexpr uint32_t secondLogLimit = 128 * kibibyte;
 
         uint32_t Scaled(uint32_t size, const WorkloadParameters& parameters)
         {
@@ -63,6 +64,26 @@ namespace metrics
 
             if (parameters.fillPercent != 0)
                 FillVolume(runner, parameters.fillPercent, parameters, reservedBytes);
+        }
+
+        void AppendLog(Runner& runner, std::string_view path, uint32_t fileId, uint32_t size)
+        {
+            auto file = runner.Open(path, OpenMode::append);
+            if (!file)
+                return;
+
+            std::array<uint8_t, appendSize> record{};
+            for (uint32_t offset = 0; offset + appendSize <= size && !runner.Interrupted(); offset += appendSize)
+            {
+                FillPattern(infra::MakeRange(record), fileId, offset);
+                if (runner.Write(*file, infra::MakeRange(record)) != fs::Result::success)
+                    break;
+
+                runner.Sync(*file);
+                runner.Idle(loggerIdle);
+            }
+
+            runner.Close(*file);
         }
 
         void ReadFileInChunks(Runner& runner, std::string_view path)
@@ -189,25 +210,17 @@ namespace metrics
     void DataLogger(Runner& runner, const WorkloadParameters& parameters)
     {
         auto size = Scaled(4 * mebibyte, parameters);
-        Prepare(runner, "L2", parameters, size);
-        runner.SetPhase("L2");
+        auto secondSize = std::min(size, secondLogLimit);
+        Prepare(runner, "L2", parameters, uint64_t{ size } + secondSize);
 
-        auto file = runner.Open("/log", OpenMode::append);
-        if (!file)
+        runner.SetPhase("L2");
+        AppendLog(runner, "/log", 200, size);
+
+        if (runner.Interrupted())
             return;
 
-        std::array<uint8_t, appendSize> record{};
-        for (uint32_t offset = 0; offset + appendSize <= size && !runner.Interrupted(); offset += appendSize)
-        {
-            FillPattern(infra::MakeRange(record), 200, offset);
-            if (runner.Write(*file, infra::MakeRange(record)) != fs::Result::success)
-                break;
-
-            runner.Sync(*file);
-            runner.Idle(loggerIdle);
-        }
-
-        runner.Close(*file);
+        runner.SetPhase(std::string{ secondLogPhase });
+        AppendLog(runner, "/log2", 201, secondSize);
     }
 
     void RandomOverwrite(Runner& runner, const WorkloadParameters& parameters)

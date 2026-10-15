@@ -40,7 +40,7 @@ namespace fs
     {
         const auto& state = volume.State();
         auto notErased = WornBlock(state.blocks, state.eraseCounts, NorBlockState::freeNotErased, NorWear::most);
-        return wear == NorWear::least || !notErased.has_value() || state.eraseCounts.Count(erased) >= state.eraseCounts.Count(notErased.value_or(0));
+        return wear != NorWear::mostFree || !notErased.has_value() || state.eraseCounts.Count(erased) >= state.eraseCounts.Count(notErased.value_or(0));
     }
 
     void NorBlockAllocator::TakeErased()

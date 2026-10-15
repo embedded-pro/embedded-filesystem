@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <string_view>
 
 namespace metrics
 {
@@ -18,6 +19,7 @@ namespace metrics
     constexpr uint32_t appendSize = 64;
     constexpr uint32_t overwriteSize = 512;
     constexpr uint32_t randomReadSize = 512;
+    constexpr std::string_view secondLogPhase{ "L2 second log" };
 
     std::string Phase(std::string_view workload, uint64_t value);
     std::string Phase(std::string_view workload, uint64_t first, uint64_t second);

@@ -334,6 +334,47 @@ TEST_F(NorWearLevelerTest, moves_a_node_block_into_a_node_block_taken_from_the_m
     EXPECT_THAT(List("/a"), testing::ElementsAre("x"));
 }
 
+TEST_F(NorWearLevelerTest, a_node_move_takes_the_most_worn_erased_block_before_a_more_worn_one_that_is_not_erased)
+{
+    MountWithDirectories();
+    auto source = State().inodeTable.address / blockSize;
+    auto target = FreeErasedBlock();
+    auto notErased = FreeErasedBlock() - 1;
+    Wear(10);
+    State().eraseCounts.Record(source, 1);
+    State().eraseCounts.Record(target, worn);
+    State().eraseCounts.Record(notErased, worn + 5);
+    ASSERT_EQ(fs::NorBlockState::freeErased, State().blocks.State(notErased));
+    State().blocks.Set(notErased, fs::NorBlockState::freeNotErased);
+    SetErases(2);
+
+    Move();
+
+    EXPECT_EQ(target, State().inodeTable.address / blockSize);
+    EXPECT_EQ(fs::NorBlockState::freeNotErased, State().blocks.State(notErased));
+}
+
+TEST_F(NorWearLevelerTest, a_node_move_on_an_empty_pool_erases_the_most_worn_free_block)
+{
+    MountWithDirectories();
+    auto source = State().inodeTable.address / blockSize;
+    auto target = FreeErasedBlock();
+    Wear(10);
+    State().eraseCounts.Record(source, 1);
+    State().eraseCounts.Record(target, worn);
+    for (uint32_t block = 2; block != 48; ++block)
+        if (State().blocks.State(block) == fs::NorBlockState::freeErased)
+            State().blocks.Set(block, fs::NorBlockState::freeNotErased);
+    SetErases(2);
+
+    Move();
+
+    EXPECT_EQ(target, State().inodeTable.address / blockSize);
+    EXPECT_EQ(worn + 1, HeaderOf(target).eraseCount);
+    RemountWithFreeBlocksErased();
+    EXPECT_THAT(List("/a"), testing::ElementsAre("x"));
+}
+
 TEST_F(NorWearLevelerTest, a_move_is_due_into_a_worn_free_block_that_is_not_erased)
 {
     auto file = MountWithFile();

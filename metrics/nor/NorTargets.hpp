@@ -11,11 +11,17 @@
 
 namespace metrics
 {
+    enum class WearTargets
+    {
+        reported,
+        asserted
+    };
+
     class NorTargets
         : public Targets
     {
     public:
-        NorTargets(const NorModel& model, const fs::NorConfig& config, uint32_t scaleDivisor);
+        NorTargets(const NorModel& model, const fs::NorConfig& config, uint32_t scaleDivisor, WearTargets wear = WearTargets::reported);
 
         std::optional<Target> For(std::string_view metric, std::string_view workload) const override;
         double CommitMilliseconds() const;
@@ -29,7 +35,8 @@ namespace metrics
         const NorModel& model;
         fs::NorConfig config;
         uint32_t scaleDivisor;
-        std::string firstPhaseOfL1;
+        WearTargets wear;
+        std::string smallerFilesOfL1;
     };
 }
 

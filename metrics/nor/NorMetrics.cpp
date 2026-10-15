@@ -15,7 +15,7 @@ namespace metrics
 
         const NorTargets norQspi16mTargets{ norQspi16m, norQspi16mConfig, 1 };
         const NorTargets internalFlashTargets{ internalFlash, internalFlashConfig, 64 };
-        const NorTargets norQspi1mTargets{ norQspi1m, norQspi1mConfig, 1 };
+        const NorTargets norQspi1mTargets{ norQspi1m, norQspi1mConfig, 1, WearTargets::asserted };
 
         template<fs::NorConfig Config>
         NorSetup Setup(std::string label, const NorModel& model, uint32_t scaleDivisor, const std::set<std::string, std::less<>>& deferred, const Targets& targets)
