@@ -152,6 +152,7 @@ namespace fs
     {
         auto& state = volume.State();
         auto kept = std::ranges::find(state.epoch, checkpoint.recordsBlock);
+        really_assert(!replayRecords.has_value() || kept != state.epoch.end());
         if (state.checkpointBlock != checkpoint.recordsBlock)
             state.blocks.Set(state.checkpointBlock, NorBlockState::freeNotErased);
         for (auto epochBlock = state.epoch.begin(); epochBlock != kept; ++epochBlock)
@@ -165,7 +166,6 @@ namespace fs
         state.checkpointBlock = block;
         if (replayRecords.has_value())
         {
-            really_assert(kept != state.epoch.end());
             state.epoch.erase(state.epoch.begin(), kept);
             state.journal.blocks = static_cast<uint32_t>(state.epoch.size());
         }

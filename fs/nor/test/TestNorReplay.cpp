@@ -295,12 +295,73 @@ TEST_F(NorReplayTest, a_data_block_that_a_record_after_the_checkpoint_sets_is_no
 
     MountWith(reader);
 
+    const auto& state = reader.Volume().State();
+    ASSERT_NE(state.checkpointBlock, state.checkpoint.recordsBlock);
+    EXPECT_EQ(0, state.blocks.Count(fs::NorBlockState::pending));
+    ASSERT_TRUE(HeaderOf(block).allocation.has_value());
     EXPECT_EQ(fs::NorBlockType::data, HeaderOf(block).allocation->type);
     ExpectContentsIn(reader, "/g");
     Settle(reader);
     fs::ExposedNorFileSystem<readerConfig> smallAgain{ device };
     MountWith(smallAgain);
     ExpectContentsIn(smallAgain, "/g");
+}
+
+TEST_F(NorReplayTest, a_block_that_a_record_before_the_checkpoint_releases_and_a_record_after_it_maps_again_is_not_erased_for_the_checkpoint)
+{
+    AddDirectories(root, 160);
+    Mount();
+    auto file = Open("/g", fs::OpenMode::write);
+    ASSERT_EQ(fs::Result::success, Write(*file, infra::MakeRange(contents)));
+    ASSERT_EQ(fs::Result::success, Close(*file));
+    auto inode = InodeOf("/g");
+    auto block = BlockOf("/g", 0);
+    std::optional<fs::Result> written;
+    Volume().Checkpoints().Write([&written](fs::Result result)
+        {
+            written = result;
+        });
+    ExecuteAllActions();
+    ASSERT_EQ(fs::Result::success, written);
+    ASSERT_EQ(fs::Result::success, Commit({ fs::NorBlockSet{ inode, 0, block, 0 } }));
+    PutLeaves(0, 20);
+    ASSERT_EQ(fs::Result::success, Commit({ fs::NorBlockSet{ inode, 0, 0, block } }));
+    WearFreeBlocksExcept(block);
+
+    MountWith(reader);
+
+    const auto& state = reader.Volume().State();
+    ASSERT_NE(state.checkpointBlock, state.checkpoint.recordsBlock);
+    EXPECT_EQ(0, state.blocks.Count(fs::NorBlockState::pending));
+    ASSERT_TRUE(HeaderOf(block).allocation.has_value());
+    EXPECT_EQ(fs::NorBlockType::data, HeaderOf(block).allocation->type);
+    ExpectContentsIn(reader, "/g");
+    Settle(reader);
+    fs::ExposedNorFileSystem<readerConfig> smallAgain{ device };
+    MountWith(smallAgain);
+    ExpectContentsIn(smallAgain, "/g");
+}
+
+TEST_F(NorReplayTest, a_block_that_records_after_the_checkpoint_map_and_release_is_free_after_the_replay)
+{
+    SetUpInodeTable();
+    auto file = Open("/f", fs::OpenMode::write);
+    ASSERT_EQ(fs::Result::success, Close(*file));
+    auto inode = InodeOf("/f");
+    PutLeaves(0, 20);
+    uint32_t block = 2;
+    while (State().blocks.State(block) != fs::NorBlockState::freeErased)
+        ++block;
+    ASSERT_EQ(fs::Result::success, Commit({ fs::NorBlockSet{ inode, 0, 0, block } }));
+    ASSERT_EQ(fs::Result::success, Commit({ fs::NorBlockSet{ inode, 0, block, 0 } }));
+
+    MountWith(reader);
+
+    const auto& state = reader.Volume().State();
+    ASSERT_NE(state.checkpointBlock, state.checkpoint.recordsBlock);
+    EXPECT_NE(block, state.checkpointBlock);
+    EXPECT_EQ(fs::NorBlockState::freeNotErased, state.blocks.State(block));
+    EXPECT_EQ(0, state.blocks.Count(fs::NorBlockState::pending));
 }
 
 TEST_F(NorReplayTest, a_replay_that_overflows_in_the_checkpoint_block_keeps_it_for_its_records)
@@ -340,6 +401,8 @@ TEST_F(NorReplayTest, a_replay_that_overflows_at_the_first_record_of_a_journal_b
     Settle(reader);
     fs::ExposedNorFileSystem<readerConfig> smallAgain{ device };
     MountWith(smallAgain);
+    EXPECT_EQ(overflow.block, smallAgain.Volume().State().checkpoint.recordsBlock);
+    EXPECT_EQ(headerSize, smallAgain.Volume().State().checkpoint.recordsOffset);
     ExpectLeavesPut(smallAgain, 0, leavesThatFitTheReader + 6);
 }
 
@@ -363,8 +426,8 @@ TEST_F(NorReplayTest, a_replay_that_overflows_in_a_third_journal_block_frees_the
 
     const auto& state = reader.Volume().State();
     EXPECT_EQ(third, state.checkpoint.recordsBlock);
-    EXPECT_NE(fs::NorBlockState::inUse, state.blocks.State(checkpointBlock));
-    EXPECT_NE(fs::NorBlockState::inUse, state.blocks.State(second));
+    EXPECT_EQ(fs::NorBlockState::freeNotErased, state.blocks.State(checkpointBlock));
+    EXPECT_EQ(fs::NorBlockState::freeNotErased, state.blocks.State(second));
     EXPECT_THAT(state.epoch, testing::ElementsAre(third));
     EXPECT_EQ(1, state.journal.blocks);
     Settle(reader);
@@ -381,6 +444,7 @@ TEST_F(NorReplayTest, a_replay_that_overflows_again_after_its_checkpoint_writes_
     MountWith(reader);
 
     EXPECT_LT(leavesThatFitTheReader, IndexOf(reader.Volume().State().checkpoint));
+    EXPECT_GT(committed, IndexOf(reader.Volume().State().checkpoint));
     Settle(reader);
     fs::ExposedNorFileSystem<readerConfig> smallAgain{ device };
     MountWith(smallAgain);
@@ -401,6 +465,30 @@ TEST_F(NorReplayTest, a_first_record_that_does_not_fit_an_empty_cache_makes_the_
     ASSERT_EQ(fs::Result::success, written);
     ASSERT_EQ(fs::Result::success, Commit({ fs::NorDirectoryEntryPut{ 2, 0, 3 }, fs::NorDirectoryEntryPut{ 3, 0, 3 }, fs::NorDirectoryEntryPut{ 4, 0, 3 }, fs::NorDirectoryEntryPut{ 5, 0, 3 }, fs::NorDirectoryEntryPut{ 6, 0, 3 }, fs::NorDirectoryEntryPut{ 7, 0, 3 }, fs::NorDirectoryEntryPut{ 8, 0, 3 }, fs::NorDirectoryEntryPut{ 9, 0, 3 }, fs::NorDirectoryEntryPut{ 10, 0, 3 }, fs::NorDirectoryEntryPut{ 11, 0, 3 }, fs::NorDirectoryEntryPut{ 12, 0, 3 }, fs::NorDirectoryEntryPut{ 13, 0, 3 }, fs::NorDirectoryEntryPut{ 14, 0, 3 }, fs::NorDirectoryEntryPut{ 15, 0, 3 }, fs::NorDirectoryEntryPut{ 16, 0, 3 } }));
     ASSERT_LT(readerConfig.cachedNodes, Volume().Cache().ModifiedNodes());
+    device.recording = true;
+
+    MountWith(reader, fs::Result::unsupported);
+
+    EXPECT_TRUE(device.requests.empty());
+}
+
+TEST_F(NorReplayTest, a_first_record_in_a_journal_block_after_a_remount_that_does_not_fit_an_empty_cache_makes_the_mount_unsupported_without_writing)
+{
+    Mount();
+    for (uint32_t index = 0; index != 15; ++index)
+        ASSERT_EQ(fs::Result::success, MakeDirectory(PathOf(index)));
+    std::optional<fs::Result> written;
+    Volume().Checkpoints().Write([&written](fs::Result result)
+        {
+            written = result;
+        });
+    ExecuteAllActions();
+    ASSERT_EQ(fs::Result::success, written);
+    Unmount();
+    Mount();
+    auto checkpointBlock = State().checkpointBlock;
+    ASSERT_EQ(fs::Result::success, Commit({ fs::NorDirectoryEntryPut{ 2, 0, 3 }, fs::NorDirectoryEntryPut{ 3, 0, 3 }, fs::NorDirectoryEntryPut{ 4, 0, 3 }, fs::NorDirectoryEntryPut{ 5, 0, 3 }, fs::NorDirectoryEntryPut{ 6, 0, 3 }, fs::NorDirectoryEntryPut{ 7, 0, 3 }, fs::NorDirectoryEntryPut{ 8, 0, 3 }, fs::NorDirectoryEntryPut{ 9, 0, 3 }, fs::NorDirectoryEntryPut{ 10, 0, 3 }, fs::NorDirectoryEntryPut{ 11, 0, 3 }, fs::NorDirectoryEntryPut{ 12, 0, 3 }, fs::NorDirectoryEntryPut{ 13, 0, 3 }, fs::NorDirectoryEntryPut{ 14, 0, 3 }, fs::NorDirectoryEntryPut{ 15, 0, 3 }, fs::NorDirectoryEntryPut{ 16, 0, 3 } }));
+    ASSERT_NE(checkpointBlock, State().journal.block);
     device.recording = true;
 
     MountWith(reader, fs::Result::unsupported);

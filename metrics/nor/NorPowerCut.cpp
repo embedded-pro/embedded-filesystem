@@ -511,6 +511,19 @@ public:
             return "the run without a cut did not checkpoint during replay and make /m";
 
         {
+            metrics::NorSweepVolume volume{ context, WithCache(longJournal, largerCache) };
+            if (volume.Mount() != fs::Result::success)
+                return "the volume does not mount with the larger cache";
+
+            for (uint32_t index = 0; index != replayedDirectories; ++index)
+                if (volume.TypeOf(ReplayedName(index)) != fs::EntryType::directory)
+                    return "the larger cache and the checker disagree on " + ReplayedName(index);
+
+            if (volume.ReadFile("/g") != FileBytes(0, payload / 2))
+                return "the larger cache reads other contents of /g than the checker";
+        }
+
+        {
             metrics::NorSweepVolume volume{ context, longJournal };
             if (volume.Mount() != fs::Result::success)
                 return "the volume does not mount with the smaller cache";

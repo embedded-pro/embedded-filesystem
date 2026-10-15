@@ -20,6 +20,7 @@ namespace fs
         index = 0;
         offset = volume.State().checkpoint.recordsOffset;
         linked = offset == volume.Geometry().HeaderSize();
+        applied = false;
         ReadRecord();
     }
 
@@ -45,7 +46,7 @@ namespace fs
         {
             laterIndex = index;
             laterOffset = offset;
-            ReserveBlocksOf(record);
+            HoldBlocksOf(record);
         }
         else
             Apply(*record);
@@ -55,11 +56,11 @@ namespace fs
     {
         records.Read(volume.Geometry(), volume.State().epoch[laterIndex], laterOffset, [this](const std::optional<OpenedRecord>& record)
             {
-                ReserveBlocksOf(record);
+                HoldBlocksOf(record);
             });
     }
 
-    void NorReplay::ReserveBlocksOf(const std::optional<OpenedRecord>& record)
+    void NorReplay::HoldBlocksOf(const std::optional<OpenedRecord>& record)
     {
         auto& state = volume.State();
         if (!record.has_value() && ++laterIndex == state.epoch.size())
@@ -93,6 +94,7 @@ namespace fs
                 else
                 {
                     index = 0;
+                    applied = false;
                     ReadRecord();
                 }
             });
@@ -111,14 +113,14 @@ namespace fs
 
     void NorReplay::Applied(Result result)
     {
-        const auto& checkpoint = volume.State().checkpoint;
-        if (result == Result::unsupported && current != NorRecordPosition{ checkpoint.recordsBlock, checkpoint.recordsOffset })
+        if (result == Result::unsupported && applied)
             onDone(result, current);
         else if (result != Result::success)
             onDone(result, std::nullopt);
         else
         {
             linked = false;
+            applied = true;
             ReadRecord();
         }
     }

@@ -249,8 +249,6 @@ namespace fs
                 return NorMountDone{ result };
             });
         volume.Cache().Clear();
-        volume.Collector().Reset();
-        volume.Eraser().Reset();
         volume.Operation().emplace<NorMount>(volume.Flash(), volume.Config(), volume.State(), volume.JournalBuffer(), [this](Result result)
                               {
                                   if (result == Result::success)

@@ -42,8 +42,9 @@ namespace
         void FillCacheWithModifiedNodes(uint32_t highestDirectory, std::size_t leftFree = 0)
         {
             auto record = Directory("x");
-            for (uint32_t inode = highestDirectory; Volume().Cache().ModifiedNodes() != Volume().Cache().Capacity() - leftFree; inode -= 3)
+            for (uint32_t inode = highestDirectory; Volume().Cache().ModifiedNodes() < Volume().Cache().Capacity() - leftFree; inode -= 3)
                 ASSERT_EQ(fs::Result::success, Apply({ fs::NorInodePut{ inode, infra::MakeRange(record) } })) << inode;
+            ASSERT_EQ(Volume().Cache().Capacity() - leftFree, Volume().Cache().ModifiedNodes());
         }
     };
 }
@@ -316,6 +317,25 @@ TEST_F(NorRecordApplyTest, a_block_set_to_block_0_clears_the_index_and_releases_
     EXPECT_EQ(0, BlockInVolume(file, 1));
     EXPECT_NE(0, BlockInVolume(file, 0));
     EXPECT_EQ(fs::NorBlockState::freeNotErased, State().blocks.State(previous));
+}
+
+TEST_F(NorRecordApplyTest, a_released_block_that_an_uncommitted_checkpoint_took_for_nodes_is_no_longer_a_node_block)
+{
+    std::array<uint8_t, 5000> contents{};
+    auto file = Builder().AddFile(root, "f", infra::MakeRange(contents));
+    Builder().Commit();
+    Mount();
+    auto previous = BlockInVolume(file, 1);
+    Unmount();
+    Builder().EraseBlock(previous);
+    Builder().SetEraseCount(previous, 2);
+    Builder().Allocate(previous, fs::NorBlockType::node);
+    Mount();
+    ASSERT_TRUE(State().nodeBlocks.Contains(previous));
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorBlockSet{ file, 1, previous, 0 } }));
+
+    EXPECT_FALSE(State().nodeBlocks.Contains(previous));
 }
 
 TEST_F(NorRecordApplyTest, a_block_set_from_block_0_to_block_0_changes_nothing)

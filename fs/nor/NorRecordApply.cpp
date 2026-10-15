@@ -382,8 +382,11 @@ namespace fs
 
     void NorRecordApply::Release(uint32_t block) const
     {
-        if (!IsOfEpoch(block))
-            volume.State().blocks.Set(block, NorBlockState::freeNotErased);
+        if (IsOfEpoch(block))
+            return;
+
+        volume.State().blocks.Set(block, NorBlockState::freeNotErased);
+        volume.State().nodeBlocks.Remove(block);
     }
 
     bool NorRecordApply::IsOfEpoch(uint32_t block) const
