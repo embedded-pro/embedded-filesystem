@@ -372,24 +372,26 @@ Live file data is never relocated by garbage collection; only static wear leveli
 
 ## Static wear leveling
 
-A move is due when the volume has erased at least `staticWearLevelingInterval` blocks since the last move, 32 by default, and the spread exceeds `staticWearLevelingThreshold`, 64 by default.
+A move is due when the spread exceeds `staticWearLevelingThreshold`, 64 by default, and the volume has erased at least `staticWearLevelingInterval` blocks since the last move, 32 by default; the first move after a mount does not wait for the interval, so a device that erases few blocks between two power cycles is leveled too.
 The volume counts the erased blocks as the erased sectors divided by `sectorsPerBlock`.
-The spread is the highest erase count of all blocks, the superblocks aside, minus the lowest erase count of a block that can be moved: a block in use that is not the checkpoint block, a journal block of the epoch or the node block being filled.
+The spread is the highest erase count of all blocks, the superblocks aside, minus the lowest erase count of a block that can be moved: a block in use that is not the checkpoint block, a journal block of the epoch, the node block being filled, or the block that the last move gave up.
 That least-worn block is the source, and the most-worn erased block of the pool the destination; a move is due only when the destination is more worn than the source.
 The least-worn block in use usually holds data that never changes; after the move, the data rests on a worn block, and the young block returns to the pool for frequently changing data.
-A move that is given up counts as a move for the interval, so a block that cannot be moved is not tried again before the next interval.
+A move that is given up counts as a move for the interval, and the next move passes over its block, so a block that cannot be moved, such as the block that a log kept open appends into, does not stop the leveling of the others.
 
-* A data block: the move reads part B of the source for its owner, and gives the move up when part B is not that of a data block, when a handle opened for writing that file is open, when the record of the owner or its data map cannot be read, when the map no longer holds the source at that index, or when fewer than 6 nodes of the cache are unmodified.
+* A data block: the move reads part B of the source for its owner, and gives the move up when part B is not that of a data block, when an open handle appends into the block or holds an uncommitted entry that replaces it, when the record of the owner cannot be read, is not that of a file or has more inline bytes than its size, when the block lies beyond the committed size, when the data map cannot be read or no longer holds the source at that index, when fewer than 6 nodes of the cache are unmodified, or when no free block beyond the reserve is left.
   It allocates the destination as a write does, keeping the reserve, and copies only the committed bytes of the source: its payload up to the committed size, rounded up to the program unit.
-  A record with a block set then maps the destination in place of the source, which is released; when the record fails, the destination is freed instead.
+  A record with a block set then maps the destination in place of the source, which is released; when the record could not be written, the destination is freed instead, and when it was written but not applied, the destination stays allocated until the next mount, which replays the record.
 * A node block: the move points the cursor of the collection at the block, closes the node block being filled, and writes a checkpoint at once.
   Its collection step moves the live nodes of the block whether or not a collection is due, and its node blocks are the most-worn erased blocks of the pool; the block is freed when the checkpoint is complete, as a collected block is.
+  When the step stops before the last slot of the block, the following checkpoints continue the move, and take their node blocks from the most-worn erased blocks until it is complete.
 * Checkpoint and journal blocks are not moved; they become free at the next checkpoint anyway.
 
 The background makes a move when one is due and the pool holds more erased blocks than twice the node blocks of a checkpoint.
-When the volume is never idle, the foreground makes it: an allocation after `2 × staticWearLevelingInterval` erased blocks without a move, with a move due, arms the fallback.
-When the call that made the allocation releases the queue, the background claims it ahead of every waiting call and makes one move; the next call waits for it.
-So at most one move happens per interval, and its overhead is bounded by the configuration and measured by WL-4.
+When the volume is never idle, the foreground makes it: an allocation of a call after `2 × staticWearLevelingInterval` erased blocks without a move, with a move due, arms the fallback.
+When that call releases the queue and the fallback is still due, with the pool as above, the background claims the queue ahead of every waiting call and makes one move; the next call waits for it.
+An allocation of the background does not arm the fallback, so a call that waits for the background waits for one unit only, and the fallback is disarmed whenever the background releases the queue.
+So at most one move happens per interval and per mount, and its overhead is bounded by the configuration and measured by WL-4.
 
 ## Format
 
@@ -436,7 +438,7 @@ Background work runs when the volume has been idle for the idle delay, 10 ms by 
 Its lifecycle is a `services::TableStateMachine` with the states `Stopped`, `Waiting`, `Claiming` and `Working`.
 While it holds the queue, it does one unit of work at a time, in this order of priority:
 
-1. The move of the fallback of static wear leveling, when it is armed.
+1. The move of the fallback of static wear leveling, when it is armed and still due, and the pool holds more erased blocks than twice the node blocks of a checkpoint.
 2. A checkpoint, when the journal is more than half full, when more than half the cache holds modified nodes, or when a collection is due, and only when the pool holds every block it may need: more erased blocks than the node blocks of a checkpoint of the whole cache, or than twice as many when a collection is due.
 3. One sector erase of the free block that is not erased and has the lowest erase count, followed by its part A once its last sector is erased.
 4. A static wear leveling move, when one is due and the pool holds more erased blocks than twice the node blocks of a checkpoint.
@@ -536,7 +538,7 @@ The reserve and the watermark of the pool are computed from the configuration an
 ## Counters
 
 The volume counts, since it was mounted, the blocks it allocated, the sectors it erased, the checkpoints it wrote and the blocks static wear leveling moved, as 32-bit counters that `Counters()` returns without a device access.
-A data block counts as moved when its record commits, and a node block when the collection step has passed its last slot.
+A data block counts as moved when its record commits, and a node block when the checkpoint whose collection step passed its last slot commits.
 A product can read them for diagnostics, and the metrics use them to charge erases, and for W-2 and WL-4.
 
 ## Internal flash with error correction

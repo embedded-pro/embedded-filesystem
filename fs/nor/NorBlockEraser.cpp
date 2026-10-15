@@ -89,7 +89,7 @@ namespace fs
             {
                 auto& state = volume.State();
                 auto programmed = block.value_or(0);
-                state.eraseCounts.Record(programmed, state.eraseCounts.Count(programmed) + 1);
+                state.eraseCounts.Raise(programmed, superblocks);
                 state.blocks.Set(programmed, NorBlockState::freeErased);
                 block = std::nullopt;
                 onStepped();

@@ -92,6 +92,7 @@ namespace fs
         bool CheckpointDue() const;
         bool FallbackDue() const;
         bool MoveDue() const;
+        bool PoolHoldsAMove() const;
         bool RoundLeft() const;
         bool CalledSinceRound() const;
         bool ShouldStop() const;

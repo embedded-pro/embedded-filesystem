@@ -59,6 +59,7 @@ namespace fs
         std::optional<uint32_t> block;
         uint32_t slot{ 0 };
         std::optional<uint32_t> moving;
+        bool movePassed{ false };
         bool collecting{ false };
         uint32_t left{ 0 };
         uint32_t leftByStep{ 0 };

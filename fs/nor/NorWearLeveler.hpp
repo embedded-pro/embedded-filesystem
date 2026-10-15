@@ -28,30 +28,37 @@ namespace fs
         void Move(const infra::Function<void()>& onMoved);
 
     private:
-        bool DueAfter(uint32_t erases) const;
+        struct Candidates
+        {
+            std::optional<uint32_t> source;
+            std::optional<uint32_t> destination;
+            uint32_t highest{ 0 };
+        };
+
+        uint32_t ErasesSinceMove() const;
         uint32_t BlockErases() const;
         bool IsWorthAMove() const;
-        std::optional<uint32_t> Source() const;
-        std::optional<uint32_t> MostWornErased() const;
-        uint32_t HighestCount() const;
+        Candidates Scan() const;
         bool IsMovable(uint32_t block) const;
         void MoveNodes();
         void MoveData();
         void HeaderRead();
         void RecordFetched(NorFetchResult result);
         void MapFetched(NorFetchResult result);
-        bool OpenForWriting() const;
+        bool HeldByAHandle() const;
         void Allocated(std::optional<uint32_t> block);
         void CopyNextChunk();
         void Commit();
         void Committed(Result result);
+        void GiveUp();
         void Done();
         NorMapId InodeTable() const;
         NorMapId DataMap() const;
 
     private:
         NorVolume& volume;
-        uint32_t erasesAtMove{ 0 };
+        std::optional<uint32_t> erasesAtMove;
+        std::optional<uint32_t> givenUp;
         uint32_t source{ 0 };
         uint32_t target{ 0 };
         NorBlockOwner owner;

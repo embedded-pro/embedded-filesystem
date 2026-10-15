@@ -268,3 +268,18 @@ TEST_F(NorBlockEraserOnMockTest, after_a_reset_starts_again_with_the_least_worn_
     EXPECT_CALL(flash, eraseSectorsMock(18, 19));
     Step();
 }
+
+TEST_F(NorBlockEraserTest, erasing_the_last_block_at_the_lowest_count_moves_the_base_up)
+{
+    for (uint32_t block = 2; block != 32; ++block)
+        State().eraseCounts.Record(block, 3);
+    State().eraseCounts.Record(12, 2);
+    State().eraseCounts.Normalize(2);
+    State().blocks.Set(12, fs::NorBlockState::freeNotErased);
+
+    Step();
+
+    EXPECT_EQ(3, State().eraseCounts.Base());
+    EXPECT_EQ(3, State().eraseCounts.Count(12));
+    EXPECT_EQ(3, State().eraseCounts.Count(20));
+}

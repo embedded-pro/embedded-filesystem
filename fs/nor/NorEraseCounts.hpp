@@ -18,6 +18,7 @@ namespace fs
 
         void Reset(uint32_t blocks);
         void Record(uint32_t block, uint32_t count);
+        void Raise(uint32_t block, uint32_t firstBlock);
         uint32_t Count(uint32_t block) const;
         uint32_t Base() const;
         void Normalize(uint32_t firstBlock);

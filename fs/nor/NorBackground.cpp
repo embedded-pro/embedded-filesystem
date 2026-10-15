@@ -34,13 +34,13 @@ namespace fs
 
     void NorBackground::Urge()
     {
-        if (volume.Leveler().FallbackDue())
+        if (!claimer.IsClaimed() && volume.Leveler().FallbackDue())
             urgent = true;
     }
 
     void NorBackground::CallReleased()
     {
-        if (urgent)
+        if (FallbackDue())
             machine.Dispatch(NorBackgroundUrge{});
     }
 
@@ -51,12 +51,17 @@ namespace fs
 
     bool NorBackground::FallbackDue() const
     {
-        return urgent && volume.Leveler().FallbackDue();
+        return urgent && PoolHoldsAMove() && volume.Leveler().FallbackDue();
     }
 
     bool NorBackground::MoveDue() const
     {
-        return volume.Leveler().Due() && volume.State().blocks.Count(NorBlockState::freeErased) > 2 * volume.Geometry().NodeBlocksPerCheckpoint();
+        return PoolHoldsAMove() && volume.Leveler().Due();
+    }
+
+    bool NorBackground::PoolHoldsAMove() const
+    {
+        return volume.State().blocks.Count(NorBlockState::freeErased) > 2 * volume.Geometry().NodeBlocksPerCheckpoint();
     }
 
     bool NorBackground::CheckpointDue() const
@@ -80,7 +85,7 @@ namespace fs
 
     bool NorBackground::ShouldStop() const
     {
-        return (claimer.ShouldYield() && !urgent) || !HasWork();
+        return (claimer.ShouldYield() && !FallbackDue()) || !HasWork();
     }
 
     void NorBackground::Claim()
@@ -157,6 +162,7 @@ namespace fs
             volume.Eraser().CountAsRefill();
 
         erasing = false;
+        urgent = false;
         claimer.Release();
     }
 }

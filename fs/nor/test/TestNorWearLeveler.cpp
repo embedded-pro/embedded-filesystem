@@ -67,6 +67,7 @@ namespace
                 {
                     moved = true;
                 });
+            EXPECT_FALSE(moved);
             ExecuteAllActions();
             EXPECT_TRUE(moved);
         }
@@ -101,16 +102,28 @@ namespace
     };
 }
 
-TEST_F(NorWearLevelerTest, a_move_is_due_after_the_interval_of_erases_when_the_spread_exceeds_the_threshold)
+TEST_F(NorWearLevelerTest, the_first_move_after_a_mount_is_due_as_soon_as_the_spread_exceeds_the_threshold)
 {
     auto file = MountWithFile();
     Wear(10);
     State().eraseCounts.Record(BlockInVolume(file, 0), 5);
 
+    EXPECT_TRUE(Leveler().Due());
+}
+
+TEST_F(NorWearLevelerTest, after_a_move_the_next_one_is_due_after_the_interval_of_erases)
+{
+    auto file = MountWithFile();
+    Wear(10);
+    State().eraseCounts.Record(BlockInVolume(file, 0), 2);
+    State().eraseCounts.Record(BlockInVolume(file, 1), 1);
+    State().eraseCounts.Record(FreeErasedBlock(), worn);
+    SetErases(5);
+    Move();
+
+    SetErases(6);
     EXPECT_FALSE(Leveler().Due());
-    SetErases(1);
-    EXPECT_FALSE(Leveler().Due());
-    SetErases(2);
+    SetErases(7);
     EXPECT_TRUE(Leveler().Due());
 }
 
@@ -221,7 +234,7 @@ TEST_F(NorWearLevelerTest, a_moved_data_block_holds_only_the_committed_bytes)
     EXPECT_EQ(fileSize - payload, programmed);
 }
 
-TEST_F(NorWearLevelerTest, gives_up_a_data_block_that_an_open_file_may_write)
+TEST_F(NorWearLevelerTest, gives_up_the_block_that_an_open_file_appends_into)
 {
     auto file = MountWithFile();
     auto source = BlockInVolume(file, 1);
@@ -236,6 +249,67 @@ TEST_F(NorWearLevelerTest, gives_up_a_data_block_that_an_open_file_may_write)
     EXPECT_EQ(source, BlockInVolume(file, 1));
     EXPECT_EQ(0, Volume().Counters().movedBlocks);
     EXPECT_FALSE(Leveler().Due());
+    Close(*opened);
+}
+
+TEST_F(NorWearLevelerTest, moves_a_block_of_an_open_file_other_than_the_one_it_appends_into)
+{
+    auto file = MountWithFile();
+    auto source = BlockInVolume(file, 0);
+    auto target = FreeErasedBlock();
+    Wear(10);
+    State().eraseCounts.Record(source, 1);
+    State().eraseCounts.Record(target, worn);
+    SetErases(2);
+    auto opened = Open("/f", fs::OpenMode::append);
+
+    Move();
+
+    EXPECT_EQ(target, BlockInVolume(file, 0));
+    Close(*opened);
+    RemountWithFreeBlocksErased();
+    ExpectContents("/f", contents);
+}
+
+TEST_F(NorWearLevelerTest, gives_up_a_block_that_an_uncommitted_overwrite_replaces)
+{
+    auto file = MountWithFile();
+    auto source = BlockInVolume(file, 0);
+    auto target = FreeErasedBlock();
+    auto opened = Open("/f", fs::OpenMode::readWrite);
+    std::array<uint8_t, 300> patch{ Pattern<300>(7) };
+    ASSERT_EQ(fs::Result::success, Write(*opened, infra::MakeRange(patch)));
+    Wear(10);
+    State().eraseCounts.Record(source, 1);
+    State().eraseCounts.Record(target, worn);
+    SetErases(2);
+
+    Move();
+
+    ExpectNoMove(target);
+    Close(*opened);
+    std::ranges::copy(patch, contents.begin());
+    ExpectContents("/f", contents);
+}
+
+TEST_F(NorWearLevelerTest, the_next_move_passes_over_the_block_given_up_last)
+{
+    auto file = MountWithFile();
+    auto target = FreeErasedBlock();
+    Wear(10);
+    State().eraseCounts.Record(BlockInVolume(file, 0), 2);
+    State().eraseCounts.Record(BlockInVolume(file, 1), 1);
+    State().eraseCounts.Record(target, worn);
+    SetErases(2);
+    auto opened = Open("/f", fs::OpenMode::append);
+    Move();
+    ASSERT_EQ(0, Volume().Counters().movedBlocks);
+
+    SetErases(4);
+    Move();
+
+    EXPECT_EQ(target, BlockInVolume(file, 0));
+    EXPECT_EQ(1, Volume().Counters().movedBlocks);
     Close(*opened);
 }
 
@@ -354,6 +428,7 @@ TEST_F(NorWearLevelerTest, a_move_whose_record_fails_frees_its_target_and_keeps_
         {
             moved = true;
         });
+    EXPECT_FALSE(moved);
     while (State().blocks.State(target) != fs::NorBlockState::pending)
         ExecuteFirstAction();
     for (uint32_t block = 2; block != 48; ++block)

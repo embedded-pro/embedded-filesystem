@@ -26,17 +26,18 @@ namespace fs
 
     bool NorWearLeveler::Due() const
     {
-        return DueAfter(volume.Config().staticWearLevelingInterval);
+        return (!erasesAtMove.has_value() || ErasesSinceMove() >= volume.Config().staticWearLevelingInterval) && IsWorthAMove();
     }
 
     bool NorWearLeveler::FallbackDue() const
     {
-        return DueAfter(2 * volume.Config().staticWearLevelingInterval);
+        return ErasesSinceMove() >= 2 * volume.Config().staticWearLevelingInterval && IsWorthAMove();
     }
 
     void NorWearLeveler::Reset()
     {
-        erasesAtMove = 0;
+        erasesAtMove = std::nullopt;
+        givenUp = std::nullopt;
     }
 
     void NorWearLeveler::Move(const infra::Function<void()>& onMoved)
@@ -44,7 +45,7 @@ namespace fs
         onDone = onMoved;
         erasesAtMove = BlockErases();
 
-        auto from = Source();
+        auto from = Scan().source;
         really_assert(from.has_value());
         source = from.value_or(0);
 
@@ -54,9 +55,9 @@ namespace fs
             MoveData();
     }
 
-    bool NorWearLeveler::DueAfter(uint32_t erases) const
+    uint32_t NorWearLeveler::ErasesSinceMove() const
     {
-        return BlockErases() - erasesAtMove >= erases && IsWorthAMove();
+        return BlockErases() - erasesAtMove.value_or(0);
     }
 
     uint32_t NorWearLeveler::BlockErases() const
@@ -66,58 +67,47 @@ namespace fs
 
     bool NorWearLeveler::IsWorthAMove() const
     {
-        auto from = Source();
-        auto to = MostWornErased();
-        if (!from.has_value() || !to.has_value())
+        auto candidates = Scan();
+        if (!candidates.source.has_value() || !candidates.destination.has_value())
             return false;
 
         const auto& counts = volume.State().eraseCounts;
-        auto lowest = counts.Count(from.value_or(0));
-        return HighestCount() - lowest > volume.Config().staticWearLevelingThreshold && counts.Count(to.value_or(0)) > lowest;
+        auto lowest = counts.Count(candidates.source.value_or(0));
+        return candidates.highest - lowest > volume.Config().staticWearLevelingThreshold && counts.Count(candidates.destination.value_or(0)) > lowest;
     }
 
-    std::optional<uint32_t> NorWearLeveler::Source() const
-    {
-        const auto& counts = volume.State().eraseCounts;
-        std::optional<uint32_t> leastWorn;
-
-        for (uint32_t candidate = superblocks; candidate != volume.Geometry().blocks; ++candidate)
-            if (IsMovable(candidate) && (!leastWorn.has_value() || counts.Count(candidate) < counts.Count(leastWorn.value_or(0))))
-                leastWorn = candidate;
-
-        return leastWorn;
-    }
-
-    std::optional<uint32_t> NorWearLeveler::MostWornErased() const
+    NorWearLeveler::Candidates NorWearLeveler::Scan() const
     {
         const auto& state = volume.State();
-        std::optional<uint32_t> mostWorn;
+        const auto& counts = state.eraseCounts;
+        Candidates candidates;
 
         for (uint32_t candidate = superblocks; candidate != volume.Geometry().blocks; ++candidate)
-            if (state.blocks.State(candidate) == NorBlockState::freeErased && (!mostWorn.has_value() || state.eraseCounts.Count(candidate) > state.eraseCounts.Count(mostWorn.value_or(0))))
-                mostWorn = candidate;
+        {
+            auto count = counts.Count(candidate);
+            candidates.highest = std::max(candidates.highest, count);
 
-        return mostWorn;
-    }
+            if (state.blocks.State(candidate) == NorBlockState::freeErased && (!candidates.destination.has_value() || count > counts.Count(candidates.destination.value_or(0))))
+                candidates.destination = candidate;
+            else if (IsMovable(candidate) && (!candidates.source.has_value() || count < counts.Count(candidates.source.value_or(0))))
+                candidates.source = candidate;
+        }
 
-    uint32_t NorWearLeveler::HighestCount() const
-    {
-        uint32_t highest = 0;
-        for (uint32_t candidate = superblocks; candidate != volume.Geometry().blocks; ++candidate)
-            highest = std::max(highest, volume.State().eraseCounts.Count(candidate));
-
-        return highest;
+        return candidates;
     }
 
     bool NorWearLeveler::IsMovable(uint32_t block) const
     {
         const auto& state = volume.State();
-        auto ofEpoch = std::ranges::find(state.epoch, block) != state.epoch.end();
-        return state.blocks.State(block) == NorBlockState::inUse && block != state.checkpointBlock && !ofEpoch && block != state.nodeBlock;
+        if (state.blocks.State(block) != NorBlockState::inUse || block == state.checkpointBlock || block == state.nodeBlock || block == givenUp)
+            return false;
+
+        return std::ranges::find(state.epoch, block) == state.epoch.end();
     }
 
     void NorWearLeveler::MoveNodes()
     {
+        givenUp = std::nullopt;
         volume.Collector().Move(source);
         volume.State().nodeBlock = std::nullopt;
         volume.Checkpoints().Write([this](Result)
@@ -139,18 +129,13 @@ namespace fs
     {
         const auto& geometry = volume.Geometry();
         auto allocation = ParseNorBlockHeader(infra::Head(volume.JournalBuffer(), geometry.HeaderSize()), geometry.programUnit).allocation;
-        if (!allocation.has_value() || allocation->type != NorBlockType::data)
+        if (!allocation.has_value() || allocation->type != NorBlockType::data || HeldByAHandle())
         {
-            Done();
+            GiveUp();
             return;
         }
 
         owner = allocation->owner;
-        if (OpenForWriting())
-        {
-            Done();
-            return;
-        }
 
         volume.Fetch().Fetch(InodeTable(), volume.State().inodeTable, owner.inode, [this](NorFetchResult result)
             {
@@ -163,12 +148,13 @@ namespace fs
         auto bytes = result == NorFetchResult::fetched ? NorBTree(volume.Cache(), InodeTable()).Find(volume.State().inodeTable, owner.inode) : std::nullopt;
         auto record = bytes.has_value() ? ParseNorInodeRecord(*bytes, volume.Config()) : std::nullopt;
         const auto& geometry = volume.Geometry();
-        auto blockBytes = record.has_value() ? uint64_t{ record->size } - record->inlineBytes.size() : 0;
+        auto consistent = record.has_value() && record->type == NorInodeType::file && record->inlineBytes.size() <= record->size;
+        auto blockBytes = consistent ? uint64_t{ record->size } - record->inlineBytes.size() : 0;
         auto start = uint64_t{ owner.index } * geometry.PayloadSize();
 
-        if (!record.has_value() || record->type != NorInodeType::file || start >= blockBytes)
+        if (!consistent || start >= blockBytes)
         {
-            Done();
+            GiveUp();
             return;
         }
 
@@ -185,7 +171,7 @@ namespace fs
         const auto& cache = volume.Cache();
         if (result != NorFetchResult::fetched || NorRadixTree(volume.Cache(), owner.inode).Find(dataMap, owner.index) != source || cache.Capacity() - cache.ModifiedNodes() < nodesOfARecord)
         {
-            Done();
+            GiveUp();
             return;
         }
 
@@ -195,11 +181,15 @@ namespace fs
             });
     }
 
-    bool NorWearLeveler::OpenForWriting() const
+    bool NorWearLeveler::HeldByAHandle() const
     {
         return std::ranges::any_of(volume.OpenFiles(), [this](const NorFile& file)
             {
-                return file.State().inode == owner.inode && file.State().Writable();
+                const auto& state = file.State();
+                return state.tailBlock == source || std::ranges::any_of(state.entries, [this](const NorBlockEntry& entry)
+                                                        {
+                                                            return entry.previous == source;
+                                                        });
             });
     }
 
@@ -207,7 +197,7 @@ namespace fs
     {
         if (!block.has_value())
         {
-            Done();
+            GiveUp();
             return;
         }
 
@@ -252,11 +242,24 @@ namespace fs
 
     void NorWearLeveler::Committed(Result result)
     {
-        if (result == Result::success)
-            ++volume.Counters().movedBlocks;
-        else
-            volume.State().blocks.Set(target, NorBlockState::freeNotErased);
+        if (result != Result::success)
+        {
+            // Only a record that was never programmed leaves the copy unreferenced on flash
+            if (result == Result::noSpace)
+                volume.State().blocks.Set(target, NorBlockState::freeNotErased);
 
+            GiveUp();
+            return;
+        }
+
+        ++volume.Counters().movedBlocks;
+        givenUp = std::nullopt;
+        Done();
+    }
+
+    void NorWearLeveler::GiveUp()
+    {
+        givenUp = source;
         Done();
     }
 

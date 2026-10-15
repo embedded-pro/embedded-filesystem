@@ -48,6 +48,16 @@ namespace fs
         storage[block] = Clamped(count - base);
     }
 
+    void NorEraseCounts::Raise(uint32_t block, uint32_t firstBlock)
+    {
+        really_assert(block < blocks);
+
+        auto wasLowest = storage[block] == 0;
+        storage[block] = Clamped(storage[block] + 1u);
+        if (wasLowest)
+            Normalize(firstBlock);
+    }
+
     uint32_t NorEraseCounts::Count(uint32_t block) const
     {
         really_assert(block < blocks);

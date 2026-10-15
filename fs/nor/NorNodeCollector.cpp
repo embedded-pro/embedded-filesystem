@@ -52,6 +52,7 @@ namespace fs
         block = std::nullopt;
         slot = 0;
         moving = std::nullopt;
+        movePassed = false;
         awaitingCommit = 0;
     }
 
@@ -74,6 +75,10 @@ namespace fs
 
     void NorNodeCollector::Committed()
     {
+        if (movePassed)
+            ++volume.Counters().movedBlocks;
+
+        movePassed = false;
         auto& state = volume.State();
         for (uint32_t candidate = superblocks; awaitingCommit != 0 && candidate != state.blocks.Blocks(); ++candidate)
             if (state.nodeBlocks.Contains(candidate) && state.blocks.State(candidate) == NorBlockState::pending)
@@ -250,8 +255,7 @@ namespace fs
     {
         volume.State().blocks.Set(block.value_or(0), NorBlockState::pending);
         ++awaitingCommit;
-        if (block == moving)
-            ++volume.Counters().movedBlocks;
+        movePassed = movePassed || block == moving;
         Leave();
     }
 
