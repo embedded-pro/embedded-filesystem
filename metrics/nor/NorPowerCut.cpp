@@ -1408,11 +1408,13 @@ public:
 
         WearFreeBlocks(context, youngBlocks.value_or(0), std::nullopt, wornEraseCount);
         if (youngBlocks.has_value())
+        {
             MakeFreeBlocksNotErased(context, 0);
-        if (youngBlocks.has_value())
-            for (uint32_t block = 2; block != metrics::CheckImage(context, model).blocks.size(); ++block)
-                if (metrics::CheckImage(context, model).blocks[block] == metrics::NorBlockUse::node)
+            auto uses = metrics::CheckImage(context, model).blocks;
+            for (uint32_t block = 2; block != uses.size(); ++block)
+                if (uses[block] == metrics::NorBlockUse::node)
                     WearBlockInUse(context, block, wornEraseCount);
+        }
 
         auto image = metrics::ReadImage(context);
         auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
@@ -1480,6 +1482,13 @@ public:
 
         if (uncut && withFile && !std::ranges::all_of(setUpDataBlocks, movedIntoAWornBlock))
             return "the run without a cut moved a data block of /f into a block that was not among the most worn";
+
+        auto nodesLeft = [&](const auto& setUp)
+        {
+            return check.blocks[setUp.first] != metrics::NorBlockUse::node || AllocationOf(image, setUp.first) != setUp.second;
+        };
+        if (uncut && !withFile && !std::ranges::any_of(setUpNodeBlocks, nodesLeft))
+            return "the run without a cut left every node block of the set-up in use";
 
         const auto* written = check.Find("/g");
         auto writtenContents = written != nullptr ? metrics::ReadContents(image, check, *written) : std::vector<uint8_t>{};

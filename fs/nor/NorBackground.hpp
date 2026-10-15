@@ -5,7 +5,6 @@
 #include "services/fsm/StateMachineDefinition.hpp"
 #include "services/fsm/TableStateMachine.hpp"
 #include <array>
-#include <cstdint>
 #include <variant>
 
 namespace fs

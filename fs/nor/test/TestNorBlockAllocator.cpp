@@ -386,3 +386,33 @@ TEST_F(NorBlockAllocatorOnMockTest, a_most_worn_free_allocation_finishes_the_blo
         });
     CompleteRequests();
 }
+
+TEST_F(NorBlockAllocatorOnMockTest, a_most_worn_allocation_on_an_empty_pool_finishes_the_block_that_the_eraser_started_then_erases_the_most_worn_block)
+{
+    volume.State().blocks.Set(9, fs::NorBlockState::freeNotErased);
+    volume.State().eraseCounts.Record(9, 7);
+    EXPECT_CALL(flash, eraseSectorsMock(12, 13));
+    volume.Eraser().Step([] {});
+    CompleteRequests();
+
+    std::array<uint8_t, 16> partAOf6{};
+    fs::SerializeNorHeaderA(5, infra::MakeRange(partAOf6));
+    std::array<uint8_t, 16> partAOf9{};
+    fs::SerializeNorHeaderA(8, infra::MakeRange(partAOf9));
+    std::array<uint8_t, 32> partB{};
+    fs::SerializeNorHeaderB(fs::NorAllocation{ fs::NorBlockType::node, 9, {} }, infra::MakeRange(partB));
+    testing::InSequence sequence;
+    EXPECT_CALL(flash, eraseSectorsMock(13, 14));
+    EXPECT_CALL(flash, writeBufferMock(std::vector<uint8_t>(partAOf6.begin(), partAOf6.end()), 6 * 4096));
+    EXPECT_CALL(flash, eraseSectorsMock(18, 19));
+    EXPECT_CALL(flash, eraseSectorsMock(19, 20));
+    EXPECT_CALL(flash, writeBufferMock(std::vector<uint8_t>(partAOf9.begin(), partAOf9.end()), 9 * 4096));
+    EXPECT_CALL(flash, writeBufferMock(std::vector<uint8_t>(partB.begin(), partB.end()), 9 * 4096 + 16));
+    EXPECT_CALL(done, callback(std::optional<uint32_t>(9)));
+
+    volume.Allocator().Allocate(fs::NorBlockType::node, {}, fs::NorReserve::used, fs::NorWear::most, [this](std::optional<uint32_t> block)
+        {
+            done.callback(block);
+        });
+    CompleteRequests();
+}

@@ -98,8 +98,8 @@ namespace metrics
         if (const auto* bound = std::get_if<double>(&reference))
             return comparisonText + Number(*bound);
 
-        if (factor != 1.0)
-            comparisonText += Number(factor) + " ";
+        if (factor.has_value())
+            comparisonText += Number(factor.value_or(1.0)) + " ";
 
         return comparisonText + std::get<std::string>(reference);
     }
@@ -128,7 +128,7 @@ namespace metrics
         return { Better::lower, std::move(subjects) };
     }
 
-    Target AtLeastOf(std::string subjects, double factor)
+    Target AtLeastOf(std::string subjects, std::optional<double> factor)
     {
         return { Better::higher, std::move(subjects), factor };
     }

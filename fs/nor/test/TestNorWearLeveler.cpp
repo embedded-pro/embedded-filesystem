@@ -375,6 +375,24 @@ TEST_F(NorWearLevelerTest, a_node_move_on_an_empty_pool_erases_the_most_worn_fre
     EXPECT_THAT(List("/a"), testing::ElementsAre("x"));
 }
 
+TEST_F(NorWearLevelerTest, a_node_move_gives_up_when_the_erased_block_it_would_take_is_not_more_worn_than_the_source)
+{
+    MountWithDirectories();
+    auto source = State().inodeTable.address / blockSize;
+    auto notErased = FreeErasedBlock();
+    Wear(1);
+    State().eraseCounts.Record(notErased, worn);
+    State().blocks.Set(notErased, fs::NorBlockState::freeNotErased);
+    SetErases(2);
+    ASSERT_TRUE(Leveler().Due());
+
+    Move();
+
+    EXPECT_EQ(source, State().inodeTable.address / blockSize);
+    EXPECT_EQ(0, Volume().Counters().movedBlocks);
+    EXPECT_EQ(fs::NorBlockState::freeNotErased, State().blocks.State(notErased));
+}
+
 TEST_F(NorWearLevelerTest, a_move_is_due_into_a_worn_free_block_that_is_not_erased)
 {
     auto file = MountWithFile();

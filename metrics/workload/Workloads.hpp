@@ -2,6 +2,7 @@
 #define METRICS_WORKLOAD_WORKLOADS_HPP
 
 #include "metrics/workload/Runner.hpp"
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -20,6 +21,9 @@ namespace metrics
     constexpr uint32_t overwriteSize = 512;
     constexpr uint32_t randomReadSize = 512;
     constexpr std::string_view secondLogPhase{ "L2 second log" };
+    constexpr uint32_t smallLogSize = 4096;
+    constexpr std::size_t appendWindow = 64;
+    constexpr std::size_t checkpointPeriods = 4;
 
     std::string Phase(std::string_view workload, uint64_t value);
     std::string Phase(std::string_view workload, uint64_t first, uint64_t second);

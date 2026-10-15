@@ -6,6 +6,7 @@
 #include "fs/nor/NorRadixTree.hpp"
 #include "fs/nor/NorRecord.hpp"
 #include "fs/nor/NorVolume.hpp"
+#include "fs/nor/NorWear.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 
@@ -110,8 +111,26 @@ namespace fs
         return std::ranges::find(state.epoch, block) == state.epoch.end();
     }
 
+    bool NorWearLeveler::NodeDestinationIsMoreWorn() const
+    {
+        const auto& state = volume.State();
+        auto erased = WornBlock(state.blocks, state.eraseCounts, NorBlockState::freeErased, NorWear::most);
+        auto destination = erased.has_value() ? erased : WornBlock(state.blocks, state.eraseCounts, NorBlockState::freeNotErased, NorWear::most);
+        return state.eraseCounts.Count(destination.value_or(source)) > state.eraseCounts.Count(source);
+    }
+
     void NorWearLeveler::MoveNodes()
     {
+        if (!NodeDestinationIsMoreWorn())
+        {
+            volume.Defer(infra::Function<void(Result result)>([this](Result)
+                             {
+                                 GiveUp();
+                             }),
+                Result::success);
+            return;
+        }
+
         givenUp = std::nullopt;
         volume.Collector().Move(source);
         volume.State().nodeBlock = std::nullopt;

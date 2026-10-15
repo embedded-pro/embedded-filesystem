@@ -61,7 +61,7 @@ Measured by WL-1 and WL-2 (spread of erase counts), WL-3 (data written until the
 littlefs erases a block inside the write operation that needs it, so the write that happens to need a fresh block pays the full erase time.
 
 embedded-filesystem erases obsolete blocks while the event dispatcher is idle and keeps a pool of pre-erased blocks ready.
-A reserve of spare blocks guarantees that foreground writes never wait for a large relocation.
+A reserve of spare blocks guarantees that foreground writes never wait for a large relocation; when the volume is never idle, a write may wait for one static wear leveling move, bounded by the erase of one block.
 Measured by W-6.
 
 ## Large files on FAT

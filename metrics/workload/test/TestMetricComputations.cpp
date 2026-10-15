@@ -98,15 +98,15 @@ TEST(MetricComputationsTest, amplification_divides_device_bytes_by_user_bytes)
 TEST(MetricComputationsTest, ratio_of_two_durations)
 {
     EXPECT_DOUBLE_EQ(1.25, metrics::Ratio(5ms, 4ms));
-    EXPECT_DOUBLE_EQ(1.0, metrics::Ratio(infra::Duration{}, infra::Duration{}));
-    EXPECT_EQ(std::numeric_limits<double>::infinity(), metrics::Ratio(1ms, infra::Duration{}));
+    EXPECT_DOUBLE_EQ(1.0, metrics::Ratio({}, {}));
+    EXPECT_EQ(std::numeric_limits<double>::infinity(), metrics::Ratio(1ms, {}));
 }
 
 TEST(MetricComputationsTest, ratio_of_two_counts)
 {
-    EXPECT_DOUBLE_EQ(1.5, metrics::Ratio(3.0, 2.0));
-    EXPECT_DOUBLE_EQ(1.0, metrics::Ratio(0.0, 0.0));
-    EXPECT_EQ(std::numeric_limits<double>::infinity(), metrics::Ratio(1.0, 0.0));
+    EXPECT_DOUBLE_EQ(1.5, metrics::CountRatio(3.0, 2.0));
+    EXPECT_DOUBLE_EQ(1.0, metrics::CountRatio(0.0, 0.0));
+    EXPECT_EQ(std::numeric_limits<double>::infinity(), metrics::CountRatio(1.0, 0.0));
 }
 
 TEST(MetricComputationsTest, latencies_leave_out_idle_periods)
@@ -302,6 +302,24 @@ TEST(MetricComputationsTest, the_last_checkpoint_periods_count_every_checkpoint_
     ASSERT_EQ(2, window.size());
     EXPECT_EQ(&records[3], window.front());
     EXPECT_EQ(&records[4], window.back());
+}
+
+TEST(MetricComputationsTest, checkpoint_periods_count_only_the_checkpoints_of_appends)
+{
+    std::vector<metrics::CallRecord> records{
+        Checkpoint(metrics::Operation::idle, 1ms),
+        Record(metrics::Operation::write, "L2", DeviceTime(2ms), 64, 64),
+        Checkpoint(metrics::Operation::close, 3ms),
+        Record(metrics::Operation::write, "L2", DeviceTime(4ms), 64, 128),
+        Checkpoint(metrics::Operation::idle, 5ms),
+    };
+
+    auto window = metrics::LastCheckpointPeriods(records, "L2", 1);
+
+    ASSERT_EQ(4, window.size());
+    EXPECT_EQ(&records[1], window.front());
+    EXPECT_EQ(&records[4], window.back());
+    EXPECT_TRUE(metrics::CheckpointPeriodsFrom(records, "L2", 64, 1).empty());
 }
 
 TEST(MetricComputationsTest, checkpoint_periods_are_empty_without_enough_checkpoints)

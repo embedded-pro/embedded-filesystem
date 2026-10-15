@@ -149,15 +149,15 @@ What the baselines show:
 
 All workloads use a fixed random seed.
 
-| Workload | Description                                                                                                                                                            |
-|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| L1       | Write one file of 1 MiB and one of 4 MiB sequentially, in chunks of 64 B, 512 B and 4 KiB, after announcing the size with `ExpectSize`                                 |
-| L2       | Data logger: append 64 B and call `Sync`, until the file reaches 4 MiB, with a 100 ms idle period after each append; then the same into a second file of up to 128 KiB |
-| L3       | Overwrite 512 B at random offsets in a file of 64 KiB, 1 MiB and 4 MiB                                                                                                 |
-| L4       | Create, write, close and remove many small files of 100 B to 8 KiB                                                                                                     |
-| L5       | Fill 70 % of the volume with files that are never changed, then rewrite a 4 KiB configuration file repeatedly                                                          |
-| L6       | Read sequentially, read at random offsets, seek to the end, list a directory, and open files by path in directories of 10, 100 and 1000 entries                        |
-| L7       | Mount the volume when it is 10 %, 50 % and 90 % full                                                                                                                   |
+| Workload | Description                                                                                                                                                                                             |
+|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| L1       | Write one file of 1 MiB and one of 4 MiB sequentially, in chunks of 64 B, 512 B and 4 KiB, after announcing the size with `ExpectSize`                                                                  |
+| L2       | Data logger: append 64 B and call `Sync`, until the file reaches 4 MiB, with a 100 ms idle period after each append; then the same into a second file until it holds the window of W-2, at most 128 KiB |
+| L3       | Overwrite 512 B at random offsets in a file of 64 KiB, 1 MiB and 4 MiB                                                                                                                                  |
+| L4       | Create, write, close and remove many small files of 100 B to 8 KiB                                                                                                                                      |
+| L5       | Fill 70 % of the volume with files that are never changed, then rewrite a 4 KiB configuration file repeatedly                                                                                           |
+| L6       | Read sequentially, read at random offsets, seek to the end, list a directory, and open files by path in directories of 10, 100 and 1000 entries                                                         |
+| L7       | Mount the volume when it is 10 %, 50 % and 90 % full                                                                                                                                                    |
 
 Workloads L2, L3 and L4 are run on volumes that are 10 %, 50 % and 90 % full, to measure the effect of the fill level.
 The fill level is the share of the space that the workload does not need for its own files: static files take that share of the capacity left after the largest size the workload's files reach, so that the workload still fits on a volume that is 90 % full.
@@ -169,7 +169,7 @@ The volume is filled until the usage reported by the filesystem reaches the fill
 | Id  | Metric                      | Definition                                                                                                           | Workloads | Target                                                                                                                    |
 |-----|-----------------------------|----------------------------------------------------------------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------------------------------------------|
 | W-1 | Sequential write throughput | User bytes written divided by total device time                                                                      | L1        | At least the best baseline; on NOR at least 0.97 times it                                                                 |
-| W-2 | Append scaling              | Device time of one append and `Sync` when the file holds 4 MiB, divided by the same when the second file holds 4 KiB | L2        | At most 1.1, for NOR and FAT                                                                                              |
+| W-2 | Append scaling              | Device time of one append and `Sync` when the file holds 4 MiB, divided by the same when the second file holds 4 KiB | L2        | At most 1.1, for FAT, and for NOR on `nor-qspi-16m`                                                                       |
 | W-3 | Fill scaling                | Device time of one append and `Sync` on a 90 % full volume, divided by the same on a 10 % full volume                | L2        | At most 1.2                                                                                                               |
 | W-4 | Write amplification         | Bytes programmed on the device divided by user bytes written                                                         | L1, L2    | At most 1.1 for L1; reported for L2                                                                                       |
 | W-5 | Overwrite scaling           | Device time of one overwrite in a 4 MiB file, divided by the same in a 64 KiB file                                   | L3        | At most 1.2 on NOR                                                                                                        |
@@ -187,6 +187,8 @@ The 0.97 of W-1 on NOR allows for the header of every block, which leaves 4060 o
 W-4 on the first phase of L1 is reported for NOR on `internal-flash`: its file of 16 KiB pays the first checkpoint after the mount, about 1.7 KB, as the FAT subject pays the clean-shutdown bit on M-2 of that phase.
 W-1 on the three phases of L1 with the file of 16 KiB is reported for NOR on `internal-flash` too, and asserted on the phases with the file of 64 KiB: the cost that every file pays once, its first checkpoint after the mount and the commit of its close, weighs on a file divided by 64 more than the 0.97 allows.
 W-2 measures its 4 KiB window on a second file, which L2 starts once the first holds 4 MiB, so that both windows see a volume of the same age: at 4 KiB into the first file, a fresh volume has not yet reached the steady state of its garbage collection and checkpoints.
+The second file stops once it holds its window: 64 appends from 4 KiB, or for a subject that counts its checkpoints, two checkpoints more than the periods of the window after 4 KiB, so that it takes little space on a full volume.
+W-2 on NOR is asserted on `nor-qspi-16m` and reported on `internal-flash`: there the first file of 64 KiB holds about 8 checkpoint periods, while the collection of node blocks runs in bursts further apart than a window at 50 % fill, so a window of 4 periods measures whether it holds a burst.
 W-2 on NOR averages windows that start after a checkpoint and span 4 whole checkpoint periods, counted by the volume, instead of 64 appends: a checkpoint costs more than 64 appends of 64 bytes, so a window of 64 appends would measure whether it holds a checkpoint rather than the size of the file.
 A window that the run cannot fill makes W-2 infinite, which fails its target.
 

@@ -44,6 +44,11 @@ TEST(NorTargetsTest, appends_and_overwrites_scale_with_the_file_size_and_the_fil
     EXPECT_EQ("<= 1.2", TargetOf(internalFlash, "W-5", "L3"));
 }
 
+TEST(NorTargetsTest, append_scaling_is_reported_where_the_logs_are_divided)
+{
+    EXPECT_EQ("reported", TargetOf(internalFlash, "W-2", "L2"));
+}
+
 TEST(NorTargetsTest, sequential_writes_amplify_by_at_most_1_1_and_the_data_logger_is_reported)
 {
     EXPECT_EQ("<= 1.1", TargetOf(norQspi16m, "W-4", "L1 1048576 64"));

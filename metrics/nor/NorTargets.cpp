@@ -43,11 +43,11 @@ namespace metrics
         auto geometry = fs::MakeNorGeometry(config, model.sectorSize, model.numberOfSectors);
         really_assert(geometry.has_value());
 
-        constexpr auto timing = TimingCase::maximum;
         auto program = [this](uint32_t bytes)
         {
-            return ProgramTime(model, timing, 0, bytes);
+            return ProgramTime(model, TimingCase::maximum, 0, bytes);
         };
+        constexpr auto timing = TimingCase::maximum;
 
         auto partB = program(geometry->RoundToProgramUnit(fs::norHeaderPartBBytes));
         auto record = program(geometry->nodeSize);
@@ -69,7 +69,7 @@ namespace metrics
         if (metric == "W-1" && !divided)
             return AtLeastOf(std::string{ allBaselines }, 0.97);
 
-        if (metric == "W-2")
+        if (metric == "W-2" && scaleDivisor == 1)
             return AtMost(1.1);
 
         if (metric == "W-3" || metric == "W-5")

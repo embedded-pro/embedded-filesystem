@@ -96,13 +96,31 @@ namespace metrics
         auto address = DeviceAddress(file, data.size());
         open.position += static_cast<uint32_t>(data.size());
 
+        auto countedTo = countedPerWriteTo.find(open.path);
         if (counters.has_value())
-            *counters = *counters + countedPerWrite;
+            *counters = *counters + (countedTo != countedPerWriteTo.end() ? countedTo->second : countedPerWrite);
 
         pendingCompletion = onDone;
+        pendingRepeat = writtenTwice.contains(open.path) ? std::make_optional(std::make_pair(data, address)) : std::nullopt;
         flash.WriteBuffer(data, address, [this]
             {
-                Complete(pendingCompletion, fs::Result::success);
+                Written();
+            });
+    }
+
+    void FakeFileSystem::Written()
+    {
+        if (!pendingRepeat.has_value())
+        {
+            Complete(pendingCompletion, fs::Result::success);
+            return;
+        }
+
+        auto [data, address] = *pendingRepeat;
+        pendingRepeat = std::nullopt;
+        flash.WriteBuffer(data, address, [this]
+            {
+                Written();
             });
     }
 

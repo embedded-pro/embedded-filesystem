@@ -34,9 +34,9 @@ namespace metrics
         }
     }
 
-    const NorModel norQspi16m{ "nor-qspi-16m", 4096, 4096, 256, 1, qspiTypical, qspiMaximum };
-    const NorModel norQspi1m{ "nor-qspi-1m", 256, 4096, 256, 1, qspiTypical, qspiMaximum };
-    const NorModel internalFlash{ "internal-flash", 256, 2048, 16, 16, internalTiming, internalTiming };
+    constinit const NorModel norQspi16m{ "nor-qspi-16m", 4096, 4096, 256, 1, qspiTypical, qspiMaximum };
+    constinit const NorModel norQspi1m{ "nor-qspi-1m", 256, 4096, 256, 1, qspiTypical, qspiMaximum };
+    constinit const NorModel internalFlash{ "internal-flash", 256, 2048, 16, 16, internalTiming, internalTiming };
     const BlockDeviceModel sdCard256m{ "sd-card-256m", 512, 524288, 8192, 2, { 100us, 25us, 50us, 0us, 10ms }, { 100us, 25us, 50us, 250ms, 10ms } };
 
     const NorTiming& NorModel::Timing(TimingCase timingCase) const

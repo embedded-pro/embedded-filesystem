@@ -19,7 +19,7 @@ namespace metrics
     double BytesPerSecond(uint64_t bytes, infra::Duration deviceTime);
     double Amplification(uint64_t deviceBytes, uint64_t userBytes);
     double Ratio(infra::Duration numerator, infra::Duration denominator);
-    double Ratio(double numerator, double denominator);
+    double CountRatio(double numerator, double denominator);
 
     std::vector<infra::Duration> Latencies(const RecordSelection& records);
     infra::Duration Percentile(std::vector<infra::Duration> values, double fraction);

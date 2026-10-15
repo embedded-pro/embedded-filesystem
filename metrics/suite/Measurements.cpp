@@ -10,9 +10,6 @@ namespace metrics
     namespace
     {
         constexpr uint32_t mebibyte = 1024 * 1024;
-        constexpr std::size_t appendWindow = 64;
-        constexpr std::size_t checkpointPeriods = 4;
-        constexpr uint32_t smallLogSize = 4096;
 
         uint32_t Scaled(uint32_t size, const WorkloadParameters& parameters)
         {
@@ -123,7 +120,7 @@ namespace metrics
     void MeasureDataLoggerLatency(Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters)
     {
         DataLogger(runner, parameters);
-        RecordLatency(recorder, "L2", PhaseLatencies(runner, { "L2" }));
+        RecordLatency(recorder, "L2", PhaseLatencies(runner, { "L2", std::string{ secondLogPhase } }));
     }
 
     void MeasureRandomOverwrite(Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters)
@@ -165,7 +162,7 @@ namespace metrics
         auto sizes = OverwriteSizes(parameters);
         auto largest = ReadRequestsPerOperation(Select(runner.Records(), Phase("L6 random", sizes.back())), Operation::read);
         auto smallest = ReadRequestsPerOperation(Select(runner.Records(), Phase("L6 random", sizes.front())), Operation::read);
-        recorder.Record("R-2", "L6 random ratio", "ratio", Better::lower, Ratio(largest, smallest));
+        recorder.Record("R-2", "L6 random ratio", "ratio", Better::lower, CountRatio(largest, smallest));
     }
 
     void MeasureMount(Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters)

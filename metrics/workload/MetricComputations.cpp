@@ -34,7 +34,7 @@ namespace metrics
 
         uint64_t Checkpoints(const CallRecord& record)
         {
-            return record.counters.has_value() ? record.counters->checkpoints : 0;
+            return record.counters.has_value() && IsPartOfAppend(record.operation) ? record.counters->checkpoints : 0;
         }
 
         infra::Duration ChargedDeviceTime(const CallRecord& record, infra::Duration sectorErase)
@@ -113,7 +113,7 @@ namespace metrics
         return Quotient(Seconds(numerator), Seconds(denominator), 1);
     }
 
-    double Ratio(double numerator, double denominator)
+    double CountRatio(double numerator, double denominator)
     {
         return Quotient(numerator, denominator, 1);
     }

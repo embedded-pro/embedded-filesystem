@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <optional>
 #include <vector>
 
 namespace metrics
@@ -66,14 +67,14 @@ namespace metrics
                 FillVolume(runner, parameters.fillPercent, parameters, reservedBytes);
         }
 
-        void AppendLog(Runner& runner, std::string_view path, uint32_t fileId, uint32_t size)
+        void AppendLog(Runner& runner, std::string_view path, uint32_t fileId, uint32_t size, const std::function<bool(uint32_t logSize)>& complete)
         {
             auto file = runner.Open(path, OpenMode::append);
             if (!file)
                 return;
 
             std::array<uint8_t, appendSize> record{};
-            for (uint32_t offset = 0; offset + appendSize <= size && !runner.Interrupted(); offset += appendSize)
+            for (uint32_t offset = 0; offset + appendSize <= size && !runner.Interrupted() && !complete(offset); offset += appendSize)
             {
                 FillPattern(infra::MakeRange(record), fileId, offset);
                 if (runner.Write(*file, infra::MakeRange(record)) != fs::Result::success)
@@ -84,6 +85,21 @@ namespace metrics
             }
 
             runner.Close(*file);
+        }
+
+        bool HoldsTheSmallLogWindow(const Runner& runner, uint32_t logSize, std::optional<uint64_t>& checkpointsAtSmallLog)
+        {
+            if (logSize < smallLogSize)
+                return false;
+
+            auto counters = runner.Subject().Counters();
+            if (!counters.has_value())
+                return logSize >= smallLogSize + appendWindow * appendSize;
+
+            if (!checkpointsAtSmallLog.has_value())
+                checkpointsAtSmallLog = counters->checkpoints;
+
+            return counters->checkpoints - checkpointsAtSmallLog.value_or(0) >= checkpointPeriods + 2;
         }
 
         void ReadFileInChunks(Runner& runner, std::string_view path)
@@ -214,13 +230,20 @@ namespace metrics
         Prepare(runner, "L2", parameters, uint64_t{ size } + secondSize);
 
         runner.SetPhase("L2");
-        AppendLog(runner, "/log", 200, size);
+        AppendLog(runner, "/log", 200, size, [](uint32_t)
+            {
+                return false;
+            });
 
         if (runner.Interrupted())
             return;
 
         runner.SetPhase(std::string{ secondLogPhase });
-        AppendLog(runner, "/log2", 201, secondSize);
+        std::optional<uint64_t> checkpointsAtSmallLog;
+        AppendLog(runner, "/log2", 201, secondSize, [&runner, &checkpointsAtSmallLog](uint32_t logSize)
+            {
+                return HoldsTheSmallLogWindow(runner, logSize, checkpointsAtSmallLog);
+            });
     }
 
     void RandomOverwrite(Runner& runner, const WorkloadParameters& parameters)

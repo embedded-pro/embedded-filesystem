@@ -331,8 +331,8 @@ During the mount scan, the fourth state marks the checkpoint and journal blocks 
 The erase count of every block is kept in RAM as one byte, relative to the lowest erase count of all blocks except the superblocks; counts are clamped at 255, and when no block remains at the lowest count, the counts are moved down to the new lowest one.
 
 Allocation takes the free erased block with the lowest erase count; this is dynamic wear leveling, and it needs no flash access.
-Static wear leveling takes the opposite: a data move takes the most-worn free block, which it erases first when it is not erased, after finishing a block that the eraser started, and a node move takes the most-worn erased blocks, erasing the most-worn free block only when no block is erased.
-Erasing a block erases one sector per request, then programs part A with the erase count, so an erase in the background keeps a foreground call waiting for at most one sector erase.
+Static wear leveling takes the opposite: a data move takes the most-worn free block, which it erases first when it is not erased, after finishing a block that the eraser started, and a node move takes the most-worn erased blocks, erasing the most-worn free block in the same way only when no block is erased.
+Erasing a block erases one sector per request, then programs part A with the erase count, so an erase in the background keeps a foreground call waiting for at most one sector erase; a move is one unit, so a call that waits for a move waits for up to `2 × sectorsPerBlock - 1` sector erases.
 The background and the calls share one block in erasure: a call that finds the pool empty finishes the block that the background started before it takes another one, and a mount forgets it, because the block is no longer erased in part.
 The background erases every free block that is not erased, lowest erase count first, so when the volume has been idle long enough, every free block is in the pre-erased pool.
 
@@ -378,6 +378,7 @@ The volume counts the erased blocks as the erased sectors divided by `sectorsPer
 The spread is the highest erase count of all blocks, the superblocks aside, minus the lowest erase count of a block that can be moved: a block in use that is not the checkpoint block, a journal block of the epoch, the node block being filled, or the block that the last move gave up.
 That least-worn block is the source, and the most-worn free block the destination, erased or not; a move is due only when the destination is more worn than the source.
 A data move takes the most-worn erased block of the pool when no free block that is not erased is more worn, and otherwise erases the most-worn free block; a node move takes the most-worn erased blocks, and erases the most-worn free block only when the pool is empty.
+A node move whose first node block, chosen this way, would not be more worn than the source is given up, because its nodes would land on a younger block.
 So static wear leveling also works on a volume whose pool is empty because it is never idle, and a node move, whose checkpoint may take several blocks, erases none of them while the pool holds erased ones.
 The least-worn block in use usually holds data that never changes; after the move, the data rests on a worn block, and the young block returns to the pool for frequently changing data.
 A move that is given up counts as a move for the interval, and the next move passes over its block, so a block that cannot be moved, such as the block that a log kept open appends into, does not stop the leveling of the others.
@@ -394,7 +395,8 @@ A move that is given up counts as a move for the interval, and the next move pas
 
 The background makes a move when one is due and the pool holds more erased blocks than twice the node blocks of a checkpoint.
 When the volume is never idle, the foreground makes it: an allocation of a call after `2 × staticWearLevelingInterval` erased blocks without a move, with a move due, arms the fallback.
-When that call releases the queue and the fallback is still due, the background claims the queue ahead of every waiting call and makes one move, whatever the pool holds, as long as more free blocks than twice the node blocks of a checkpoint are left, erased or not, so that the checkpoint of a node move finds its blocks; the next call waits for the move, with the erase of the destination when it was not erased.
+When that call releases the queue and the fallback is still due, the background claims the queue ahead of every waiting call and makes one move, whatever the pool holds; the next call waits for the move, with the erase of the destination when it was not erased.
+The fallback needs more free blocks than twice the node blocks of a checkpoint, erased or not, so that the checkpoint of a node move finds its blocks.
 An allocation of the background does not arm the fallback, so a call that waits for the background waits for one unit only, and the fallback is disarmed whenever the background releases the queue.
 So at most one move happens per interval and per mount, and its overhead is bounded by the configuration and measured by WL-4.
 
@@ -425,6 +427,7 @@ A power loss before step 5 leaves a device that completes `Mount` with `corrupte
    Only a configuration with a smaller cache than the one that wrote the journal can fill the cache during replay; the mount then writes a checkpoint whose epoch starts at the next record to replay, which is why a checkpoint names where its records start.
 5. Classify the remaining blocks: blocks with a valid part A and an erased part B are free and erased; every other block that is not in use is free and not erased.
    A block whose part A is not valid, because its erase was interrupted, gets the average erase count of the device as an estimate, as UBI does on Linux; this happens at most once per power loss and per block.
+   Static wear leveling erases the most-worn blocks, so such an estimate usually lowers the count of a worn block, by at most the spread, until its next erase.
 6. Continue the sequence after the highest one found.
 
 Step 2 reads the header of every block, so the time to mount grows with the size of the device, and is measured by R-4.
@@ -448,7 +451,7 @@ While it holds the queue, it does one unit of work at a time, in this order of p
 3. One sector erase of the free block that is not erased and has the lowest erase count, followed by its part A once its last sector is erased.
 4. A static wear leveling move, when one is due and the pool holds more erased blocks than twice the node blocks of a checkpoint.
 
-A checkpoint and a move are units that are not interrupted; an erase is one device request.
+A checkpoint and a move are units that are not interrupted, and a move includes the erase of its destination; an erase is one device request.
 A collection that is due does not start a checkpoint by itself: it runs as the collection step of the next checkpoint, so the checkpoints, and the collection with them, follow the records and modified nodes of the calls.
 After each unit, the background releases the queue when a foreground operation waits, and continues after the next idle delay; it also releases it when no work is left, and the next idle delay looks again.
 The fallback claims the queue as soon as a call releases it, as described under [Static wear leveling](#static-wear-leveling), and does not wait for the idle delay.

@@ -18,12 +18,12 @@ namespace fs
 
     void NorBlockAllocator::Allocate(NorBlockType allocationType, const NorBlockOwner& allocationOwner, NorReserve reserve, NorWear allocationWear, const infra::Function<void(std::optional<uint32_t> block)>& onAllocated)
     {
+        const auto& blocks = volume.State().blocks;
         type = allocationType;
         owner = allocationOwner;
-        wear = allocationWear;
+        wear = allocationWear == NorWear::most && blocks.Count(NorBlockState::freeErased) == 0 ? NorWear::mostFree : allocationWear;
         onDone = onAllocated;
 
-        const auto& blocks = volume.State().blocks;
         if (reserve == NorReserve::kept && blocks.Count(NorBlockState::freeErased) + blocks.Count(NorBlockState::freeNotErased) <= volume.Geometry().ReserveBlocks())
             onDone(std::nullopt);
         else

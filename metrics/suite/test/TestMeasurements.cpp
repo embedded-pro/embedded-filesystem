@@ -81,6 +81,26 @@ TEST_F(MeasurementsTest, data_logger_of_a_subject_that_counts_averages_whole_che
     EXPECT_DOUBLE_EQ(1.0, Find("W-2", "L2", 0).value);
 }
 
+TEST_F(MeasurementsTest, data_logger_of_a_subject_that_counts_takes_the_small_window_on_the_second_log)
+{
+    subject.counters = metrics::VolumeCounters{};
+    subject.countedPerWrite = metrics::VolumeCounters{ .checkpoints = 1 };
+    subject.countedPerWriteTo["/log2"] = metrics::VolumeCounters{ .allocatedSectors = 1, .checkpoints = 1 };
+
+    metrics::MeasureDataLogger(runner, recorder, parameters);
+
+    EXPECT_DOUBLE_EQ(0.4 / (0.4 + 45), Find("W-2", "L2", 0).value);
+}
+
+TEST_F(MeasurementsTest, data_logger_takes_the_small_window_on_the_second_log)
+{
+    subject.writtenTwice.insert("/log2");
+
+    metrics::MeasureDataLogger(runner, recorder, parameters);
+
+    EXPECT_DOUBLE_EQ(0.5, Find("W-2", "L2", 0).value);
+}
+
 TEST_F(MeasurementsTest, data_logger_of_a_subject_that_counts_fails_the_append_scaling_without_whole_checkpoint_periods)
 {
     subject.counters = metrics::VolumeCounters{};
