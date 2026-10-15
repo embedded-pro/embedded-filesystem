@@ -55,7 +55,8 @@ namespace fs
         really_assert(from.has_value());
         source = from.value_or(0);
 
-        if (volume.State().nodeBlocks.Contains(source))
+        // A node move that is not worth it reads part B as a data move does, which gives it up
+        if (volume.State().nodeBlocks.Contains(source) && NodeDestinationIsMoreWorn())
             MoveNodes();
         else
             MoveData();
@@ -121,16 +122,6 @@ namespace fs
 
     void NorWearLeveler::MoveNodes()
     {
-        if (!NodeDestinationIsMoreWorn())
-        {
-            volume.Defer(infra::Function<void(Result result)>([this](Result)
-                             {
-                                 GiveUp();
-                             }),
-                Result::success);
-            return;
-        }
-
         givenUp = std::nullopt;
         volume.Collector().Move(source);
         volume.State().nodeBlock = std::nullopt;
