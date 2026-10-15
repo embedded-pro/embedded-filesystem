@@ -241,6 +241,34 @@ WL-3 is reported, and `merge_report.py` adds its ratio to the best littlefs subj
 
 The sweep is described in [Testing.md](Testing.md).
 
+On NOR, every case of the sweep holds at 100 % on the three sweep models, with the interrupted program or erase not started, partial and completed.
+The cut points of a case are the programs and sector erases of its swept phase, and each is cut in the three modes, 18,138 cuts in all:
+
+| Case                                           | `nor-128k` | `internal-96k` | `nor-128k-two-sector-blocks` |
+|------------------------------------------------|------------|----------------|------------------------------|
+| format                                         | 68         | 100            | 100                          |
+| make directory                                 | 146        | 187            | 156                          |
+| append                                         | 46         | 291            | 47                           |
+| append after a cut with uncommitted pages      | 25         | 80             | 27                           |
+| append after a cut with an uncommitted block   | 42         | 84             | 48                           |
+| journal in a released block                    | 20         | 77             | 22                           |
+| write nine blocks                              | 188        | 1144           | 199                          |
+| overwrite                                      | 81         | 52             | 86                           |
+| overwrite after a cut with an uncommitted copy | 54         | 34             | 60                           |
+| truncate                                       | 22         | 24             | 22                           |
+| journal in a removed block                     | 7          | 7              | 8                            |
+| remove                                         | 16         | 16             | 15                           |
+| rename                                         | 20         | 21             | 19                           |
+| background                                     | 63         | 89             | 89                           |
+| collection                                     | 54         | 52             | 60                           |
+| leveling-data                                  | 114        | 141            | 144                          |
+| leveling-nodes                                 | 66         | 98             | 96                           |
+| leveling-fallback                              | 83         | 291            | 90                           |
+| leveling-fallback-nodes                        | 57         | 271            | 63                           |
+| unmount with an open file                      | 37         | 283            | 40                           |
+| replay with a smaller cache                    | 31         | 42             | 31                           |
+| Total                                          | 1240       | 3384           | 1422                         |
+
 M-2 counts blocks rather than requests, and every block of a request after its first follows the block before it, so writing the same blocks in fewer, larger requests leaves the share unchanged; only a block that neither starts an allocation unit nor follows the previous one counts against it.
 Counted by requests, a filesystem that coalesces small writes would lower its share by sending fewer data requests next to the same number of metadata requests.
 On L2, where every `Sync` writes one data block, one block per FAT copy and one directory block, almost no write is aligned for any subject, and on L4 the alignment of small files says little, so M-2 is only reported there.

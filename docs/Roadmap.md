@@ -90,7 +90,7 @@ As for FAT, the formatter and an independent checker come early, and every step 
 14. Static wear leveling of data and node blocks in the background, with its foreground fallback ahead of the next call, the counters of the volume, and WL-4 on L5.
 15. The other targets of the NOR subject in `metrics::NorTargets`: the W-6 bound on L2 on `internal-flash`, the charge of erases, the W-2 periods on a second log, the ratio of R-2, and the wear metrics on the lifetime run with a fallback that erases its destination on an empty pool.
     Also the factor and the ratio in `merge_report.py`, `littlefs/ram-matched` with the most RAM littlefs can use, checkpoints that only the calls start, and the results of the NOR subject compared with `main` again.
-16. The exhaustive sweep of every operation and background step, and P-1.
+16. The exhaustive sweep of every operation and background step, and P-1, with the checkpoint that a mount with a smaller cache writes during replay, an unmount that commits a file left open, and the results of the NOR subject and of the sweep in Metrics.md.
 17. A collection that is also due when the free blocks beyond the reserve run low, so that a write does not complete with `noSpace` while node blocks hold unused nodes: L2 on `internal-flash` at 90 % full showed 12 such blocks when its second log ran out of space.
 
 ## Phase 8: on target
