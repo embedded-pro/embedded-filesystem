@@ -97,7 +97,7 @@ namespace fs
     {
         return {
             Machine::Row<NorBackgroundStopped, NorBackgroundStart, NorBackgroundWaiting>(),
-            Machine::Row<NorBackgroundWaiting, NorBackgroundIdle, NorBackgroundClaiming>([](NorBackground& background, const NorBackgroundWaiting&, const NorBackgroundIdle&)
+            Machine::Row<NorBackgroundWaiting, NorBackgroundIdle, NorBackgroundClaiming>([](const NorBackground& background, const NorBackgroundWaiting&, const NorBackgroundIdle&)
                 {
                     return background.HasWork();
                 },
@@ -107,7 +107,7 @@ namespace fs
                     return NorBackgroundClaiming{};
                 }),
             Machine::Row<NorBackgroundWaiting, NorBackgroundStop, NorBackgroundStopped>(),
-            Machine::Row<NorBackgroundClaiming, NorBackgroundGranted, NorBackgroundWaiting>([](NorBackground& background, const NorBackgroundClaiming&, const NorBackgroundGranted&)
+            Machine::Row<NorBackgroundClaiming, NorBackgroundGranted, NorBackgroundWaiting>([](const NorBackground& background, const NorBackgroundClaiming&, const NorBackgroundGranted&)
                 {
                     return background.ShouldStop();
                 },
@@ -121,7 +121,7 @@ namespace fs
                     background.Work();
                     return NorBackgroundWorking{};
                 }),
-            Machine::Row<NorBackgroundWorking, NorBackgroundUnitDone, NorBackgroundWaiting>([](NorBackground& background, const NorBackgroundWorking&, const NorBackgroundUnitDone&)
+            Machine::Row<NorBackgroundWorking, NorBackgroundUnitDone, NorBackgroundWaiting>([](const NorBackground& background, const NorBackgroundWorking&, const NorBackgroundUnitDone&)
                 {
                     return background.ShouldStop();
                 },
