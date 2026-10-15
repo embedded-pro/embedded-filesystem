@@ -88,7 +88,7 @@ As for FAT, the formatter and an independent checker come early, and every step 
 12. Background work: the pre-erased pool and its watermark, dynamic wear leveling, the background checkpoint, and the reserve in `Usage`; the results of the NOR subject become diagnostic.
 13. Garbage collection of node blocks, with L4, L5, and L6 on `internal-flash` in the metrics.
 14. Static wear leveling with its foreground fallback, the counters of the volume, and WL-4.
-15. The other targets of the NOR subject in `metrics::NorTargets`: the W-6 bound with the call latency of L2 and L3 on `nor-qspi-16m`, whose format at maximum timings outlasts the time the runner allows a call, the charge of erases, the W-2 periods, the ratio of R-2, the wear metrics on the lifetime run, the factor and the ratio in `merge_report.py`, `littlefs/ram-matched` sized to the NOR subject, and its results compared with `main` again.
+15. The other targets of the NOR subject in `metrics::NorTargets`: the W-6 bound with the L2 and L3 call latency on `nor-qspi-16m`, the charge of erases, the W-2 periods, the ratio of R-2, the wear metrics on the lifetime run, the factor and the ratio in `merge_report.py`, `littlefs/ram-matched` sized to the NOR subject, and its results compared with `main` again.
 16. The exhaustive sweep of every operation and background step, and P-1.
 
 ## Phase 8: on target
