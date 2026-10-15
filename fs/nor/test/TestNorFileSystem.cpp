@@ -61,7 +61,7 @@ namespace
         void ExpectLookupsCompleteWith(fs::Result result)
         {
             testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
-            EXPECT_CALL(done, callback(result)).Times(3);
+            EXPECT_CALL(done, callback(result)).Times(4);
             volume.OpenDirectory("/a", [&done](fs::Result opened, infra::SharedPtr<fs::Directory> directory)
                 {
                     EXPECT_EQ(nullptr, directory);
@@ -77,22 +77,23 @@ namespace
                     done.callback(removed);
                 });
             ExecuteAllActions();
-        }
-
-        void ExpectChangesCompleteWith(fs::Result result)
-        {
-            testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
             volume.Rename("/a", "/b", [&done](fs::Result renamed)
                 {
                     done.callback(renamed);
                 });
+            ExecuteAllActions();
+        }
+
+        void ExpectUsage(fs::Result result, fs::VolumeUsage expected)
+        {
+            testing::StrictMock<infra::MockCallback<void(fs::Result, fs::VolumeUsage)>> done;
             volume.Usage([&done](fs::Result measured, fs::VolumeUsage usage)
                 {
-                    EXPECT_EQ(fs::VolumeUsage{}, usage);
-                    done.callback(measured);
+                    done.callback(measured, usage);
                 });
+            testing::Mock::VerifyAndClearExpectations(&done);
 
-            EXPECT_CALL(done, callback(result)).Times(2);
+            EXPECT_CALL(done, callback(result, expected));
             ExecuteAllActions();
         }
 
@@ -240,7 +241,7 @@ TEST_F(NorFileSystemTest, format_of_a_device_that_does_not_fit_completes_with_un
 TEST_F(NorFileSystemTest, calls_on_an_unmounted_volume_complete_with_not_mounted)
 {
     ExpectLookupsCompleteWith(fs::Result::notMounted);
-    ExpectChangesCompleteWith(fs::Result::notMounted);
+    ExpectUsage(fs::Result::notMounted, fs::VolumeUsage{});
     ExpectMakeDirectory("/a", fs::Result::notMounted);
 
     testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
@@ -270,12 +271,15 @@ TEST_F(NorFileSystemTest, lookups_on_a_mounted_volume_find_nothing_on_a_new_volu
     ExpectLookupsCompleteWith(fs::Result::notFound);
 }
 
-TEST_F(NorFileSystemTest, changes_on_a_mounted_volume_are_unsupported_until_their_step)
+TEST_F(NorFileSystemTest, usage_counts_the_payload_of_every_block_but_the_superblocks_and_uses_all_but_the_free_blocks)
 {
+    constexpr uint64_t payload = 4096 - fs::NorHeaderSize(1);
     ExpectFormat();
     ExpectMount();
 
-    ExpectChangesCompleteWith(fs::Result::unsupported);
+    ExpectUsage(fs::Result::success, fs::VolumeUsage{ 2 * payload, 30 * payload });
+    ExpectMakeDirectory("/a", fs::Result::success);
+    ExpectUsage(fs::Result::success, fs::VolumeUsage{ 3 * payload, 30 * payload });
 }
 
 TEST_F(NorFileSystemTest, makes_a_directory_that_a_lookup_then_finds)

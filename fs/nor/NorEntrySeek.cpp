@@ -1,7 +1,6 @@
 #include "fs/nor/NorEntrySeek.hpp"
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorBTree.hpp"
-#include "infra/util/ReallyAssert.hpp"
 
 namespace fs
 {
@@ -46,11 +45,10 @@ namespace fs
 
     void NorEntrySeek::Fetched(NorFetchResult result)
     {
-        really_assert(result != NorFetchResult::cacheFull);
-
-        if (result == NorFetchResult::corrupted)
+        // The cache fills with modified nodes only after a checkpoint failed for want of space
+        if (result != NorFetchResult::fetched)
         {
-            onDone(Result::corrupted);
+            onDone(result == NorFetchResult::cacheFull ? Result::noSpace : Result::corrupted);
             return;
         }
 

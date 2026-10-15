@@ -189,6 +189,14 @@ namespace metrics
             });
     }
 
+    fs::Result NorSweepVolume::Rename(const std::string& from, const std::string& to)
+    {
+        return Run([this, &from, &to](const infra::Function<void(fs::Result)>& onDone)
+            {
+                fileSystem.Rename(infra::BoundedConstString(from.data(), from.size()), infra::BoundedConstString(to.data(), to.size()), onDone);
+            });
+    }
+
     std::optional<fs::EntryType> NorSweepVolume::TypeOf(const std::string& path)
     {
         std::optional<fs::Result> result;

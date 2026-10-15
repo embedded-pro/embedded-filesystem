@@ -100,6 +100,8 @@ target_sources(fs.nor PRIVATE
     NorRecordApply.hpp
     NorRemove.cpp
     NorRemove.hpp
+    NorRename.cpp
+    NorRename.hpp
     NorRecordReader.cpp
     NorRecordReader.hpp
     NorReplay.cpp

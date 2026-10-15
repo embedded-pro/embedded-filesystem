@@ -6,11 +6,14 @@ target_link_libraries(metrics.nor PUBLIC
     metrics.device
     metrics.power_cut
     metrics.report
+    metrics.workload
 )
 
 target_sources(metrics.nor PRIVATE
     NorChecker.cpp
     NorChecker.hpp
+    NorSubject.cpp
+    NorSubject.hpp
     NorSweep.cpp
     NorSweep.hpp
     NorTargets.cpp
@@ -19,6 +22,11 @@ target_sources(metrics.nor PRIVATE
 
 emfs_add_metrics(metrics.nor_power_cut
     SOURCES NorPowerCut.cpp
+    LIBRARIES metrics.nor
+)
+
+emfs_add_metrics(metrics.nor_metrics
+    SOURCES NorMetrics.cpp
     LIBRARIES metrics.nor
 )
 

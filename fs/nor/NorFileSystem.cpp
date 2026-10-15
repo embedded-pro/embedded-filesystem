@@ -3,6 +3,11 @@
 
 namespace fs
 {
+    namespace
+    {
+        constexpr uint32_t superblocks = 2;
+    }
+
     NorFileSystem::NorFileSystem(const NorVolumeParts& parts, const NorConfig& config, infra::Duration idleDelay)
         : volume(parts, config, idleDelay)
         , lifecycleClaimer(volume.Queue())
@@ -74,9 +79,10 @@ namespace fs
         StartPathCall(path, NorRemoveCall{ path, onDone });
     }
 
-    void NorFileSystem::Rename(infra::BoundedConstString, infra::BoundedConstString, const infra::Function<void(Result result)>& onDone)
+    void NorFileSystem::Rename(infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone)
     {
-        Refuse(onDone);
+        auto validation = ValidatePath(from, volume.Limits());
+        StartPathCall(validation != Result::success ? validation : ValidatePath(to, volume.Limits()), NorRenameCall{ from, to, onDone });
     }
 
     void NorFileSystem::MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
@@ -86,7 +92,7 @@ namespace fs
 
     void NorFileSystem::Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone)
     {
-        Refuse(onDone);
+        StartCall(NorUsageCall{ onDone });
     }
 
     NorVolume& NorFileSystem::Volume()
@@ -104,22 +110,28 @@ namespace fs
         return std::holds_alternative<NorMounted>(lifecycle.CurrentState());
     }
 
-    template<class Callback>
-    void NorFileSystem::Refuse(const Callback& onDone)
-    {
-        volume.Defer(onDone, IsMounted() ? Result::unsupported : Result::notMounted);
-    }
-
     template<class Call>
     void NorFileSystem::StartPathCall(infra::BoundedConstString path, Call&& call)
     {
-        auto validation = ValidatePath(path, volume.Limits());
+        StartPathCall(ValidatePath(path, volume.Limits()), std::forward<Call>(call));
+    }
+
+    template<class Call>
+    void NorFileSystem::StartPathCall(Result validation, Call&& call)
+    {
+        if (IsMounted() && validation != Result::success)
+            volume.Defer(call.onDone.Clone(), validation);
+        else
+            StartCall(std::forward<Call>(call));
+    }
+
+    template<class Call>
+    void NorFileSystem::StartCall(Call&& call)
+    {
         auto* slot = FreePathSlot();
 
         if (!IsMounted())
             volume.Defer(call.onDone.Clone(), Result::notMounted);
-        else if (validation != Result::success)
-            volume.Defer(call.onDone.Clone(), validation);
         else if (slot == nullptr)
             volume.Defer(call.onDone.Clone(), Result::busy);
         else
@@ -173,8 +185,23 @@ namespace fs
                 .Start();
         else if (auto* makeDirectory = std::get_if<NorMakeDirectoryCall>(&call))
             volume.Operation().emplace<NorMakeDirectory>(volume, std::move(*makeDirectory), finished).Start();
+        else if (auto* remove = std::get_if<NorRemoveCall>(&call))
+            volume.Operation().emplace<NorRemove>(volume, std::move(*remove), finished).Start();
+        else if (auto* rename = std::get_if<NorRenameCall>(&call))
+            volume.Operation().emplace<NorRename>(volume, std::move(*rename), finished).Start();
         else
-            volume.Operation().emplace<NorRemove>(volume, std::move(std::get<NorRemoveCall>(call)), finished).Start();
+            ReportUsage(slot, std::get<NorUsageCall>(call));
+    }
+
+    void NorFileSystem::ReportUsage(NorPathSlot& slot, NorUsageCall& call)
+    {
+        const auto& blocks = volume.State().blocks;
+        uint64_t payload = volume.Geometry().PayloadSize();
+        uint64_t total = uint64_t{ volume.Geometry().blocks - superblocks } * payload;
+        uint64_t free = uint64_t{ blocks.Count(NorBlockState::freeErased) + blocks.Count(NorBlockState::freeNotErased) } * payload;
+
+        slot.claimer.Release();
+        call.onDone(Result::success, VolumeUsage{ total - free, total });
     }
 
     void NorFileSystem::BeginFormat()

@@ -5,6 +5,7 @@
 #include "fs/interfaces/Directory.hpp"
 #include "fs/interfaces/EntryInfo.hpp"
 #include "fs/interfaces/File.hpp"
+#include "fs/interfaces/FileSystem.hpp"
 #include "fs/interfaces/OpenMode.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -46,7 +47,19 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 
-    using NorPathCall = std::variant<NorStatCall, NorOpenDirectoryCall, NorOpenCall, NorMakeDirectoryCall, NorRemoveCall>;
+    struct NorRenameCall
+    {
+        infra::BoundedConstString from;
+        infra::BoundedConstString to;
+        infra::AutoResetFunction<void(Result result)> onDone;
+    };
+
+    struct NorUsageCall
+    {
+        infra::AutoResetFunction<void(Result result, VolumeUsage usage)> onDone;
+    };
+
+    using NorPathCall = std::variant<NorStatCall, NorOpenDirectoryCall, NorOpenCall, NorMakeDirectoryCall, NorRemoveCall, NorRenameCall, NorUsageCall>;
 
     struct NorPathSlot
     {

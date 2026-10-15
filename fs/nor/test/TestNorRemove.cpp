@@ -2,6 +2,7 @@
 #include "gmock/gmock.h"
 #include <array>
 #include <cstdint>
+#include <optional>
 
 namespace
 {
@@ -216,6 +217,30 @@ TEST_F(NorRemoveDeepTest, a_remove_that_leaves_fewer_than_3_unmodified_nodes_mak
     EXPECT_NE(checkpointBlock, State().checkpointBlock);
     EXPECT_EQ(0, Volume().Cache().ModifiedNodes());
     EXPECT_EQ(fs::Result::notFound, Stat("/d059").first);
+}
+
+TEST_F(NorRemoveDeepTest, after_a_checkpoint_that_fails_for_want_of_space_lookups_reads_and_listings_complete_with_no_space)
+{
+    PrepareFile();
+    auto file = Open("/f", fs::OpenMode::read);
+    auto directory = OpenDirectory("/");
+    ModifyLeavesOf({ 3, 5, 7, 9, 11, 13, 15, 17, 19, 21 });
+    UseEveryFreeBlock();
+
+    EXPECT_EQ(fs::Result::noSpace, Remove("/d000"));
+
+    EXPECT_EQ(Volume().Cache().Capacity(), Volume().Cache().ModifiedNodes());
+    EXPECT_EQ(fs::Result::noSpace, Stat("/d020").first);
+    EXPECT_EQ(fs::Result::noSpace, Stat("/d030").first);
+    std::array<uint8_t, 16> buffer{};
+    EXPECT_EQ(fs::Result::noSpace, Read(*file, infra::MakeRange(buffer)).first);
+    std::optional<fs::Result> listed;
+    directory->Next([&listed](fs::Result result, std::optional<fs::EntryInfo>)
+        {
+            listed = result;
+        });
+    ExecuteAllActions();
+    EXPECT_EQ(fs::Result::noSpace, listed);
 }
 
 TEST_F(NorRemoveDeepTest, paths_that_do_not_fit_in_the_cache_next_to_the_modified_nodes_make_a_checkpoint_first)

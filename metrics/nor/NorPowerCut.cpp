@@ -1094,6 +1094,110 @@ public:
         return std::nullopt;
     }
 
+    const std::vector<std::pair<std::string, std::string>> renames{ { "/a", "/b" }, { "/d/e", "/g/e" }, { "/b", "/d/c" }, { "/d", "/g/d" } };
+
+    struct RenamedPaths
+    {
+        std::string file;
+        std::string moved;
+        std::string parent;
+    };
+
+    const std::vector<RenamedPaths> afterRenames{ { "/a", "/d/e", "/d" }, { "/b", "/d/e", "/d" }, { "/b", "/g/e", "/d" }, { "/d/c", "/g/e", "/d" }, { "/g/d/c", "/g/e", "/g/d" } };
+
+    std::size_t RenamedSize() const
+    {
+        return 2 * std::size_t{ payload } + 100;
+    }
+
+    void RenameEntries(Context& context) const
+    {
+        metrics::NorSweepVolume volume{ context, config };
+        if (volume.Mount() != fs::Result::success)
+            return;
+
+        for (const auto& [from, to] : renames)
+            if (volume.Rename(from, to) != fs::Result::success)
+                return;
+
+        if (volume.MakeDirectory("/n") != fs::Result::success)
+            return;
+
+        volume.Unmount();
+    }
+
+    static bool OnlyAt(const metrics::NorCheck& check, const std::string& expected, const std::vector<std::string>& candidates)
+    {
+        for (const auto& candidate : candidates)
+            if ((check.Find(candidate) != nullptr) != (candidate == expected))
+                return false;
+
+        return true;
+    }
+
+    std::optional<std::size_t> RenamesDone(const metrics::NorCheck& check) const
+    {
+        std::vector<std::string> files;
+        std::vector<std::string> moved;
+        std::vector<std::string> parents;
+        for (const auto& paths : afterRenames)
+        {
+            files.push_back(paths.file);
+            moved.push_back(paths.moved);
+            parents.push_back(paths.parent);
+        }
+
+        for (std::size_t done = 0; done != afterRenames.size(); ++done)
+        {
+            const auto& expected = afterRenames[done];
+            if (OnlyAt(check, expected.file, files) && OnlyAt(check, expected.moved, moved) && OnlyAt(check, expected.parent, parents))
+                return done;
+        }
+
+        return std::nullopt;
+    }
+
+    std::optional<std::string> VerifyRenamed(Context& context, bool uncut) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        auto done = RenamesDone(check);
+        if (!done.has_value())
+            return "the entries are not where a prefix of the renames leaves them";
+
+        const auto& paths = afterRenames[*done];
+        if (metrics::ReadContents(image, check, *check.Find(paths.file)) != FileBytes(0, RenamedSize()))
+            return paths.file + " does not hold its contents";
+
+        auto made = check.Find("/n") != nullptr;
+        if (made && *done != renames.size())
+            return "/n was made before every rename";
+
+        if (uncut && !made)
+            return "the run without a cut did not make /n";
+
+        {
+            metrics::NorSweepVolume volume{ context, config };
+            if (volume.Mount() != fs::Result::success)
+                return "the volume does not mount";
+
+            if (volume.ReadFile(paths.file) != FileBytes(0, RenamedSize()) || volume.TypeOf(paths.moved) != fs::EntryType::directory || volume.TypeOf(paths.parent) != fs::EntryType::directory)
+                return "the library and the checker disagree";
+
+            if (volume.MakeDirectory("/z") != fs::Result::success || volume.Unmount() != fs::Result::success)
+                return "a change after the mount fails";
+        }
+
+        auto after = metrics::CheckImage(context, model);
+        if (after.problem.has_value())
+            return "after a change after the mount: " + *after.problem;
+
+        return std::nullopt;
+    }
+
     void SweepAppendAfterLoss(const std::string& caseName, std::size_t writes)
     {
         auto committed = SizeAfter(writes - 1);
@@ -1256,6 +1360,23 @@ TEST_P(NorAppendPowerCut, removes_happen_in_order_and_each_completely_or_not_at_
         [this](Context& context, bool uncut)
         {
             return VerifyRemoved(context, uncut);
+        });
+}
+
+TEST_P(NorAppendPowerCut, renames_happen_in_order_and_leave_each_entry_under_exactly_one_name)
+{
+    SweepEveryMode(
+        model, "rename", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpFiles(context, { { "/a", RenamedSize() } }, { "/d", "/d/e", "/g" });
+        },
+        [this](Context& context)
+        {
+            RenameEntries(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return VerifyRenamed(context, uncut);
         });
 }
 

@@ -165,6 +165,19 @@ namespace fs
             return removed.value_or(Result::busy);
         }
 
+        Result Rename(infra::BoundedConstString from, infra::BoundedConstString to)
+        {
+            std::optional<Result> renamed;
+            fileSystem.Rename(from, to, [&renamed](Result result)
+                {
+                    renamed = result;
+                });
+
+            EXPECT_FALSE(renamed.has_value());
+            ExecuteAllActions();
+            return renamed.value_or(Result::busy);
+        }
+
         infra::SharedPtr<Directory> OpenDirectory(infra::BoundedConstString path)
         {
             infra::SharedPtr<Directory> opened;

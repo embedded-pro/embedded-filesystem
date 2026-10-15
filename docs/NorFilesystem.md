@@ -117,7 +117,7 @@ Each entry starts with its kind:
 | 6    | Block set              | Inode (4), block index (4), previous block (4), new block (4) | Maps the index to the new block, which becomes used, and releases the previous block; 0 means none     |
 | 7    | Size                   | Inode (4), size (4), inline length (2), inline bytes          | Sets the size of the file and the contents of its inline area, and releases the blocks beyond the size |
 
-An operation writes one record with every entry it needs: creating a file puts its directory entry and its inode, `Rename` removes one entry, puts another and puts the inode with its new parent and name, and an overwrite that spans two blocks sets both blocks and the size.
+An operation writes one record with every entry it needs: creating a file puts its directory entry and its inode, `Rename` puts one entry, removes another and puts the inode with its new parent and name, and an overwrite that spans two blocks sets both blocks and the size.
 Replay checks that the previous block of a block set is the one the map holds, and a mismatch makes the mount complete with `corrupted`.
 A block that a block set maps may have been released by a later record and reused as a journal block of the same epoch; replay then maps it without changing its state, and the later record releases nothing.
 An inode put of an inode that exists keeps its maps and ignores the roots it carries, because roots change only at checkpoints, and a checkpoint written during replay may come between a record and the roots it was written with; an inode put of a new inode creates it without maps.
@@ -187,6 +187,7 @@ Before an operation changes anything, it brings the paths it changes into the ca
 When they do not fit next to the nodes already modified, or when the cache has no room to bring a path in, a checkpoint comes first and the operation starts again.
 The largest operation, `Rename` between two directories, modifies at most 15 nodes: 3 to remove the old entry, 5 to insert the new one with two splits, 3 for the record of the entry, and 2 more for the record of each directory, whose map gets a new root.
 A lookup that only reads brings one path at a time into the cache, up to 3 nodes, so an operation that leaves fewer than 3 nodes of the cache unmodified writes a checkpoint before it completes, and `cachedNodes` must be at least 15, which `static_assert` checks.
+The [reserve](#allocation-and-the-pre-erased-pool) keeps that checkpoint from failing for want of space; when it fails anyway, the operation completes with `noSpace` after its record, and until a checkpoint succeeds, a lookup or read that finds no room in the cache completes with `noSpace`.
 
 ## Inodes and directories
 
@@ -214,6 +215,9 @@ The key of a directory entry is the low 24 bits of the CRC of its name, shifted 
 Lookup reads the entries of the directory whose keys share the hash, from the lowest index, and compares the name of each one's inode record byte by byte.
 An entry whose inode has no record, or whose record names another parent, completes the operation with `corrupted`, and so does a root whose record is not a directory.
 Creating an entry takes the lowest index that its hash does not use; when all 256 are used, it completes with `noSpace`.
+`Rename` looks up both names before it changes anything, and writes one record that puts the new entry under the lowest free index of its hash, removes the old one, and puts the inode record with its new parent and name; the inode keeps its number, its map and its inline area.
+The new entry comes first, so that it goes into the map that the room check measured: removing the old entry first may drop a node and route the new entry into a node that is neither cached nor counted.
+Paths are canonical, so a directory moves into its own subtree exactly when the new path starts with the old one followed by `/`.
 `Next` returns the entries of a directory in the order of their keys, and continues after the key it returned last, so entries that are added or removed meanwhile do not disturb it.
 
 A name is at most `maxNameBytes` bytes, 64 by default, and a longer one completes with `nameTooLong`; a path is at most `maxPathBytes` bytes.
@@ -463,6 +467,7 @@ The power-cut sweep in [Testing.md](Testing.md) interrupts every operation and b
 | Each open file | Position, size, 8 uncommitted entries and a buffer of one page, or of the inline area if larger |
 
 For a 16 MiB device with 4 KiB blocks, that is 4096 blocks, so 1 KiB for the block states and 4 KiB for the erase counts, plus 8 KiB for the default cache of 16 nodes of 512 bytes, and about 0.6 KiB per open file: about 14 KiB with one open file.
+The state of the volume, its handles and its operations comes on top: the metrics report 18,440 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M.
 Using larger blocks reduces the tables proportionally: with 64 KiB blocks, the same device needs 320 bytes for block states and erase counts, and about 9 KiB in all.
 This is more RAM than littlefs needs for the same device; it is the price of allocation without traversal and of wear leveling based on actual erase counts.
 

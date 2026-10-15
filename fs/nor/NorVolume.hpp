@@ -29,6 +29,7 @@
 #include "fs/nor/NorRead.hpp"
 #include "fs/nor/NorRecordApply.hpp"
 #include "fs/nor/NorRemove.hpp"
+#include "fs/nor/NorRename.hpp"
 #include "fs/nor/NorReplay.hpp"
 #include "fs/nor/NorStat.hpp"
 #include "fs/nor/NorUnmount.hpp"
@@ -58,7 +59,7 @@ namespace fs
         infra::MemoryRange<NorNodeCache::Slot> nodeSlots;
     };
 
-    using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorReplay, NorUnmount, NorStat, NorOpenDirectory, NorOpen, NorRead, NorWrite, NorMakeDirectory, NorRemove>;
+    using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorReplay, NorUnmount, NorStat, NorOpenDirectory, NorOpen, NorRead, NorWrite, NorMakeDirectory, NorRemove, NorRename>;
 
     class NorVolume
     {

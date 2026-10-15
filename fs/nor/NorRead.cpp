@@ -1,7 +1,6 @@
 #include "fs/nor/NorRead.hpp"
 #include "fs/nor/NorRadixTree.hpp"
 #include "fs/nor/NorVolume.hpp"
-#include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 
 namespace fs
@@ -76,11 +75,10 @@ namespace fs
 
     void NorRead::Fetched(NorFetchResult result)
     {
-        really_assert(result != NorFetchResult::cacheFull);
-
-        if (result == NorFetchResult::corrupted)
+        // The cache fills with modified nodes only after a checkpoint failed for want of space
+        if (result != NorFetchResult::fetched)
         {
-            Done(Result::corrupted);
+            Done(result == NorFetchResult::cacheFull ? Result::noSpace : Result::corrupted);
             return;
         }
 
