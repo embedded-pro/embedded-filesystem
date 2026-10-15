@@ -11,6 +11,8 @@
 #include "fs/nor/NorConfig.hpp"
 #include "fs/nor/NorDirectoryRead.hpp"
 #include "fs/nor/NorEntrySeek.hpp"
+#include "fs/nor/NorFileCommit.hpp"
+#include "fs/nor/NorFileFlush.hpp"
 #include "fs/nor/NorFormatter.hpp"
 #include "fs/nor/NorInodeRead.hpp"
 #include "fs/nor/NorJournalWriter.hpp"
@@ -26,16 +28,21 @@
 #include "fs/nor/NorRecordApply.hpp"
 #include "fs/nor/NorReplay.hpp"
 #include "fs/nor/NorStat.hpp"
+#include "fs/nor/NorUnmount.hpp"
 #include "fs/nor/NorVolumeState.hpp"
+#include "fs/nor/NorWrite.hpp"
 #include "hal/interfaces/Flash.hpp"
 #include "infra/timer/Timer.hpp"
 #include "infra/util/ByteRange.hpp"
+#include "infra/util/IntrusiveList.hpp"
 #include "infra/util/MemoryRange.hpp"
 #include <cstdint>
 #include <variant>
 
 namespace fs
 {
+    class NorFile;
+
     struct NorVolumeParts
     {
         hal::Flash& flash;
@@ -47,7 +54,7 @@ namespace fs
         infra::MemoryRange<NorNodeCache::Slot> nodeSlots;
     };
 
-    using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorReplay, NorStat, NorOpenDirectory, NorOpen, NorRead, NorMakeDirectory>;
+    using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorReplay, NorUnmount, NorStat, NorOpenDirectory, NorOpen, NorRead, NorWrite, NorMakeDirectory>;
 
     class NorVolume
     {
@@ -74,6 +81,9 @@ namespace fs
         NorRecordApply& RecordApply();
         NorCheckpointWriter& Checkpoints();
         NorJournalWriter& Journal();
+        NorFileFlush& FileFlush();
+        NorFileCommit& FileCommit();
+        infra::IntrusiveList<NorFile>& OpenFiles();
         OperationQueue& Queue();
         NorOperation& Operation();
 
@@ -103,6 +113,9 @@ namespace fs
         NorRecordApply recordApply{ *this };
         NorCheckpointWriter checkpoints{ *this };
         NorJournalWriter journal{ *this };
+        NorFileFlush fileFlush{ *this };
+        NorFileCommit fileCommit{ *this };
+        infra::IntrusiveList<NorFile> openFiles;
         OperationQueue queue;
         NorOperation operation;
         uint32_t generation{ 0 };

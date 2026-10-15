@@ -33,6 +33,11 @@ namespace fs
         return NorInodeRecordBytes(config.inlineBytes, config.maxNameBytes);
     }
 
+    constexpr uint32_t NorFileBufferBytes(const NorConfig& config)
+    {
+        return config.pageSize > config.inlineBytes ? config.pageSize : config.inlineBytes;
+    }
+
     namespace detail
     {
         constexpr bool IsValidNorGeometry(const NorConfig& config)

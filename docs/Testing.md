@@ -94,7 +94,7 @@ After each cut, the sweep checks that:
 
 * the library mounts the volume;
 * an independent checker, which parses the image without the code of `fs/nor`, finds valid superblocks, a checkpoint with a valid CRC, a journal whose records replay without a mismatch, every node of every map with a valid CRC and reachable once, every block that the state uses marked in use with a header of the right type and owner, and no block used twice;
-* every block marked in use is used, except node blocks whose nodes were all replaced, which stay in use until garbage collection passes them;
+* every block marked in use is used, except node blocks whose nodes were all replaced, which stay in use until garbage collection passes them, and blocks that a replayed record released, which may have been erased and allocated again;
 * the checker also finds every free block that holds only its part A erased;
 * no program unit was programmed twice since its last erase, as counted by `metrics::MeteredFlash`, which takes every unit that does not read erased when the operation starts as programmed;
 * every file holds, byte by byte, either its contents before the interrupted operation or its contents after it;
@@ -102,6 +102,7 @@ After each cut, the sweep checks that:
 * the volume takes a new change after the mount, and the checker accepts the image again after it.
 
 The cases cover every operation that writes, the start of a new journal block after a mount, checkpoints, the background work of erasing, collecting node blocks and moving blocks, and chains of a cut, a mount, an append and another cut.
+The first cut of a chain is fixed where it leaves the most behind: after pages programmed beyond the last commit, and after a new data block that no record commits; the second cut is swept.
 `Format` is swept too: after a cut, the mount finds the previous volume as long as its second superblock is not erased, completes with `corrupted`, or finds the new, empty volume with every other block in the pre-erased pool.
 Small configurations, with a few cached nodes and a short journal, make the sweep cross journal blocks and checkpoints within a few operations.
 Unlike FAT, a NOR volume allows nothing extra after a cut: blocks that an interrupted operation allocated are free, because no committed state refers to them, so the run without a cut and the runs with a cut pass the same checks.

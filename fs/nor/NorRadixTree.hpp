@@ -19,12 +19,14 @@ namespace fs
 
         uint32_t Find(const NorMapRoot& root, uint32_t index) const;
         std::optional<uint32_t> NodesModifiedBySet(const NorMapRoot& root, uint32_t index) const;
+        std::optional<uint32_t> NodesCreatedBySet(const NorMapRoot& root, uint32_t index) const;
         uint32_t NodesModifiedByClear(const NorMapRoot& root, uint32_t index) const;
 
         void Set(NorMapRoot& root, uint32_t index, uint32_t block) const;
         void Clear(NorMapRoot& root, uint32_t index) const;
 
         static bool Covers(const NorMapRoot& root, uint32_t index, uint32_t nodeSize);
+        static bool CanMap(uint32_t index, uint32_t nodeSize);
         static uint32_t ChildFor(infra::ConstByteRange node, uint32_t index);
         static uint32_t FirstIndexOfChild(infra::ConstByteRange node, uint32_t index);
         static bool HasValidCount(infra::ConstByteRange node);

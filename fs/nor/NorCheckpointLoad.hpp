@@ -36,7 +36,7 @@ namespace fs
         void Accept();
         void ReadBitmap();
         void OnBitmap(uint32_t size);
-        bool Settle(uint32_t block, bool inUse) const;
+        void Settle(uint32_t block, bool inUse) const;
         Result Consistency() const;
         bool IsNodeInUse(uint32_t address) const;
         bool AreRecordsInUse() const;

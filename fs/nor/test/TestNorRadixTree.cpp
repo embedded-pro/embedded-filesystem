@@ -141,6 +141,35 @@ TEST_F(NorRadixTreeTest, counts_the_nodes_below_a_hole)
     EXPECT_EQ(0u, tree.NodesModifiedByClear(root, 3));
 }
 
+TEST_F(NorRadixTreeTest, counts_the_nodes_that_a_set_creates)
+{
+    EXPECT_EQ(std::optional<uint32_t>(3), tree.NodesCreatedBySet(root, 70));
+    EXPECT_EQ(std::nullopt, tree.NodesCreatedBySet(root, 512));
+
+    tree.Set(root, 3, 7);
+    EXPECT_EQ(std::optional<uint32_t>(0), tree.NodesCreatedBySet(root, 4));
+    EXPECT_EQ(std::optional<uint32_t>(4), tree.NodesCreatedBySet(root, 100));
+
+    tree.Set(root, 9, 8);
+    EXPECT_EQ(std::optional<uint32_t>(1), tree.NodesCreatedBySet(root, 20));
+}
+
+TEST_F(NorRadixTreeTest, a_node_that_is_written_back_is_modified_by_a_set_but_not_created)
+{
+    tree.Set(root, 3, 7);
+    cache.Written(cache.Find(root.address).value_or(0), 4096);
+    root.address = 4096;
+
+    EXPECT_EQ(std::optional<uint32_t>(1), tree.NodesModifiedBySet(root, 4));
+    EXPECT_EQ(std::optional<uint32_t>(0), tree.NodesCreatedBySet(root, 4));
+}
+
+TEST_F(NorRadixTreeTest, maps_the_indexes_that_three_levels_reach)
+{
+    EXPECT_TRUE(fs::NorRadixTree::CanMap(511, nodeSize));
+    EXPECT_FALSE(fs::NorRadixTree::CanMap(512, nodeSize));
+}
+
 TEST_F(NorRadixTreeTest, an_empty_leaf_leaves_its_parent_and_a_root_with_only_its_first_child_is_replaced_by_it)
 {
     tree.Set(root, 3, 7);

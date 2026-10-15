@@ -4,6 +4,7 @@
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorBTree.hpp"
 #include "fs/nor/NorInodeRecord.hpp"
+#include "fs/nor/NorRadixTree.hpp"
 #include "fs/nor/NorRecord.hpp"
 #include "fs/nor/test/NorVolumeFixture.hpp"
 #include "infra/util/BoundedVector.hpp"
@@ -14,9 +15,9 @@
 
 namespace fs
 {
-    template<NorConfig Config, uint32_t Sectors, uint32_t SectorSize>
+    template<NorConfig Config, uint32_t Sectors, uint32_t SectorSize, std::size_t Files = 1>
     class NorRecordsFixture
-        : public NorVolumeFixture<Config, Sectors, SectorSize>
+        : public NorVolumeFixture<Config, Sectors, SectorSize, Files>
     {
     public:
         static constexpr uint32_t recordBytes = NorInodeRecordBytes(Config);
@@ -72,6 +73,37 @@ namespace fs
             this->ExecuteAllActions();
             this->Volume().Cache().UnpinAll();
             return applied.value_or(Result::busy);
+        }
+
+        using Name = infra::BoundedString::WithStorage<8>;
+
+        static Name NameOf(uint32_t index)
+        {
+            Name name("d");
+            name.push_back(static_cast<char>('0' + index / 100));
+            name.push_back(static_cast<char>('0' + index / 10 % 10));
+            name.push_back(static_cast<char>('0' + index % 10));
+            return name;
+        }
+
+        void AddDirectories(uint32_t parent, uint32_t count)
+        {
+            for (uint32_t index = 0; index != count; ++index)
+            {
+                this->Builder().AddDirectory(parent, NameOf(index));
+                if (index % 30 == 29)
+                    this->Builder().Commit();
+            }
+            this->Builder().Commit();
+        }
+
+        void ModifyLeavesOf(std::initializer_list<uint32_t> inodes)
+        {
+            for (auto inode : inodes)
+            {
+                auto record = Serialized(NorInodeRecord{ NorImageBuilder::rootInode, NorInodeType::directory, 0, 0, 0, {}, infra::StringAsByteRange(infra::BoundedConstString("m")) });
+                ASSERT_EQ(Result::success, Commit({ NorInodePut{ inode, infra::MakeRange(record) } })) << inode;
+            }
         }
 
         void FillInodeTable(uint32_t lastInode)
@@ -145,7 +177,20 @@ namespace fs
             return LoadLittle32(*value, 0);
         }
 
-        infra::BoundedVector<NorEntry>::WithMaxSize<4> entries;
+        uint32_t BlockInVolume(uint32_t file, uint32_t index)
+        {
+            auto record = RecordInVolume(file);
+            if (!record.has_value())
+                return 0;
+
+            NorMapRoot map{ record->mapRoot, record->mapHeight };
+            Fetch(NorMapId{ NorMap::fileData, file, 4 }, map, index);
+            auto block = NorRadixTree(this->Volume().Cache(), file).Find(map, index);
+            this->Volume().Cache().UnpinAll();
+            return block;
+        }
+
+        infra::BoundedVector<NorEntry>::WithMaxSize<10> entries;
         std::array<uint8_t, 512> recordBuffer{};
     };
 }

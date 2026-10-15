@@ -13,7 +13,9 @@ namespace fs
     constexpr uint32_t norInodeRecordFixedBytes = 20;
     constexpr uint32_t norInodeTypeOffset = 4;
     constexpr uint32_t norInodeMapHeightOffset = 6;
+    constexpr uint32_t norInodeSizeOffset = 8;
     constexpr uint32_t norInodeMapRootOffset = 12;
+    constexpr uint32_t norInodeInlineLengthOffset = 16;
     constexpr uint32_t norCheckpointFixedBytes = 28;
     constexpr uint32_t norCheckpointCrcBytes = 4;
     constexpr uint32_t norMaxLevels = 3;

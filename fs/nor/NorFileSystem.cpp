@@ -56,10 +56,7 @@ namespace fs
 
     void NorFileSystem::Open(infra::BoundedConstString path, OpenMode mode, const infra::Function<void(Result result, infra::SharedPtr<File> file)>& onDone)
     {
-        if (mode != OpenMode::read)
-            Refuse(onDone);
-        else
-            StartPathCall(path, NorOpenCall{ path, mode, onDone });
+        StartPathCall(path, NorOpenCall{ path, mode, onDone });
     }
 
     void NorFileSystem::OpenDirectory(infra::BoundedConstString path, const infra::Function<void(Result result, infra::SharedPtr<Directory> directory)>& onDone)
@@ -240,14 +237,11 @@ namespace fs
                     {
                         return NorUnmountDone{ result };
                     });
-
-                if (volume.Journal().IsMoreThanHalfFull())
-                    volume.Checkpoints().Write([this](Result result)
-                        {
-                            LifecycleOperationDone(result);
-                        });
-                else
-                    LifecycleOperationDone(Result::success);
+                volume.Operation().emplace<NorUnmount>(volume, [this](Result result)
+                                      {
+                                          LifecycleOperationDone(result);
+                                      })
+                    .Start();
             });
     }
 

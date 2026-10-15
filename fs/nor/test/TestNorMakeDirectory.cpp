@@ -234,39 +234,7 @@ namespace
 
     class NorMakeDirectoryDeepTest
         : public fs::NorRecordsFixture<smallNodes, 128, 4096>
-    {
-    public:
-        using Name = infra::BoundedString::WithStorage<8>;
-
-        static Name NameOf(uint32_t index)
-        {
-            Name name("d");
-            name.push_back(static_cast<char>('0' + index / 100));
-            name.push_back(static_cast<char>('0' + index / 10 % 10));
-            name.push_back(static_cast<char>('0' + index % 10));
-            return name;
-        }
-
-        void AddDirectories(uint32_t parent, uint32_t count)
-        {
-            for (uint32_t index = 0; index != count; ++index)
-            {
-                Builder().AddDirectory(parent, NameOf(index));
-                if (index % 30 == 29)
-                    Builder().Commit();
-            }
-            Builder().Commit();
-        }
-
-        void ModifyLeavesOf(std::initializer_list<uint32_t> inodes)
-        {
-            for (auto inode : inodes)
-            {
-                auto record = Serialized(fs::NorInodeRecord{ root, fs::NorInodeType::directory, 0, 0, 0, {}, Bytes("m") });
-                ASSERT_EQ(fs::Result::success, Commit({ fs::NorInodePut{ inode, infra::MakeRange(record) } })) << inode;
-            }
-        }
-    };
+    {};
 }
 
 TEST_F(NorMakeDirectoryDeepTest, an_inode_table_that_would_need_a_fourth_level_has_no_space)

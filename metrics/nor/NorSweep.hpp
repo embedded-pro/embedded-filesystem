@@ -62,6 +62,11 @@ namespace metrics
         fs::Result Unmount();
         fs::Result MakeDirectory(const std::string& path);
         std::optional<fs::EntryType> TypeOf(const std::string& path);
+        fs::Result OpenFile(const std::string& path, fs::OpenMode mode);
+        fs::Result Write(const std::vector<uint8_t>& data);
+        fs::Result Sync();
+        fs::Result Close();
+        std::optional<std::vector<uint8_t>> ReadFile(const std::string& path);
 
     private:
         class FileSystem
@@ -78,7 +83,7 @@ namespace metrics
         private:
             infra::BoundedVector<fs::NorPathSlot>::WithMaxSize<8> pathSlots;
             fs::HandlePool<fs::NorDirectory, 1> directories{ Volume() };
-            fs::HandlePool<fs::NorFile, 1> files{ Volume() };
+            fs::HandlePool<fs::NorFile::WithBuffer<256>, 1> files{ Volume() };
         };
 
         template<class Start>
@@ -87,6 +92,7 @@ namespace metrics
     private:
         SweepContext<hal::Flash>& context;
         FileSystem fileSystem;
+        infra::SharedPtr<fs::File> file;
     };
 }
 

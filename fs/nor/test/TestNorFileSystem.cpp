@@ -78,11 +78,6 @@ namespace
         void ExpectChangesCompleteWith(fs::Result result)
         {
             testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
-            volume.Open("/a", fs::OpenMode::write, [&done](fs::Result opened, infra::SharedPtr<fs::File> file)
-                {
-                    EXPECT_EQ(nullptr, file);
-                    done.callback(opened);
-                });
             volume.Remove("/a", [&done](fs::Result removed)
                 {
                     done.callback(removed);
@@ -97,7 +92,7 @@ namespace
                     done.callback(measured);
                 });
 
-            EXPECT_CALL(done, callback(result)).Times(4);
+            EXPECT_CALL(done, callback(result)).Times(3);
             ExecuteAllActions();
         }
 
@@ -247,6 +242,15 @@ TEST_F(NorFileSystemTest, calls_on_an_unmounted_volume_complete_with_not_mounted
     ExpectLookupsCompleteWith(fs::Result::notMounted);
     ExpectChangesCompleteWith(fs::Result::notMounted);
     ExpectMakeDirectory("/a", fs::Result::notMounted);
+
+    testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
+    volume.Open("/a", fs::OpenMode::write, [&done](fs::Result opened, infra::SharedPtr<fs::File> file)
+        {
+            EXPECT_EQ(nullptr, file);
+            done.callback(opened);
+        });
+    EXPECT_CALL(done, callback(fs::Result::notMounted));
+    ExecuteAllActions();
 }
 
 TEST_F(NorFileSystemTest, lookups_after_unmount_complete_with_not_mounted)

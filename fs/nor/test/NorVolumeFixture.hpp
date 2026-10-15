@@ -18,6 +18,75 @@
 
 namespace fs
 {
+    class RecordingFlash
+        : public hal::Flash
+    {
+    public:
+        struct Request
+        {
+            uint32_t address{ 0 };
+            std::size_t size{ 0 };
+            bool erase{ false };
+
+            bool operator==(const Request& other) const = default;
+        };
+
+        using Requests = infra::BoundedVector<Request>::WithMaxSize<64>;
+
+        explicit RecordingFlash(hal::Flash& flash)
+            : flash(flash)
+        {}
+
+        uint32_t NumberOfSectors() const override
+        {
+            return flash.NumberOfSectors();
+        }
+
+        uint32_t SizeOfSector(uint32_t sectorIndex) const override
+        {
+            return flash.SizeOfSector(sectorIndex);
+        }
+
+        uint32_t SectorOfAddress(uint32_t address) const override
+        {
+            return flash.SectorOfAddress(address);
+        }
+
+        uint32_t AddressOfSector(uint32_t sectorIndex) const override
+        {
+            return flash.AddressOfSector(sectorIndex);
+        }
+
+        void WriteBuffer(infra::ConstByteRange buffer, uint32_t address, infra::Function<void()> onDone) override
+        {
+            Record(Request{ address, buffer.size(), false });
+            flash.WriteBuffer(buffer, address, onDone);
+        }
+
+        void ReadBuffer(infra::ByteRange buffer, uint32_t address, infra::Function<void()> onDone) override
+        {
+            flash.ReadBuffer(buffer, address, onDone);
+        }
+
+        void EraseSectors(uint32_t beginIndex, uint32_t endIndex, infra::Function<void()> onDone) override
+        {
+            Record(Request{ flash.AddressOfSector(beginIndex), endIndex - beginIndex, true });
+            flash.EraseSectors(beginIndex, endIndex, onDone);
+        }
+
+        void Record(const Request& request)
+        {
+            if (recording && !requests.full())
+                requests.push_back(request);
+        }
+
+        bool recording{ false };
+        Requests requests;
+
+    private:
+        hal::Flash& flash;
+    };
+
     template<NorConfig Config, std::size_t Files = 1>
     class ExposedNorFileSystem
         : public NorFileSystem::WithStorage<Config, Files>
@@ -27,7 +96,7 @@ namespace fs
         using NorFileSystem::Volume;
     };
 
-    template<NorConfig Config, uint32_t Sectors, uint32_t SectorSize>
+    template<NorConfig Config, uint32_t Sectors, uint32_t SectorSize, std::size_t Files = 1>
     class NorVolumeFixture
         : public testing::Test
         , public infra::ClockFixture
@@ -142,9 +211,10 @@ namespace fs
         }
 
         hal::FlashStub flash{ Sectors, SectorSize };
+        RecordingFlash device{ flash };
         NorFlashStubImage image{ flash };
         std::optional<NorImageBuilder> builder;
-        ExposedNorFileSystem<Config> fileSystem{ flash };
+        ExposedNorFileSystem<Config, Files> fileSystem{ device };
     };
 }
 

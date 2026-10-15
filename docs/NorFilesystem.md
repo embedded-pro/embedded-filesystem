@@ -243,8 +243,10 @@ A logical block before the inline area without a data block, a data block outsid
 
 An append is programmed in place, into the erased program units of the data block of the last logical block, and the record that commits it holds only a size entry with the bytes of the inline area.
 An append of 64 bytes followed by `Sync` therefore programs 64 bytes and one record of 19 bytes on SPI NOR, independent of the size of the file.
-Each open file collects the bytes it writes in a buffer of one page, and programs the buffer when it reaches the end of a page of the device, and at `Sync` and `Close`, up to the last whole program unit; so a series of small writes is programmed page by page.
+Each open file collects the bytes it writes in a buffer of one page, or of the inline area when that is larger, and programs the buffer when it reaches the end of a page of the device, and at `Sync` and `Close`, up to the last whole program unit; so a series of small writes is programmed page by page.
+A file that fits the inline area keeps its bytes in the buffer until `Sync` or `Close` writes them into the inline area with the record, and needs no data block.
 When a logical block is full, the next one gets a new data block.
+A write whose page cannot be programmed, because the copy described below finds no free block, completes with `noSpace` and keeps only the bytes before that page.
 
 A handle appends in place only into a data block that it allocated itself, and only above the high-water mark of what it has programmed into it.
 The first append to a partial last block that the handle did not allocate, for instance after a mount, copies the block to a new one first, and so does an append below the high-water mark after `Truncate`.
@@ -261,6 +263,7 @@ Data that a write programs is not visible until a record commits it.
 The blocks it allocated are in RAM in the state allocated but not committed, and the handle keeps the block entries, the size and the inline bytes that are not yet committed.
 `Sync` and `Close` program the buffer and write one record with all of them.
 A handle keeps at most 8 uncommitted block entries; the write that would add a ninth first commits them.
+A `Close` whose commit fails frees the blocks of those entries, because no committed state refers to them.
 A read through the handle sees its uncommitted entries and its buffer.
 
 ### Other operations on files
@@ -268,7 +271,7 @@ A read through the handle sees its uncommitted entries and its buffer.
 `Truncate` commits the file with its new size; the blocks after the new end are released when the record is applied.
 `Open` in `write` mode does the same with a size of 0.
 `Remove` writes one record that removes the directory entry and the inode; applying it walks the data map and releases every data block and node of the file.
-`Truncate`, `Remove`, `MakeDirectory` and `Rename` write their record before they complete, so they are durable then.
+`Open` of a missing file in a mode other than `read`, `Truncate`, `Remove`, `MakeDirectory` and `Rename` write their record before they complete, so they are durable then.
 `ExpectSize` completes with `success` and has no effect, because NOR blocks need no contiguity.
 A file is at most 4 GiB minus one byte; a write beyond writes up to that size and completes with `noSpace`.
 
@@ -375,6 +378,8 @@ A power loss before step 5 leaves a device that completes `Mount` with `corrupte
 2. Read the header of every block, which gives the erase counts, the highest sequence, the free and erased blocks, and the checkpoint and journal blocks.
 3. Load the checkpoint with the highest sequence whose CRC is valid.
    A checkpoint whose CRC is not valid was interrupted and is skipped, but a valid checkpoint is never skipped: if it is not consistent, the mount completes with `corrupted`, because the blocks of an older one may have been reused.
+   A block that the checkpoint marks is in use even when its header is erased or of another type, because a record of the epoch may have released it, and it may have been erased and allocated again since; replaying that record releases it again, unless the block is now a journal block of the epoch.
+   The exception is a marked block whose header says journal or checkpoint: apart from the checkpoint block and the block where its records start, it is in use only when the journal chain reaches it.
 4. Replay the records of the epoch, as described under [Journal](#journal).
    Only a configuration with a smaller cache than the one that wrote the journal can fill the cache during replay; the mount then writes a checkpoint whose epoch starts at the next record to replay, which is why a checkpoint names where its records start.
 5. Classify the remaining blocks: blocks with a valid part A and an erased part B are free and erased; every other block that is not in use is free and not erased.
@@ -438,13 +443,13 @@ The power-cut sweep in [Testing.md](Testing.md) interrupts every operation and b
 
 ## RAM use
 
-| Item           | Size                                                                   |
-|----------------|------------------------------------------------------------------------|
-| Block states   | 2 bits per block                                                       |
-| Erase counts   | 1 byte per block                                                       |
-| Node cache     | `cachedNodes` times the node size, plus a few bytes per node           |
-| Journal buffer | The largest record, rounded up to the program unit                     |
-| Each open file | Position, inode record, a buffer of one page and 8 uncommitted entries |
+| Item           | Size                                                                                            |
+|----------------|-------------------------------------------------------------------------------------------------|
+| Block states   | 2 bits per block                                                                                |
+| Erase counts   | 1 byte per block                                                                                |
+| Node cache     | `cachedNodes` times the node size, plus a few bytes per node                                    |
+| Journal buffer | The largest record, rounded up to the program unit                                              |
+| Each open file | Position, size, 8 uncommitted entries and a buffer of one page, or of the inline area if larger |
 
 For a 16 MiB device with 4 KiB blocks, that is 4096 blocks, so 1 KiB for the block states and 4 KiB for the erase counts, plus 8 KiB for the default cache of 16 nodes of 512 bytes, and about 0.6 KiB per open file: about 14 KiB with one open file.
 Using larger blocks reduces the tables proportionally: with 64 KiB blocks, the same device needs 320 bytes for block states and erase counts, and about 9 KiB in all.

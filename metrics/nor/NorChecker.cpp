@@ -587,7 +587,7 @@ namespace metrics
                         assigned = assigned && Assign(roles, block, NorBlockUse::data);
 
                 for (uint32_t block = 0; block != superblock.blocks; ++block)
-                    if (!roles[block].has_value() && IsMarkedInUse(block) && IsOfType(block, BlockType::node))
+                    if (!roles[block].has_value() && IsMarkedInUse(block) && !released.contains(block) && IsOfType(block, BlockType::node))
                         roles[block] = NorBlockUse::node;
 
                 return assigned;
@@ -819,6 +819,9 @@ namespace metrics
                 if (current != previous)
                     return Fail("a block set of inode " + std::to_string(number) + " at index " + std::to_string(index) + " expects block " + std::to_string(previous) + ", the map holds block " + std::to_string(current));
 
+                if (previous != 0)
+                    released.insert(previous);
+
                 if (block == 0)
                 {
                     inode->blocks.erase(index);
@@ -839,7 +842,11 @@ namespace metrics
                 inode->inlineBytes.assign(bytes, bytes + entry.byteCount);
                 std::erase_if(inode->blocks, [this, size](const auto& mapped)
                     {
-                        return mapped.first >= BlocksOfSize(size);
+                        if (mapped.first < BlocksOfSize(size))
+                            return false;
+
+                        released.insert(mapped.second);
+                        return true;
                     });
                 return true;
             }
@@ -1054,6 +1061,7 @@ namespace metrics
             std::map<uint32_t, Inode> inodes;
             std::set<uint32_t> nodes;
             std::set<uint32_t> nodeBlocks;
+            std::set<uint32_t> released;
             std::vector<uint32_t> epoch;
         };
     }

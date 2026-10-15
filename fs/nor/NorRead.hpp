@@ -28,6 +28,7 @@ namespace fs
         void RecordRead(Result result);
         void NextBlock();
         void Fetched(NorFetchResult result);
+        void ReadFrom(uint32_t block);
         void DataRead();
         void Done(Result result) const;
         bool IsDataBlock(uint32_t block) const;
