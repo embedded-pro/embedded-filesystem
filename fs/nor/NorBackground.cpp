@@ -110,11 +110,9 @@ namespace fs
         urgent = false;
         erasing = false;
 
-        if (fallback)
-            MoveBlock();
-        else if (CheckpointDue())
+        if (!fallback && CheckpointDue())
             WriteCheckpoint();
-        else if (volume.Eraser().HasWork())
+        else if (!fallback && volume.Eraser().HasWork())
         {
             erasing = true;
             volume.Eraser().Step(machine.CompletionWith<void()>([]
