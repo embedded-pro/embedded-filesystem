@@ -13,6 +13,7 @@ target_link_libraries(fs.nor_test PUBLIC
 )
 
 target_sources(fs.nor_test PRIVATE
+    NorFilesFixture.hpp
     NorRecordsFixture.hpp
     NorVolumeFixture.hpp
     TestNorBTree.cpp
@@ -40,8 +41,11 @@ target_sources(fs.nor_test PRIVATE
     TestNorNode.cpp
     TestNorNodeCache.cpp
     TestNorNodeWriteBack.cpp
+    TestNorOverwrite.cpp
     TestNorRadixTree.cpp
     TestNorRecord.cpp
     TestNorRecordApply.cpp
+    TestNorRemove.cpp
     TestNorSuperblock.cpp
+    TestNorTruncate.cpp
 )

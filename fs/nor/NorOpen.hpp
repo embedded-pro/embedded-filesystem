@@ -31,6 +31,7 @@ namespace fs
     private:
         void OnFound(Result result);
         void OnCreated(Result result);
+        void Empty(const NorFoundInode& found);
         void OpenExisting(const NorFoundInode& found);
         void TailFetched(NorFetchResult result);
         bool IsDataBlock(uint32_t block) const;

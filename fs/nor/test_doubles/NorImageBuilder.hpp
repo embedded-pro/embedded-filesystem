@@ -102,7 +102,7 @@ namespace fs
         NorMapRoot inodeTable;
         uint32_t nextInode{ 0 };
         uint32_t liveNodes{ 0 };
-        infra::BoundedVector<uint32_t>::WithMaxSize<64> blocksToCommit;
+        infra::BoundedVector<uint32_t>::WithMaxSize<128> blocksToCommit;
     };
 }
 

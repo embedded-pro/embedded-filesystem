@@ -95,9 +95,13 @@ namespace fs
     void NorFile::Truncate(const infra::Function<void(Result result)>& onDone)
     {
         if (Pending() || !state.Writable())
+        {
             volume.Defer(onDone, Unwritable());
-        else
-            volume.Defer(onDone, Availability() == Result::success ? Result::unsupported : Availability());
+            return;
+        }
+
+        this->onDone = onDone;
+        Claim(Call::truncate);
     }
 
     void NorFile::ExpectSize(uint32_t, const infra::Function<void(Result result)>& onDone)
@@ -199,6 +203,11 @@ namespace fs
                                       Done(result);
                                   })
                 .Start();
+        else if (call == Call::truncate)
+            volume.FileTruncate().Truncate(state, state.position, [this](Result result)
+                {
+                    Done(result);
+                });
         else
             volume.FileCommit().Commit(state, [this](Result result)
                 {

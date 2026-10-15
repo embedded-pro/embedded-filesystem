@@ -160,12 +160,72 @@ TEST_F(NorRecordApplyTest, a_link_that_does_not_start_a_linked_record_is_corrupt
     EXPECT_EQ(fs::Result::corrupted, Apply({ fs::NorInodePut{ 2, infra::MakeRange(record) }, fs::NorLink{ 3, 72 } }, true));
 }
 
-TEST_F(NorRecordApplyTest, entries_of_later_steps_are_unsupported)
+TEST_F(NorRecordApplyTest, a_directory_entry_remove_removes_the_entry_and_puts_the_new_root_into_the_record_of_the_directory)
 {
+    Builder().AddDirectory(root, "a");
+    Builder().AddDirectory(root, "b");
+    Builder().Commit();
     Mount();
 
-    EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorInodeRemove{ 2 } }));
-    EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorDirectoryEntryRemove{ root, 0x100 } }));
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorDirectoryEntryRemove{ root, fs::NorDirectoryKey("a") } }));
+
+    EXPECT_EQ(std::nullopt, EntryInVolume(root, fs::NorDirectoryKey("a")));
+    EXPECT_NE(std::nullopt, EntryInVolume(root, fs::NorDirectoryKey("b")));
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorDirectoryEntryRemove{ root, fs::NorDirectoryKey("b") } }));
+    EXPECT_EQ(0, RecordInVolume(root)->mapRoot);
+    EXPECT_EQ(0, RecordInVolume(root)->mapHeight);
+}
+
+TEST_F(NorRecordApplyTest, a_directory_entry_remove_of_a_missing_key_from_a_missing_directory_or_from_a_file_is_corrupted)
+{
+    auto file = Builder().AddFile(root, "f", Bytes("abc"));
+    Builder().Commit();
+    Mount();
+
+    EXPECT_EQ(fs::Result::corrupted, Apply({ fs::NorDirectoryEntryRemove{ root, fs::NorDirectoryKey("g") } }));
+    EXPECT_EQ(fs::Result::corrupted, Apply({ fs::NorDirectoryEntryRemove{ 7, fs::NorDirectoryKey("f") } }));
+    EXPECT_EQ(fs::Result::corrupted, Apply({ fs::NorDirectoryEntryRemove{ file, fs::NorDirectoryKey("f") } }));
+}
+
+TEST_F(NorRecordApplyTest, an_inode_remove_of_a_file_releases_its_blocks_and_the_nodes_of_its_map)
+{
+    std::array<uint8_t, 5000> contents{};
+    auto file = Builder().AddFile(root, "f", infra::MakeRange(contents));
+    Builder().Commit();
+    Mount();
+    auto first = BlockInVolume(file, 0);
+    auto second = BlockInVolume(file, 1);
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorDirectoryEntryRemove{ root, fs::NorDirectoryKey("f") }, fs::NorInodeRemove{ file } }));
+
+    EXPECT_EQ(std::nullopt, RecordInVolume(file));
+    EXPECT_EQ(std::nullopt, EntryInVolume(root, fs::NorDirectoryKey("f")));
+    EXPECT_EQ(fs::NorBlockState::freeNotErased, State().blocks.State(first));
+    EXPECT_EQ(fs::NorBlockState::freeNotErased, State().blocks.State(second));
+    EXPECT_EQ(3, Volume().Cache().ReleasedNodes());
+}
+
+TEST_F(NorRecordApplyTest, an_inode_remove_of_an_empty_directory_removes_it)
+{
+    auto docs = Builder().AddDirectory(root, "docs");
+    Builder().Commit();
+    Mount();
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorDirectoryEntryRemove{ root, fs::NorDirectoryKey("docs") }, fs::NorInodeRemove{ docs } }));
+
+    EXPECT_EQ(std::nullopt, RecordInVolume(docs));
+}
+
+TEST_F(NorRecordApplyTest, an_inode_remove_of_the_root_of_a_directory_with_entries_or_of_a_missing_inode_is_corrupted)
+{
+    auto docs = Builder().AddDirectory(root, "docs");
+    Builder().AddDirectory(docs, "inner");
+    Builder().Commit();
+    Mount();
+
+    EXPECT_EQ(fs::Result::corrupted, Apply({ fs::NorInodeRemove{ root } }));
+    EXPECT_EQ(fs::Result::corrupted, Apply({ fs::NorInodeRemove{ docs } }));
+    EXPECT_EQ(fs::Result::corrupted, Apply({ fs::NorInodeRemove{ 9 } }));
 }
 
 TEST_F(NorRecordApplyTest, a_block_set_maps_the_block_puts_the_new_root_into_the_record_and_marks_the_block_in_use)
@@ -226,13 +286,30 @@ TEST_F(NorRecordApplyTest, a_block_set_of_a_directory_or_of_a_missing_inode_is_c
     EXPECT_EQ(fs::Result::corrupted, Apply({ fs::NorBlockSet{ 7, 0, 0, 9 } }));
 }
 
-TEST_F(NorRecordApplyTest, a_block_set_that_clears_an_index_is_unsupported_until_truncation)
+TEST_F(NorRecordApplyTest, a_block_set_to_block_0_clears_the_index_and_releases_the_previous_block)
+{
+    std::array<uint8_t, 5000> contents{};
+    auto file = Builder().AddFile(root, "f", infra::MakeRange(contents));
+    Builder().Commit();
+    Mount();
+    auto previous = BlockInVolume(file, 1);
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorBlockSet{ file, 1, previous, 0 } }));
+
+    EXPECT_EQ(0, BlockInVolume(file, 1));
+    EXPECT_NE(0, BlockInVolume(file, 0));
+    EXPECT_EQ(fs::NorBlockState::freeNotErased, State().blocks.State(previous));
+}
+
+TEST_F(NorRecordApplyTest, a_block_set_from_block_0_to_block_0_changes_nothing)
 {
     auto file = Builder().AddFile(root, "f", Bytes("abc"));
     Builder().Commit();
     Mount();
 
-    EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorBlockSet{ file, 0, 0, 0 } }));
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorBlockSet{ file, 0, 0, 0 } }));
+
+    EXPECT_EQ(0, RecordInVolume(file)->mapRoot);
 }
 
 TEST_F(NorRecordApplyTest, a_block_set_beyond_the_reach_of_three_levels_is_corrupted)
@@ -258,13 +335,73 @@ TEST_F(NorRecordApplyTest, a_size_sets_the_size_and_the_inline_bytes)
     EXPECT_TRUE(infra::ContentsEqual(Bytes("abcde"), record->inlineBytes));
 }
 
-TEST_F(NorRecordApplyTest, a_size_below_the_size_of_the_file_is_unsupported_until_truncation)
+TEST_F(NorRecordApplyTest, a_size_below_the_size_of_the_file_releases_the_blocks_beyond_it)
 {
-    auto file = Builder().AddFile(root, "f", Bytes("abc"));
+    static std::array<uint8_t, 3 * 4060 + 100> contents{};
+    auto file = Builder().AddFile(root, "f", infra::MakeRange(contents));
+    Builder().Commit();
+    Mount();
+    std::array<uint32_t, 4> blocks{};
+    for (uint32_t index = 0; index != 4; ++index)
+        blocks[index] = BlockInVolume(file, index);
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorSize{ file, 4070, {} } }));
+
+    EXPECT_EQ(4070, RecordInVolume(file)->size);
+    EXPECT_EQ(blocks[0], BlockInVolume(file, 0));
+    EXPECT_EQ(blocks[1], BlockInVolume(file, 1));
+    EXPECT_EQ(0, BlockInVolume(file, 2));
+    EXPECT_EQ(0, BlockInVolume(file, 3));
+    EXPECT_EQ(fs::NorBlockState::inUse, State().blocks.State(blocks[1]));
+    EXPECT_EQ(fs::NorBlockState::freeNotErased, State().blocks.State(blocks[2]));
+    EXPECT_EQ(fs::NorBlockState::freeNotErased, State().blocks.State(blocks[3]));
+}
+
+TEST_F(NorRecordApplyTest, a_size_of_0_releases_every_block_and_the_map)
+{
+    static std::array<uint8_t, 20 * 4060> contents{};
+    auto file = Builder().AddFile(root, "f", infra::MakeRange(contents));
+    Builder().Commit();
+    Mount();
+    std::array<uint32_t, 20> blocks{};
+    for (uint32_t index = 0; index != 20; ++index)
+        blocks[index] = BlockInVolume(file, index);
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorSize{ file, 0, {} } }));
+
+    auto record = RecordInVolume(file);
+    EXPECT_EQ(0, record->size);
+    EXPECT_EQ(0, record->mapRoot);
+    EXPECT_EQ(0, record->mapHeight);
+    for (auto block : blocks)
+        EXPECT_EQ(fs::NorBlockState::freeNotErased, State().blocks.State(block)) << block;
+}
+
+TEST_F(NorRecordApplyTest, a_release_through_a_data_node_with_a_bad_crc_or_of_a_block_outside_the_volume_is_corrupted)
+{
+    std::array<uint8_t, 5000> contents{};
+    auto damaged = Builder().AddFile(root, "a", infra::MakeRange(contents));
+    auto outside = Builder().AddFile(root, "b", infra::MakeRange(contents));
+    Builder().MapBlock(outside, 1, 40);
+    Builder().Commit();
+    Builder().Corrupt(Builder().MapOf(damaged).address + 12);
+    Mount();
+
+    EXPECT_EQ(fs::Result::corrupted, Apply({ fs::NorSize{ damaged, 0, {} } }));
+    EXPECT_EQ(fs::Result::corrupted, Apply({ fs::NorSize{ outside, 0, {} } }));
+    EXPECT_EQ(fs::Result::corrupted, Apply({ fs::NorBlockSet{ outside, 1, 40, 9 } }));
+}
+
+TEST_F(NorRecordApplyTest, a_smaller_size_within_the_inline_area_only_changes_the_inline_bytes)
+{
+    auto file = Builder().AddFile(root, "f", Bytes("abcdef"));
     Builder().Commit();
     Mount();
 
-    EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorSize{ file, 2, Bytes("ab") } }));
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorSize{ file, 2, Bytes("ab") } }));
+
+    EXPECT_EQ(2, RecordInVolume(file)->size);
+    EXPECT_TRUE(infra::ContentsEqual(Bytes("ab"), RecordInVolume(file)->inlineBytes));
 }
 
 TEST_F(NorRecordApplyTest, a_size_with_more_inline_bytes_than_the_inline_area_or_the_size_is_corrupted)
@@ -367,4 +504,25 @@ TEST_F(NorRecordApplyDeepTest, a_directory_entry_put_that_would_need_a_fourth_le
     Mount();
 
     EXPECT_EQ(fs::Result::corrupted, Apply({ fs::NorDirectoryEntryPut{ root, 0x10000, 2 } }));
+}
+
+TEST_F(NorRecordApplyDeepTest, a_size_that_leaves_one_block_of_a_two_level_map_lowers_the_map_and_releases_its_nodes)
+{
+    static std::array<uint8_t, 40 * 4060> contents{};
+    auto file = Builder().AddFile(root, "f", infra::MakeRange(contents));
+    Builder().Commit();
+    auto map = Builder().MapOf(file);
+    ASSERT_EQ(2, map.height);
+    Mount();
+    auto first = BlockInVolume(file, 0);
+    auto last = BlockInVolume(file, 39);
+    Volume().Cache().Clear();
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorSize{ file, 100, {} } }));
+
+    auto record = RecordInVolume(file);
+    EXPECT_EQ(1, record->mapHeight);
+    EXPECT_EQ(first, BlockInVolume(file, 0));
+    EXPECT_EQ(fs::NorBlockState::freeNotErased, State().blocks.State(last));
+    EXPECT_EQ(4, Volume().Cache().ReleasedNodes());
 }

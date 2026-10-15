@@ -61,9 +61,12 @@ namespace metrics
         fs::Result Mount();
         fs::Result Unmount();
         fs::Result MakeDirectory(const std::string& path);
+        fs::Result Remove(const std::string& path);
         std::optional<fs::EntryType> TypeOf(const std::string& path);
         fs::Result OpenFile(const std::string& path, fs::OpenMode mode);
         fs::Result Write(const std::vector<uint8_t>& data);
+        void Seek(uint32_t position);
+        fs::Result Truncate();
         fs::Result Sync();
         fs::Result Close();
         std::optional<std::vector<uint8_t>> ReadFile(const std::string& path);

@@ -8,6 +8,7 @@
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/Function.hpp"
 #include <cstdint>
+#include <optional>
 
 namespace fs
 {
@@ -39,6 +40,7 @@ namespace fs
         NorVolume& volume;
         NorOpenFile* file{ nullptr };
         NorMapRoot dataMap;
+        std::optional<uint32_t> secondLeafIndex;
         infra::AutoResetFunction<void()> onFetched;
         infra::AutoResetFunction<void(Result result)> onDone;
     };

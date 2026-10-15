@@ -17,10 +17,21 @@ namespace fs
 
     void NorWrite::Start()
     {
-        if (file.mode != OpenMode::append && file.position != file.size)
-            onDone(Result::unsupported);
-        else
+        if (file.mode == OpenMode::append || file.position == file.size)
+        {
             Next();
+            return;
+        }
+
+        auto overwritten = infra::Head(data, file.size - file.position);
+        data = infra::DiscardHead(data, overwritten.size());
+        volume.FileOverwrite().Overwrite(file, overwritten, [this](Result result)
+            {
+                if (result == Result::success)
+                    Next();
+                else
+                    onDone(result);
+            });
     }
 
     void NorWrite::Next()
@@ -75,7 +86,7 @@ namespace fs
     {
         if (!NorRadixTree::CanMap(index, volume.Geometry().nodeSize))
             onDone(Result::noSpace);
-        else if (file.entries.full())
+        else if (!file.Admits(index, volume.Geometry().PayloadSize(), NorRadixFanout(volume.Geometry().nodeSize)))
             volume.FileCommit().Commit(file, [this, index](Result result)
                 {
                     if (result == Result::success)

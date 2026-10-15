@@ -3,6 +3,7 @@
 
 #include "fs/common/CrcRecord.hpp"
 #include "fs/interfaces/Result.hpp"
+#include "fs/nor/NorInodeRecord.hpp"
 #include "fs/nor/NorMapFetch.hpp"
 #include "fs/nor/NorNode.hpp"
 #include "fs/nor/NorRecord.hpp"
@@ -29,19 +30,33 @@ namespace fs
         void ApplyNext();
         void PutInode(const NorInodePut& put);
         void InodeFetched();
+        void RemoveInode(const NorInodeRemove& remove);
+        void RemovedInodeFetched();
+        void RemoveRecord();
         void PutDirectoryEntry(const NorDirectoryEntryPut& put);
-        void DirectoryFetched();
         void EntryFetched();
+        void RemoveDirectoryEntry(const NorDirectoryEntryRemove& remove);
+        void RemovedEntryFetched();
+        void FetchDirectory(uint32_t directory, uint32_t key, const infra::Function<void()>& onFetchedDone);
         void SetBlock(const NorBlockSet& set);
         void FileFetched();
         void SlotFetched();
         void SetSize(const NorSize& size);
         void SizedFileFetched();
-        std::optional<infra::ConstByteRange> FileRecord(uint32_t inode) const;
+        void WriteSize();
+        void ReleaseBlocks(uint32_t from, uint32_t to, const infra::Function<void()>& onReleasedDone);
+        void ReleaseNextBlock();
+        void ReleaseFetched(NorFetchResult result);
+        void Release(uint32_t block) const;
+        bool IsOfEpoch(uint32_t block) const;
+        uint32_t BlocksOfSize(uint32_t size) const;
+        std::optional<infra::ConstByteRange> RecordOfType(uint32_t inode, NorInodeType type) const;
+        bool IsInVolume(uint32_t block) const;
         bool IsFreeBlock(uint32_t block) const;
         void Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, const infra::Function<void()>& onFetchedDone);
         NorMapId InodeTable() const;
-        NorMapId DirectoryMap() const;
+        NorMapId DirectoryMap(uint32_t directory) const;
+        NorMapId DataMap(uint32_t file) const;
 
     private:
         NorVolume& volume;
@@ -49,11 +64,21 @@ namespace fs
         bool linked{ false };
         bool first{ false };
         NorInodePut inodePut;
+        uint32_t removedInode{ 0 };
         NorDirectoryEntryPut entryPut;
+        NorDirectoryEntryRemove entryRemove;
+        uint32_t directoryKey{ 0 };
         NorMapRoot directoryMap;
         NorBlockSet blockSet;
         NorSize sizeEntry;
+        uint32_t dataInode{ 0 };
         NorMapRoot dataMap;
+        uint32_t releaseFrom{ 0 };
+        uint32_t releaseIndex{ 0 };
+        bool releasing{ false };
+        bool fetchedWhileReleasing{ false };
+        infra::AutoResetFunction<void()> onReleased;
+        infra::AutoResetFunction<void()> onDirectory;
         infra::AutoResetFunction<void()> onFetched;
         infra::AutoResetFunction<void(Result result)> onDone;
     };

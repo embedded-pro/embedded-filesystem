@@ -474,7 +474,7 @@ public:
             }
     }
 
-    void WearFreeBlocks(Context& context, std::size_t keepErased) const
+    void WearFreeBlocks(Context& context, std::size_t keepErased, std::optional<uint32_t> spared = std::nullopt) const
     {
         auto check = metrics::CheckImage(context, model);
         std::vector<uint8_t> partA(fs::RoundUpTo(fs::norHeaderPartABytes, config.programUnit));
@@ -484,7 +484,7 @@ public:
         for (uint32_t block = 2; block != check.blocks.size(); ++block)
         {
             auto use = check.blocks[block];
-            if ((use != metrics::NorBlockUse::free && use != metrics::NorBlockUse::freeErased) || (use == metrics::NorBlockUse::freeErased && kept++ < keepErased))
+            if (block == spared || (use != metrics::NorBlockUse::free && use != metrics::NorBlockUse::freeErased) || (use == metrics::NorBlockUse::freeErased && kept++ < keepErased))
                 continue;
 
             for (auto sector = block * config.sectorsPerBlock; sector != (block + 1) * config.sectorsPerBlock; ++sector)
@@ -753,9 +753,343 @@ public:
         if (check.problem.has_value())
             return "after an append after the mount: " + *check.problem;
 
+        auto appended = contents;
+        auto tail = FileBytes(contents.size(), 200);
+        appended.insert(appended.end(), tail.begin(), tail.end());
         const auto* entry = check.Find(path);
-        if (entry == nullptr || metrics::ReadContents(image, check, *entry) != FileBytes(0, contents.size() + 200))
+        if (entry == nullptr || metrics::ReadContents(image, check, *entry) != appended)
             return "the append after the mount did not keep " + path;
+
+        return std::nullopt;
+    }
+
+    static std::vector<uint8_t> OtherBytes(std::size_t from, std::size_t count)
+    {
+        auto bytes = FileBytes(from, count);
+        for (auto& byte : bytes)
+            byte ^= 0x5a;
+
+        return bytes;
+    }
+
+    static void Put(std::vector<uint8_t>& contents, std::size_t at, const std::vector<uint8_t>& bytes)
+    {
+        if (contents.size() < at + bytes.size())
+            contents.resize(at + bytes.size());
+
+        std::ranges::copy(bytes, contents.begin() + static_cast<std::ptrdiff_t>(at));
+    }
+
+    void SetUpFiles(Context& context, const std::vector<std::pair<std::string, std::size_t>>& files, const std::vector<std::string>& directories = {}) const
+    {
+        ASSERT_EQ(fs::Result::success, metrics::Format(context, config));
+        {
+            metrics::NorSweepVolume volume{ context, config };
+            ASSERT_EQ(fs::Result::success, volume.Mount());
+            for (const auto& directory : directories)
+                ASSERT_EQ(fs::Result::success, volume.MakeDirectory(directory));
+            for (const auto& [path, size] : files)
+            {
+                ASSERT_EQ(fs::Result::success, volume.OpenFile(path, fs::OpenMode::write));
+                ASSERT_EQ(fs::Result::success, volume.Write(FileBytes(0, size)));
+                ASSERT_EQ(fs::Result::success, volume.Close());
+            }
+            ASSERT_EQ(fs::Result::success, volume.Unmount());
+        }
+
+        MakeFreeBlocksNotErased(context, 2);
+        ASSERT_EQ(std::nullopt, metrics::CheckImage(context, model).problem);
+    }
+
+    std::size_t LogSize() const
+    {
+        return 3 * std::size_t{ payload } + 100;
+    }
+
+    std::vector<std::vector<uint8_t>> OverwriteStates() const
+    {
+        auto original = FileBytes(0, LogSize());
+        auto synced = original;
+        Put(synced, 100, OtherBytes(100, 50));
+        Put(synced, payload - 20, OtherBytes(payload - 20, 40));
+        auto closed = synced;
+        Put(closed, LogSize() - 10, OtherBytes(LogSize() - 10, 30));
+        return { original, synced, closed };
+    }
+
+    void Overwrite(Context& context) const
+    {
+        metrics::NorSweepVolume volume{ context, config };
+        if (volume.Mount() != fs::Result::success || volume.OpenFile("/log", fs::OpenMode::readWrite) != fs::Result::success)
+            return;
+
+        volume.Seek(100);
+        if (volume.Write(OtherBytes(100, 50)) != fs::Result::success)
+            return;
+
+        volume.Seek(payload - 20);
+        if (volume.Write(OtherBytes(payload - 20, 40)) != fs::Result::success || volume.Sync() != fs::Result::success)
+            return;
+
+        volume.Seek(static_cast<uint32_t>(LogSize() - 10));
+        if (volume.Write(OtherBytes(LogSize() - 10, 30)) != fs::Result::success || volume.Close() != fs::Result::success)
+            return;
+
+        volume.Unmount();
+    }
+
+    std::optional<std::string> VerifyStates(Context& context, bool uncut, const std::vector<std::vector<uint8_t>>& states) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        const auto* log = check.Find("/log");
+        if (log == nullptr)
+            return "the log is gone";
+
+        auto contents = metrics::ReadContents(image, check, *log);
+        if (std::ranges::find(states, contents) == states.end())
+            return "/log holds contents that no commit left";
+
+        if (uncut && contents != states.back())
+            return "the run without a cut did not write everything";
+
+        return VerifyAfterMount(context, "/log", contents);
+    }
+
+    void SetUpLossDuringOverwrite(Context& context) const
+    {
+        SetUpFiles(context, { { "/log", LogSize() } });
+        PowerLossFlash flash{ context.device };
+        Context losing{ context.time, flash };
+        {
+            metrics::NorSweepVolume volume{ losing, config };
+            ASSERT_EQ(fs::Result::success, volume.Mount());
+            ASSERT_EQ(fs::Result::success, volume.OpenFile("/log", fs::OpenMode::readWrite));
+            volume.Seek(100);
+            ASSERT_EQ(fs::Result::success, volume.Write(OtherBytes(100, 50)));
+            flash.Lose();
+            EXPECT_NE(fs::Result::success, volume.Close());
+        }
+
+        auto check = metrics::CheckImage(context, model);
+        ASSERT_EQ(std::nullopt, check.problem);
+        ASSERT_NE(nullptr, check.Find("/log"));
+        ASSERT_EQ(LogSize(), check.Find("/log")->size);
+    }
+
+    void OverwriteAfterLoss(Context& context) const
+    {
+        metrics::NorSweepVolume volume{ context, config };
+        if (volume.Mount() != fs::Result::success || volume.OpenFile("/log", fs::OpenMode::readWrite) != fs::Result::success)
+            return;
+
+        volume.Seek(payload - 20);
+        if (volume.Write(OtherBytes(payload - 20, 40)) != fs::Result::success || volume.Close() != fs::Result::success)
+            return;
+
+        volume.Unmount();
+    }
+
+    std::vector<std::vector<uint8_t>> OverwriteAfterLossStates() const
+    {
+        auto original = FileBytes(0, LogSize());
+        auto overwritten = original;
+        Put(overwritten, payload - 20, OtherBytes(payload - 20, 40));
+        return { original, overwritten };
+    }
+
+    std::size_t TruncatedLog() const
+    {
+        return std::size_t{ payload } + 50;
+    }
+
+    std::size_t OldSize() const
+    {
+        return 2 * std::size_t{ payload } + 50;
+    }
+
+    void TruncateFiles(Context& context) const
+    {
+        metrics::NorSweepVolume volume{ context, config };
+        if (volume.Mount() != fs::Result::success || volume.OpenFile("/log", fs::OpenMode::readWrite) != fs::Result::success)
+            return;
+
+        volume.Seek(static_cast<uint32_t>(TruncatedLog()));
+        if (volume.Truncate() != fs::Result::success || volume.Write(FileBytes(TruncatedLog(), 30)) != fs::Result::success || volume.Close() != fs::Result::success)
+            return;
+
+        if (volume.OpenFile("/old", fs::OpenMode::write) != fs::Result::success || volume.Write(FileBytes(0, 10)) != fs::Result::success || volume.Close() != fs::Result::success)
+            return;
+
+        volume.Unmount();
+    }
+
+    std::optional<std::string> VerifyTruncated(Context& context, bool uncut) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        const auto* log = check.Find("/log");
+        const auto* old = check.Find("/old");
+        if (log == nullptr || old == nullptr)
+            return "a file is gone";
+
+        auto logContents = metrics::ReadContents(image, check, *log);
+        auto oldContents = metrics::ReadContents(image, check, *old);
+        if (auto problem = ExpectCommitted(logContents, { LogSize(), TruncatedLog(), TruncatedLog() + 30 }, "/log"))
+            return problem;
+
+        if (auto problem = ExpectCommitted(oldContents, { OldSize(), 0, 10 }, "/old"))
+            return problem;
+
+        if (oldContents.size() != OldSize() && logContents.size() != TruncatedLog() + 30)
+            return "/old changed before /log was closed";
+
+        if (uncut && (logContents.size() != TruncatedLog() + 30 || oldContents.size() != 10))
+            return "the run without a cut did not write everything";
+
+        return VerifyAfterMount(context, "/log", logContents);
+    }
+
+    void SetUpRemovedBlock(Context& context)
+    {
+        ASSERT_EQ(fs::Result::success, metrics::Format(context, config));
+        {
+            metrics::NorSweepVolume volume{ context, longJournal };
+            ASSERT_EQ(fs::Result::success, volume.Mount());
+            ASSERT_EQ(fs::Result::success, volume.OpenFile("/x", fs::OpenMode::write));
+            ASSERT_EQ(fs::Result::success, volume.Write(FileBytes(0, 1000)));
+            ASSERT_EQ(fs::Result::success, volume.Close());
+            auto check = metrics::CheckImage(context, model);
+            ASSERT_NE(nullptr, check.Find("/x"));
+            ASSERT_FALSE(check.Find("/x")->blocks.empty());
+            releasedTail = check.Find("/x")->blocks.begin()->second;
+            ASSERT_EQ(fs::Result::success, volume.Remove("/x"));
+        }
+
+        WearFreeBlocks(context, 0, releasedTail);
+        auto check = metrics::CheckImage(context, model);
+        ASSERT_EQ(std::nullopt, check.problem);
+        ASSERT_EQ(metrics::NorBlockUse::free, check.blocks[releasedTail]);
+    }
+
+    void MakeIntoTheRemovedBlock(Context& context) const
+    {
+        metrics::NorSweepVolume volume{ context, longJournal };
+        if (volume.Mount() != fs::Result::success || volume.MakeDirectory("/n1") != fs::Result::success || volume.MakeDirectory("/n2") != fs::Result::success)
+            return;
+
+        if (volume.OpenFile("/y", fs::OpenMode::write) == fs::Result::success && volume.Write(FileBytes(0, 10)) == fs::Result::success)
+            volume.Close();
+    }
+
+    std::optional<std::string> VerifyRemovedBlock(Context& context, bool uncut) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        if (check.Find("/x") != nullptr)
+            return "/x is back";
+
+        auto first = check.Find("/n1") != nullptr;
+        auto second = check.Find("/n2") != nullptr;
+        const auto* created = check.Find("/y");
+        if ((second && !first) || (created != nullptr && !second))
+            return "the changes do not form a prefix";
+
+        if (created != nullptr)
+            if (auto problem = ExpectCommitted(metrics::ReadContents(image, check, *created), { 0, 10 }, "/y"))
+                return problem;
+
+        if (uncut && (created == nullptr || created->size != 10 || check.blocks[releasedTail] != metrics::NorBlockUse::journal))
+            return "the run without a cut did not write everything into a journal that reuses the removed block";
+
+        {
+            metrics::NorSweepVolume volume{ context, longJournal };
+            if (volume.Mount() != fs::Result::success)
+                return "the volume does not mount";
+
+            if (volume.TypeOf("/n1").has_value() != first || volume.TypeOf("/n2").has_value() != second || volume.TypeOf("/x").has_value())
+                return "the library and the checker disagree";
+
+            if (volume.MakeDirectory("/z") != fs::Result::success || volume.Unmount() != fs::Result::success)
+                return "a change after the mount fails";
+        }
+
+        auto after = metrics::CheckImage(context, model);
+        if (after.problem.has_value())
+            return "after a change after the mount: " + *after.problem;
+
+        return std::nullopt;
+    }
+
+    const std::vector<std::string> removed{ "/a", "/d/e", "/d", "/f" };
+
+    void RemoveEntries(Context& context) const
+    {
+        metrics::NorSweepVolume volume{ context, config };
+        if (volume.Mount() != fs::Result::success)
+            return;
+
+        for (const auto& path : removed)
+            if (volume.Remove(path) != fs::Result::success)
+                return;
+
+        if (volume.MakeDirectory("/n") != fs::Result::success)
+            return;
+
+        volume.Unmount();
+    }
+
+    std::optional<std::string> VerifyRemoved(Context& context, bool uncut) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        std::size_t gone = 0;
+        while (gone != removed.size() && check.Find(removed[gone]) == nullptr)
+            ++gone;
+
+        for (auto index = gone; index != removed.size(); ++index)
+            if (check.Find(removed[index]) == nullptr)
+                return removed[index] + " is gone before " + removed[gone];
+
+        const auto* a = check.Find("/a");
+        if (a != nullptr && metrics::ReadContents(image, check, *a) != FileBytes(0, 2 * std::size_t{ payload } + 100))
+            return "/a does not hold its contents";
+
+        auto made = check.Find("/n") != nullptr;
+        if (made && gone != removed.size())
+            return "/n was made before every remove";
+
+        if (uncut && !made)
+            return "the run without a cut did not make /n";
+
+        {
+            metrics::NorSweepVolume volume{ context, config };
+            if (volume.Mount() != fs::Result::success)
+                return "the volume does not mount";
+
+            for (const auto& path : removed)
+                if (volume.TypeOf(path).has_value() != (check.Find(path) != nullptr))
+                    return "the library and the checker disagree about " + path;
+
+            if (volume.MakeDirectory("/z") != fs::Result::success || volume.Unmount() != fs::Result::success)
+                return "a change after the mount fails";
+        }
+
+        auto after = metrics::CheckImage(context, model);
+        if (after.problem.has_value())
+            return "after a change after the mount: " + *after.problem;
 
         return std::nullopt;
     }
@@ -837,6 +1171,91 @@ TEST_P(NorAppendPowerCut, a_file_of_more_blocks_than_a_handle_keeps_uncommitted_
         [this](Context& context, bool uncut)
         {
             return VerifyBig(context, uncut);
+        });
+}
+
+TEST_P(NorAppendPowerCut, overwrites_keep_the_contents_of_the_last_commit)
+{
+    SweepEveryMode(
+        model, "overwrite", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpFiles(context, { { "/log", LogSize() } });
+        },
+        [this](Context& context)
+        {
+            Overwrite(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return VerifyStates(context, uncut, OverwriteStates());
+        });
+}
+
+TEST_P(NorAppendPowerCut, an_overwrite_after_a_power_loss_with_an_uncommitted_copy_keeps_the_last_commit)
+{
+    SweepEveryMode(
+        model, "overwrite after a cut with an uncommitted copy", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpLossDuringOverwrite(context);
+        },
+        [this](Context& context)
+        {
+            OverwriteAfterLoss(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return VerifyStates(context, uncut, OverwriteAfterLossStates());
+        });
+}
+
+TEST_P(NorAppendPowerCut, truncations_keep_the_last_commit)
+{
+    SweepEveryMode(
+        model, "truncate", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpFiles(context, { { "/log", LogSize() }, { "/old", OldSize() } });
+        },
+        [this](Context& context)
+        {
+            TruncateFiles(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return VerifyTruncated(context, uncut);
+        });
+}
+
+TEST_P(NorAppendPowerCut, a_block_that_a_record_mapped_and_a_remove_released_can_become_a_journal_block_of_the_epoch)
+{
+    SweepEveryMode(
+        model, "journal in a removed block", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpRemovedBlock(context);
+        },
+        [this](Context& context)
+        {
+            MakeIntoTheRemovedBlock(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return VerifyRemovedBlock(context, uncut);
+        });
+}
+
+TEST_P(NorAppendPowerCut, removes_happen_in_order_and_each_completely_or_not_at_all)
+{
+    SweepEveryMode(
+        model, "remove", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpFiles(context, { { "/a", 2 * std::size_t{ payload } + 100 }, { "/f", 10 } }, { "/d", "/d/e" });
+        },
+        [this](Context& context)
+        {
+            RemoveEntries(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return VerifyRemoved(context, uncut);
         });
 }
 

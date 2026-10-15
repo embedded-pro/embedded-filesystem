@@ -79,12 +79,24 @@ namespace fs
             Finish(Result::isADirectory);
         else if (Shared(found.inode) != Result::success)
             Finish(Result::busy);
-        else if (call.mode == OpenMode::write && found.size != 0)
-            Finish(Result::unsupported);
         else if (Allocated() != Result::success)
             Finish(Result::tooManyOpenFiles);
+        else if (call.mode == OpenMode::write && found.size != 0)
+            Empty(found);
         else
             OpenExisting(found);
+    }
+
+    void NorOpen::Empty(const NorFoundInode& found)
+    {
+        opened = NorOpenFile{ found.inode, 0, 0, call.mode, found.size };
+        volume.FileCommit().Commit(opened, [this](Result result)
+            {
+                if (result == Result::success)
+                    file->Open(opened);
+
+                Finish(result);
+            });
     }
 
     void NorOpen::OpenExisting(const NorFoundInode& found)

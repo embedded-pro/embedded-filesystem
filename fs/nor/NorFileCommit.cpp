@@ -63,12 +63,13 @@ namespace fs
         }
 
         dataMap = NorMapRoot{ LoadLittle32(*record, norInodeMapRootOffset), (*record)[norInodeMapHeightOffset] };
+        secondLeafIndex = file->SecondLeafIndex(NorRadixFanout(volume.Geometry().nodeSize));
         if (file->entries.empty())
             CheckRoom();
         else
             Fetch(DataMap(), dataMap, file->entries.front().index, [this]
                 {
-                    Fetch(DataMap(), dataMap, file->entries.back().index, [this]
+                    Fetch(DataMap(), dataMap, secondLeafIndex.value_or(file->entries.front().index), [this]
                         {
                             CheckRoom();
                         });
@@ -96,7 +97,10 @@ namespace fs
         uint32_t created = 0;
 
         if (!file->entries.empty())
-            created = data.NodesCreatedBySet(dataMap, file->entries.front().index).value_or(0) + (file->entries.size() > 1 ? data.NodesCreatedBySet(dataMap, file->entries.back().index).value_or(0) : 0);
+            created = data.NodesCreatedBySet(dataMap, file->entries.front().index).value_or(0) + (secondLeafIndex.has_value() ? data.NodesCreatedBySet(dataMap, secondLeafIndex.value_or(0)).value_or(0) : 0);
+
+        if (file->size < file->committedSize)
+            created += dataMap.height;
 
         if (cache.ModifiedNodes() + cache.UnmodifiedPinnedNodes() + created > cache.Capacity())
             CheckpointAndRetry();

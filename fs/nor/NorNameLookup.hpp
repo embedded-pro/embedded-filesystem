@@ -23,6 +23,7 @@ namespace fs
 
         void Find(const NorMapRoot& inodeTable, uint32_t directory, const NorMapRoot& map, infra::BoundedConstString name, const infra::Function<void(Result result)>& onDone);
         uint32_t FoundInode() const;
+        uint32_t FoundKey() const;
         const NorInodeRecord& FoundRecord() const;
         std::optional<uint32_t> FreeKey() const;
 

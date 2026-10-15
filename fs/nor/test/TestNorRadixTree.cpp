@@ -170,6 +170,13 @@ TEST_F(NorRadixTreeTest, maps_the_indexes_that_three_levels_reach)
     EXPECT_FALSE(fs::NorRadixTree::CanMap(512, nodeSize));
 }
 
+TEST_F(NorRadixTreeTest, counts_the_indexes_that_a_map_covers)
+{
+    EXPECT_EQ(0, fs::NorRadixTree::IndicesCovered(fs::NorMapRoot{}, nodeSize));
+    EXPECT_EQ(8, fs::NorRadixTree::IndicesCovered(fs::NorMapRoot{ 0x4100, 1 }, nodeSize));
+    EXPECT_EQ(512, fs::NorRadixTree::IndicesCovered(fs::NorMapRoot{ 0x4100, 3 }, nodeSize));
+}
+
 TEST_F(NorRadixTreeTest, an_empty_leaf_leaves_its_parent_and_a_root_with_only_its_first_child_is_replaced_by_it)
 {
     tree.Set(root, 3, 7);

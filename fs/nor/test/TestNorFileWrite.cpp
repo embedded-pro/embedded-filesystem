@@ -2,7 +2,7 @@
 #include "fs/nor/NorDirectoryKey.hpp"
 #include "fs/nor/NorFile.hpp"
 #include "fs/nor/NorRadixTree.hpp"
-#include "fs/nor/test/NorRecordsFixture.hpp"
+#include "fs/nor/test/NorFilesFixture.hpp"
 #include "gmock/gmock.h"
 #include <array>
 #include <cstdint>
@@ -18,126 +18,11 @@ namespace
     constexpr uint32_t payload = blockSize - headerSize;
     constexpr uint32_t root = fs::NorImageBuilder::rootInode;
 
-    infra::ConstByteRange Bytes(const char* text)
-    {
-        return infra::StringAsByteRange(infra::BoundedConstString(text));
-    }
-
-    template<std::size_t Size>
-    std::array<uint8_t, Size> Pattern(uint8_t seed = 0)
-    {
-        std::array<uint8_t, Size> pattern{};
-        for (std::size_t index = 0; index != Size; ++index)
-            pattern[index] = static_cast<uint8_t>(index * 13 + index / 251 + seed);
-
-        return pattern;
-    }
-
-    template<fs::NorConfig Config, uint32_t Sectors, uint32_t SectorSize>
-    class NorFileWriteFixture
-        : public fs::NorRecordsFixture<Config, Sectors, SectorSize, 2>
-    {
-    public:
-        infra::SharedPtr<fs::File> Open(infra::BoundedConstString path, fs::OpenMode mode, fs::Result expected = fs::Result::success)
-        {
-            std::optional<fs::Result> result;
-            infra::SharedPtr<fs::File> opened;
-            this->fileSystem.Open(path, mode, [&result, &opened](fs::Result openResult, infra::SharedPtr<fs::File> file)
-                {
-                    result = openResult;
-                    opened = file;
-                });
-            this->ExecuteAllActions();
-            EXPECT_EQ(expected, result);
-            EXPECT_EQ(expected == fs::Result::success, opened != nullptr);
-            return opened;
-        }
-
-        fs::Result Write(fs::File& file, infra::ConstByteRange data)
-        {
-            return Complete([&file, data](const infra::Function<void(fs::Result)>& onDone)
-                {
-                    file.Write(data, onDone);
-                });
-        }
-
-        fs::Result Sync(fs::File& file)
-        {
-            return Complete([&file](const infra::Function<void(fs::Result)>& onDone)
-                {
-                    file.Sync(onDone);
-                });
-        }
-
-        fs::Result Close(fs::File& file)
-        {
-            return Complete([&file](const infra::Function<void(fs::Result)>& onDone)
-                {
-                    file.Close(onDone);
-                });
-        }
-
-        std::pair<fs::Result, std::size_t> Read(fs::File& file, infra::ByteRange buffer)
-        {
-            std::optional<std::pair<fs::Result, std::size_t>> read;
-            file.Read(buffer, [&read](fs::Result result, std::size_t bytesRead)
-                {
-                    read.emplace(result, bytesRead);
-                });
-            this->ExecuteAllActions();
-            return read.value_or(std::make_pair(fs::Result::busy, std::size_t{ 0 }));
-        }
-
-        template<std::size_t Size>
-        void ExpectContents(infra::BoundedConstString path, const std::array<uint8_t, Size>& contents)
-        {
-            auto file = Open(path, fs::OpenMode::read);
-            ASSERT_NE(nullptr, file);
-            EXPECT_EQ(Size, file->Size());
-
-            static std::array<uint8_t, Size + 1> read;
-            read.fill(0);
-            EXPECT_EQ(std::make_pair(fs::Result::success, Size), Read(*file, infra::MakeRange(read)));
-            EXPECT_TRUE(infra::ContentsEqual(infra::MakeRange(contents), infra::Head(infra::MakeRange(read), Size)));
-            Close(*file);
-        }
-
-        uint32_t InodeOf(infra::BoundedConstString path)
-        {
-            auto file = Open(path, fs::OpenMode::read);
-            auto inode = static_cast<fs::NorFile&>(*file).State().inode;
-            Close(*file);
-            return inode;
-        }
-
-        uint32_t BlockOf(infra::BoundedConstString path, uint32_t index)
-        {
-            return this->BlockInVolume(InodeOf(path), index);
-        }
-
-        void UseEveryFreeBlock()
-        {
-            for (uint32_t block = 2; block != this->State().blocks.Blocks(); ++block)
-                if (this->State().blocks.State(block) != fs::NorBlockState::inUse)
-                    this->State().blocks.Set(block, fs::NorBlockState::inUse);
-        }
-
-        template<class Start>
-        fs::Result Complete(const Start& start)
-        {
-            std::optional<fs::Result> result;
-            start([&result](fs::Result completed)
-                {
-                    result = completed;
-                });
-            EXPECT_FALSE(result.has_value());
-            this->ExecuteAllActions();
-            return result.value_or(fs::Result::busy);
-        }
-    };
+    using fs::Bytes;
+    using fs::Pattern;
 
     class NorFileWriteTest
-        : public NorFileWriteFixture<config, 32, blockSize>
+        : public fs::NorFilesFixture<config, 32, blockSize>
     {
     public:
         NorFileWriteTest()
@@ -341,7 +226,7 @@ TEST_F(NorFileWriteTest, append_mode_writes_at_the_end_wherever_the_position_is)
     ExpectContents("/a", std::array<uint8_t, 5>{ 'a', 'b', 'c', 'd', 'e' });
 }
 
-TEST_F(NorFileWriteTest, a_write_below_the_end_is_unsupported_until_overwriting)
+TEST_F(NorFileWriteTest, a_write_in_read_write_mode_starts_at_the_position)
 {
     Unmount();
     Builder().AddFile(root, "a", Bytes("abc"));
@@ -349,9 +234,12 @@ TEST_F(NorFileWriteTest, a_write_below_the_end_is_unsupported_until_overwriting)
     Mount();
     auto file = Open("/a", fs::OpenMode::readWrite);
 
-    EXPECT_EQ(fs::Result::unsupported, Write(*file, Bytes("x")));
+    EXPECT_EQ(fs::Result::success, Write(*file, Bytes("x")));
     file->Seek(3);
     EXPECT_EQ(fs::Result::success, Write(*file, Bytes("d")));
+    EXPECT_EQ(fs::Result::success, Close(*file));
+    file = nullptr;
+    ExpectContents("/a", std::array<uint8_t, 4>{ 'x', 'b', 'c', 'd' });
 }
 
 TEST_F(NorFileWriteTest, an_append_to_a_block_written_before_the_mount_copies_the_block_first)
@@ -589,14 +477,11 @@ TEST_F(NorFileWriteTest, calls_while_a_call_is_pending_complete_with_busy)
     EXPECT_EQ(fs::Result::success, written);
 }
 
-TEST_F(NorFileWriteTest, truncate_is_unsupported_until_its_step_and_expect_size_has_no_effect)
+TEST_F(NorFileWriteTest, expect_size_has_no_effect_and_truncate_after_unmount_is_not_mounted)
 {
     auto file = Open("/a", fs::OpenMode::write);
 
-    EXPECT_EQ(fs::Result::unsupported, Complete([&file](const infra::Function<void(fs::Result)>& onDone)
-                                           {
-                                               file->Truncate(onDone);
-                                           }));
+    EXPECT_EQ(fs::Result::success, Truncate(*file));
     EXPECT_EQ(fs::Result::success, Complete([&file](const infra::Function<void(fs::Result)>& onDone)
                                        {
                                            file->ExpectSize(1000, onDone);
@@ -709,7 +594,7 @@ namespace
     constexpr fs::NorConfig wideUnitConfig{ .maxBlocks = 48, .programUnit = 16, .pageSize = 16, .cachedNodes = 15 };
 
     class NorFileWriteWideUnitTest
-        : public NorFileWriteFixture<wideUnitConfig, 48, 2048>
+        : public fs::NorFilesFixture<wideUnitConfig, 48, 2048>
     {
     public:
         NorFileWriteWideUnitTest()
@@ -742,7 +627,7 @@ namespace
     constexpr fs::NorConfig smallNodes{ .maxBlocks = 64, .pageSize = 16, .nodeSize = 160, .cachedNodes = 15, .inlineBytes = 36, .maxNameBytes = 8 };
 
     class NorFileWriteSmallNodesTest
-        : public NorFileWriteFixture<smallNodes, 64, blockSize>
+        : public fs::NorFilesFixture<smallNodes, 64, blockSize>
     {
     public:
         NorFileWriteSmallNodesTest()
@@ -841,7 +726,7 @@ namespace
     constexpr fs::NorConfig sixtyFourBlocks{ .maxBlocks = 64, .cachedNodes = 15 };
 
     class NorFileWriteManyFilesTest
-        : public NorFileWriteFixture<sixtyFourBlocks, 64, blockSize>
+        : public fs::NorFilesFixture<sixtyFourBlocks, 64, blockSize>
     {
     public:
         NorFileWriteManyFilesTest()
@@ -872,7 +757,7 @@ namespace
     constexpr fs::NorConfig deepConfig{ .maxBlocks = 128, .pageSize = 16, .nodeSize = 160, .cachedNodes = 15, .inlineBytes = 36, .maxNameBytes = 8 };
 
     class NorFileWriteDeepTest
-        : public NorFileWriteFixture<deepConfig, 128, blockSize>
+        : public fs::NorFilesFixture<deepConfig, 128, blockSize>
     {
     public:
         template<std::size_t Size>
@@ -989,7 +874,7 @@ namespace
     constexpr fs::NorConfig longJournal{ .maxBlocks = 32, .cachedNodes = 15, .journalBlocks = 4 };
 
     class NorFileWriteLongJournalTest
-        : public NorFileWriteFixture<longJournal, 32, blockSize>
+        : public fs::NorFilesFixture<longJournal, 32, blockSize>
     {
     public:
         NorFileWriteLongJournalTest()

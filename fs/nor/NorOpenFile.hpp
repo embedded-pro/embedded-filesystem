@@ -36,6 +36,9 @@ namespace fs
         bool Uncommitted() const;
         infra::ByteRange Pending() const;
         std::optional<uint32_t> UncommittedBlock(uint32_t index) const;
+        std::optional<uint32_t> ForeignTailIndex(uint32_t payload) const;
+        bool Admits(uint32_t index, uint32_t payload, uint32_t fanout) const;
+        std::optional<uint32_t> SecondLeafIndex(uint32_t fanout) const;
     };
 }
 

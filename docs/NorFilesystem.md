@@ -119,8 +119,10 @@ Each entry starts with its kind:
 
 An operation writes one record with every entry it needs: creating a file puts its directory entry and its inode, `Rename` removes one entry, puts another and puts the inode with its new parent and name, and an overwrite that spans two blocks sets both blocks and the size.
 Replay checks that the previous block of a block set is the one the map holds, and a mismatch makes the mount complete with `corrupted`.
+A block that a block set maps may have been released by a later record and reused as a journal block of the same epoch; replay then maps it without changing its state, and the later record releases nothing.
 An inode put of an inode that exists keeps its maps and ignores the roots it carries, because roots change only at checkpoints, and a checkpoint written during replay may come between a record and the roots it was written with; an inode put of a new inode creates it without maps.
 An inode put of inode 0, of a record that does not parse or that changes the type of an inode, a directory entry put into a directory that does not exist, into a file or of a key that the directory holds, and a link anywhere but first in the first record of a journal block complete the mount with `corrupted` as well.
+So do an inode remove of the root, of a directory with entries or of an inode that does not exist, a directory entry remove of a key that the directory does not hold, and a released or previous block outside the volume.
 Allocation and release need no entries of their own: they follow from block sets, from sizes and from removed inodes, and the nodes of a removed data map are found by walking it, at run time and at replay alike.
 The largest record starts with a link and holds either a `Rename` or the commit of 8 block entries of a file with its size, `8 + 9 + max(9 + 13 + 5 + inode record, 8 × 17 + 11 + inlineBytes)` bytes, 228 with the defaults; the journal buffer of the volume holds it, rounded up to the program unit.
 
@@ -256,6 +258,10 @@ This is what guarantees that no program unit is programmed twice, also after a p
 
 An overwrite is copy-on-write: every logical block that it touches is read, merged with the new bytes in the buffer of the file, and programmed into a new data block, and the record of the write maps the new block and releases the old one.
 An overwrite of up to one payload touches at most two blocks.
+Bytes that are still in the buffer of the handle are overwritten there and cost no program.
+The copy goes through the journal buffer, chunk by chunk, so it needs no buffer of a block.
+A block that the handle copied before is copied again, and the earlier copy, which no record refers to, is freed at once.
+A copy of the last block takes over its high-water mark, so later appends continue in place in the copy.
 
 ### Committing
 
@@ -263,14 +269,19 @@ Data that a write programs is not visible until a record commits it.
 The blocks it allocated are in RAM in the state allocated but not committed, and the handle keeps the block entries, the size and the inline bytes that are not yet committed.
 `Sync` and `Close` program the buffer and write one record with all of them.
 A handle keeps at most 8 uncommitted block entries; the write that would add a ninth first commits them.
+A handle whose last block it did not allocate keeps one of the 8 entries free for the copy of that block.
+The entries, with that last block, lie in at most two leaves of the data map, so a commit pins two paths and its room check counts the nodes of both; a write that would add an entry in a third leaf commits first.
 A `Close` whose commit fails frees the blocks of those entries, because no committed state refers to them.
 A read through the handle sees its uncommitted entries and its buffer.
 
 ### Other operations on files
 
 `Truncate` commits the file with its new size; the blocks after the new end are released when the record is applied.
+It frees the uncommitted blocks after the new end, reads the bytes after the last whole program unit of the new last block back into the buffer for the inline area, and the handle no longer appends in place into that block.
+A truncation below programmed bytes of a handle that holds uncommitted blocks commits them first, so that the last block it no longer appends to is a committed one.
 `Open` in `write` mode does the same with a size of 0.
 `Remove` writes one record that removes the directory entry and the inode; applying it walks the data map and releases every data block and node of the file.
+Applying a release walks the data map from the last index down to the first one released, through the node cache, so it modifies at most one node per level at a time; an operation that releases blocks checks that the cache holds one more node per level of the map next to its paths, and writes a checkpoint first when it does not.
 `Open` of a missing file in a mode other than `read`, `Truncate`, `Remove`, `MakeDirectory` and `Rename` write their record before they complete, so they are durable then.
 `ExpectSize` completes with `success` and has no effect, because NOR blocks need no contiguity.
 A file is at most 4 GiB minus one byte; a write beyond writes up to that size and completes with `noSpace`.

@@ -181,6 +181,14 @@ namespace metrics
             });
     }
 
+    fs::Result NorSweepVolume::Remove(const std::string& path)
+    {
+        return Run([this, &path](const infra::Function<void(fs::Result)>& onDone)
+            {
+                fileSystem.Remove(infra::BoundedConstString(path.data(), path.size()), onDone);
+            });
+    }
+
     std::optional<fs::EntryType> NorSweepVolume::TypeOf(const std::string& path)
     {
         std::optional<fs::Result> result;
@@ -221,6 +229,19 @@ namespace metrics
         return Run([this, &data](const infra::Function<void(fs::Result)>& onDone)
             {
                 file->Write(infra::MakeRange(data), onDone);
+            });
+    }
+
+    void NorSweepVolume::Seek(uint32_t position)
+    {
+        file->Seek(position);
+    }
+
+    fs::Result NorSweepVolume::Truncate()
+    {
+        return Run([this](const infra::Function<void(fs::Result)>& onDone)
+            {
+                file->Truncate(onDone);
             });
     }
 

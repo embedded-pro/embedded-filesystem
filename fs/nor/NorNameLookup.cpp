@@ -28,6 +28,11 @@ namespace fs
         return candidate.inode;
     }
 
+    uint32_t NorNameLookup::FoundKey() const
+    {
+        return candidate.key;
+    }
+
     const NorInodeRecord& NorNameLookup::FoundRecord() const
     {
         return inodeRead.Record();

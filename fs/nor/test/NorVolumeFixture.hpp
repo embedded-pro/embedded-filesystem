@@ -152,6 +152,31 @@ namespace fs
             return made.value_or(Result::busy);
         }
 
+        Result Remove(infra::BoundedConstString path)
+        {
+            std::optional<Result> removed;
+            fileSystem.Remove(path, [&removed](Result result)
+                {
+                    removed = result;
+                });
+
+            EXPECT_FALSE(removed.has_value());
+            ExecuteAllActions();
+            return removed.value_or(Result::busy);
+        }
+
+        infra::SharedPtr<Directory> OpenDirectory(infra::BoundedConstString path)
+        {
+            infra::SharedPtr<Directory> opened;
+            fileSystem.OpenDirectory(path, [&opened](Result, infra::SharedPtr<Directory> directory)
+                {
+                    opened = directory;
+                });
+
+            ExecuteAllActions();
+            return opened;
+        }
+
         std::pair<Result, EntryInfo> Stat(infra::BoundedConstString path)
         {
             std::optional<std::pair<Result, EntryInfo>> found;

@@ -2,6 +2,7 @@
 #include "fs/common/LittleEndian.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
+#include <limits>
 
 namespace fs
 {
@@ -209,6 +210,14 @@ namespace fs
     bool NorRadixTree::CanMap(uint32_t index, uint32_t nodeSize)
     {
         return index < Span(NorRadixFanout(nodeSize), norMaxLevels);
+    }
+
+    uint32_t NorRadixTree::IndicesCovered(const NorMapRoot& root, uint32_t nodeSize)
+    {
+        if (root.address == 0)
+            return 0;
+
+        return static_cast<uint32_t>(std::min<uint64_t>(Span(NorRadixFanout(nodeSize), root.height), std::numeric_limits<uint32_t>::max()));
     }
 
     uint32_t NorRadixTree::ChildFor(infra::ConstByteRange node, uint32_t index)
