@@ -29,7 +29,7 @@ namespace metrics
         uint32_t scaleDivisor;
         std::function<std::shared_ptr<FileSystemUnderTest>(VirtualTime& time, hal::Flash& flash)> create;
         std::set<std::string, std::less<>> deferredWorkloads;
-        bool diagnostic{ false };
+        const Targets* targets{ nullptr };
     };
 
     struct BlockSetup
@@ -60,7 +60,6 @@ namespace metrics
         Runner& Workloads();
         MetricRecorder& Recorder();
         const MeteredFlash& Flash() const;
-        std::optional<double> LevelingOverhead() const;
         WorkloadParameters Parameters(uint8_t fillPercent = 0) const;
 
     private:

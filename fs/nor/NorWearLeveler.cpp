@@ -16,6 +16,11 @@ namespace fs
         constexpr uint32_t superblocks = 2;
         constexpr uint32_t blockNumberBytes = 4;
         constexpr std::size_t nodesOfARecord = 2 * norMaxLevels;
+
+        bool IsFree(NorBlockState state)
+        {
+            return state == NorBlockState::freeErased || state == NorBlockState::freeNotErased;
+        }
     }
 
     NorWearLeveler::NorWearLeveler(NorVolume& volume)
@@ -87,7 +92,7 @@ namespace fs
             auto count = counts.Count(candidate);
             candidates.highest = std::max(candidates.highest, count);
 
-            if (state.blocks.State(candidate) == NorBlockState::freeErased && (!candidates.destination.has_value() || count > counts.Count(candidates.destination.value_or(0))))
+            if (IsFree(state.blocks.State(candidate)) && (!candidates.destination.has_value() || count > counts.Count(candidates.destination.value_or(0))))
                 candidates.destination = candidate;
             else if (IsMovable(candidate) && (!candidates.source.has_value() || count < counts.Count(candidates.source.value_or(0))))
                 candidates.source = candidate;

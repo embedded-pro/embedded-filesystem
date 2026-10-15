@@ -89,6 +89,7 @@ embedded-filesystem reads the header of every block at mount to build its free-b
 
 littlefs needs less RAM.
 A littlefs configuration with caches of a few hundred bytes is common, while embedded-filesystem keeps two bits and one byte per block plus a node cache of 8 KiB by default, about 14 KiB for a 16 MiB device with 4 KiB blocks, or about 9 KiB with 64 KiB blocks; see [NorFilesystem.md](NorFilesystem.md#ram-use).
+littlefs cannot use as much: its caches hold at most one block and its lookahead one bit per block, about 13 KiB on the same device.
 This is the price of allocation without traversal and of wear leveling based on actual erase counts.
 
 On SD cards, FatFs needs less RAM as well: about 1.7 KiB with one open file, against about 5.8 KiB for `fs::FatFileSystem::WithStorage<2, 8>` on a 32-bit target.

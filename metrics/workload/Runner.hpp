@@ -41,6 +41,7 @@ namespace metrics
         uint32_t fileSizeBefore;
         infra::Duration latency;
         DeviceSnapshot device;
+        std::optional<VolumeCounters> counters;
     };
 
     class Runner
@@ -80,7 +81,8 @@ namespace metrics
         using Completion = std::function<void(fs::Result result)>;
 
         fs::Result Call(Operation operation, uint64_t userBytes, uint32_t fileSizeBefore, const std::function<void(const Completion& done)>& start);
-        void RecordIdle(infra::TimePoint startTime, const DeviceSnapshot& deviceBefore);
+        void RecordIdle(infra::TimePoint startTime, const DeviceSnapshot& deviceBefore, const std::optional<VolumeCounters>& countersBefore);
+        std::optional<VolumeCounters> CountedSince(const std::optional<VolumeCounters>& countersBefore) const;
 
     private:
         VirtualTime& time;

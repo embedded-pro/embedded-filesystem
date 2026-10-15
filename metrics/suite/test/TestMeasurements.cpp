@@ -60,6 +60,35 @@ TEST_F(MeasurementsTest, sequential_write_throughput_divides_user_bytes_by_devic
     EXPECT_DOUBLE_EQ(4096 / 400e-6 / 4096 * 256, Find("W-1", "L1 16384 4096").value);
 }
 
+TEST_F(MeasurementsTest, sequential_write_charges_a_subject_that_counts_one_sector_erase_per_allocated_sector)
+{
+    subject.counters = metrics::VolumeCounters{};
+    subject.countedPerWrite = metrics::VolumeCounters{ .allocatedSectors = 1 };
+
+    metrics::MeasureSequentialWrite(runner, recorder, parameters);
+
+    EXPECT_DOUBLE_EQ(4096 / (400e-6 * 4096 / 256 + 45e-3), Find("W-1", "L1 16384 4096").value);
+}
+
+TEST_F(MeasurementsTest, data_logger_of_a_subject_that_counts_averages_whole_checkpoint_periods)
+{
+    subject.counters = metrics::VolumeCounters{};
+    subject.countedPerWrite = metrics::VolumeCounters{ .checkpoints = 1 };
+
+    metrics::MeasureDataLogger(runner, recorder, parameters);
+
+    EXPECT_DOUBLE_EQ(1.0, Find("W-2", "L2", 0).value);
+}
+
+TEST_F(MeasurementsTest, random_read_ratio_divides_the_reads_in_the_largest_file_by_those_in_the_smallest)
+{
+    metrics::MeasureReads(runner, recorder, parameters);
+    metrics::MeasureRandomReadRatio(runner, recorder, parameters);
+
+    EXPECT_DOUBLE_EQ(1.0, Find("R-2", "L6 random ratio").value);
+    EXPECT_EQ(metrics::Better::lower, Find("R-2", "L6 random ratio").better);
+}
+
 TEST_F(MeasurementsTest, data_logger_records_append_scaling_and_amplification)
 {
     auto perAppend = metrics::MeasureDataLogger(runner, recorder, parameters);

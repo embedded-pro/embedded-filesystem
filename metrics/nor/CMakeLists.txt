@@ -12,6 +12,7 @@ target_link_libraries(metrics.nor PUBLIC
 target_sources(metrics.nor PRIVATE
     NorChecker.cpp
     NorChecker.hpp
+    NorConfigurations.hpp
     NorSubject.cpp
     NorSubject.hpp
     NorSweep.cpp

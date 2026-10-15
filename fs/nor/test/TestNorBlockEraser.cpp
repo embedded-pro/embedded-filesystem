@@ -283,3 +283,23 @@ TEST_F(NorBlockEraserTest, erasing_the_last_block_at_the_lowest_count_moves_the_
     EXPECT_EQ(3, State().eraseCounts.Count(12));
     EXPECT_EQ(3, State().eraseCounts.Count(20));
 }
+
+TEST_F(NorBlockEraserTest, a_step_for_the_most_worn_erases_the_most_worn_free_block_that_is_not_erased)
+{
+    State().eraseCounts.Record(9, 3);
+    State().eraseCounts.Record(12, 2);
+    State().blocks.Set(9, fs::NorBlockState::freeNotErased);
+    State().blocks.Set(12, fs::NorBlockState::freeNotErased);
+
+    bool stepped = false;
+    Volume().Eraser().Step(fs::NorWear::most, [&stepped]
+        {
+            stepped = true;
+        });
+    EXPECT_FALSE(stepped);
+    ExecuteAllActions();
+
+    EXPECT_TRUE(stepped);
+    EXPECT_EQ(fs::NorBlockState::freeErased, State().blocks.State(9));
+    EXPECT_EQ(fs::NorBlockState::freeNotErased, State().blocks.State(12));
+}

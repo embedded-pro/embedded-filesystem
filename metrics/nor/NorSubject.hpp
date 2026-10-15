@@ -46,7 +46,7 @@ namespace metrics
         void QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone) override;
         void IdleHint(const std::function<void()>& onDone) override;
 
-        std::optional<double> LevelingOverhead() const override;
+        std::optional<VolumeCounters> Counters() const override;
 
     protected:
         NorSubject(fs::NorFileSystem& fileSystem, std::size_t ramBytes, uint32_t sectorsPerBlock);
@@ -79,6 +79,7 @@ namespace metrics
         fs::NorFileSystem& fileSystem;
         std::size_t ramBytes;
         uint32_t sectorsPerBlock;
+        VolumeCounters earlierMounts;
         std::array<infra::SharedPtr<fs::File>, 2> files;
         std::list<Call> calls;
     };

@@ -51,7 +51,7 @@ namespace fs
 
     bool NorBackground::FallbackDue() const
     {
-        return urgent && PoolHoldsAMove() && volume.Leveler().FallbackDue();
+        return urgent && volume.Leveler().FallbackDue();
     }
 
     bool NorBackground::MoveDue() const

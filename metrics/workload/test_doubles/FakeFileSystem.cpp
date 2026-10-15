@@ -96,6 +96,9 @@ namespace metrics
         auto address = DeviceAddress(file, data.size());
         open.position += static_cast<uint32_t>(data.size());
 
+        if (counters.has_value())
+            *counters = *counters + countedPerWrite;
+
         pendingCompletion = onDone;
         flash.WriteBuffer(data, address, [this]
             {
@@ -168,6 +171,11 @@ namespace metrics
     {
         ++idleHints;
         completions.Defer(onDone);
+    }
+
+    std::optional<VolumeCounters> FakeFileSystem::Counters() const
+    {
+        return counters;
     }
 
     void FakeFileSystem::Complete(const std::function<void(fs::Result result)>& onDone, fs::Result result)

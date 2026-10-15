@@ -147,7 +147,7 @@ TEST_F(NorWearLevelerTest, a_young_free_block_makes_no_move_due)
     EXPECT_FALSE(Leveler().Due());
 }
 
-TEST_F(NorWearLevelerTest, no_move_is_due_without_an_erased_block_more_worn_than_the_least_worn_block_in_use)
+TEST_F(NorWearLevelerTest, no_move_is_due_without_a_free_block_more_worn_than_the_least_worn_block_in_use)
 {
     auto file = MountWithFile();
     Wear(1);
@@ -334,7 +334,7 @@ TEST_F(NorWearLevelerTest, moves_a_node_block_into_a_node_block_taken_from_the_m
     EXPECT_THAT(List("/a"), testing::ElementsAre("x"));
 }
 
-TEST_F(NorWearLevelerTest, no_move_is_due_without_an_erased_block)
+TEST_F(NorWearLevelerTest, a_move_is_due_into_a_worn_free_block_that_is_not_erased)
 {
     auto file = MountWithFile();
     Wear(10);
@@ -344,7 +344,37 @@ TEST_F(NorWearLevelerTest, no_move_is_due_without_an_erased_block)
             State().blocks.Set(block, fs::NorBlockState::freeNotErased);
     SetErases(2);
 
+    EXPECT_TRUE(Leveler().Due());
+}
+
+TEST_F(NorWearLevelerTest, no_move_is_due_without_a_free_block)
+{
+    auto file = MountWithFile();
+    Wear(10);
+    State().eraseCounts.Record(BlockInVolume(file, 1), 1);
+    UseEveryFreeBlock();
+    SetErases(2);
+
     EXPECT_FALSE(Leveler().Due());
+}
+
+TEST_F(NorWearLevelerTest, a_data_move_erases_its_destination_when_the_most_worn_free_block_is_not_erased)
+{
+    auto file = MountWithFile();
+    auto source = BlockInVolume(file, 1);
+    auto target = FreeErasedBlock();
+    Wear(10);
+    State().eraseCounts.Record(source, 1);
+    State().eraseCounts.Record(target, worn);
+    State().blocks.Set(target, fs::NorBlockState::freeNotErased);
+    SetErases(2);
+
+    Move();
+
+    EXPECT_EQ(target, BlockInVolume(file, 1));
+    EXPECT_EQ(worn + 1, HeaderOf(target).eraseCount);
+    RemountWithFreeBlocksErased();
+    ExpectContents("/f", contents);
 }
 
 TEST_F(NorWearLevelerTest, gives_up_a_block_whose_header_names_no_data_block)

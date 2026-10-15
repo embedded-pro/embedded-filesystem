@@ -23,12 +23,10 @@ namespace metrics
         , probe(metered)
         , subject(setup.create(environment.Time(), metered))
         , runner(environment.Time(), *subject, probe)
-        , recorder(GlobalReport(), subject->Name(), setup.model->name, subject->RamBytes())
+        , recorder(GlobalReport(), subject->Name(), setup.model->name, subject->RamBytes(), setup.targets)
         , scaleDivisor(setup.scaleDivisor)
     {
         GlobalReport().AddDevice(*setup.model);
-        if (setup.diagnostic)
-            recorder.RecordEveryResultAsDiagnostic();
     }
 
     Runner& NorMeasurement::Workloads()
@@ -44,11 +42,6 @@ namespace metrics
     const MeteredFlash& NorMeasurement::Flash() const
     {
         return metered;
-    }
-
-    std::optional<double> NorMeasurement::LevelingOverhead() const
-    {
-        return subject->LevelingOverhead();
     }
 
     WorkloadParameters NorMeasurement::Parameters(uint8_t fillPercent) const

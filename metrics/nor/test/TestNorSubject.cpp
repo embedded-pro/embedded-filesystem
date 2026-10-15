@@ -75,13 +75,39 @@ TEST_F(NorSubjectTest, ram_is_that_of_a_volume_with_one_open_file)
     EXPECT_EQ((sizeof(fs::NorFileSystem::WithStorage<testConfig, 1>)), subject.RamBytes());
 }
 
-TEST_F(NorSubjectTest, leveling_overhead_is_the_share_of_block_erases_that_moves_caused)
+TEST_F(NorSubjectTest, counts_the_sectors_of_the_blocks_it_allocates_and_its_checkpoints)
+{
+    FormatAndMount();
+    WriteFile("/file", Pattern(10000, 1));
+    ASSERT_EQ(fs::Result::success, runner.Unmount());
+
+    auto counters = subject.Counters();
+    ASSERT_TRUE(counters.has_value());
+    EXPECT_LE(2, counters->allocatedSectors);
+    EXPECT_LE(1, counters->checkpoints);
+}
+
+TEST_F(NorSubjectTest, counters_keep_growing_across_mounts)
+{
+    FormatAndMount();
+    WriteFile("/file", Pattern(10000, 1));
+    ASSERT_EQ(fs::Result::success, runner.Unmount());
+    auto before = subject.Counters().value_or(metrics::VolumeCounters{});
+
+    ASSERT_EQ(fs::Result::success, runner.Mount());
+    WriteFile("/other", Pattern(10000, 2));
+
+    auto after = subject.Counters().value_or(metrics::VolumeCounters{});
+    EXPECT_LT(before.allocatedSectors, after.allocatedSectors);
+    EXPECT_LE(before.checkpoints, after.checkpoints);
+}
+
+TEST_F(NorSubjectTest, counts_the_blocks_that_static_wear_leveling_moves_and_the_blocks_erased)
 {
     metrics::NorSubject::WithConfig<levelingConfig> leveling{ metered };
     metrics::Runner levelingRunner{ time, leveling, probe };
     ASSERT_EQ(fs::Result::success, levelingRunner.Format());
     ASSERT_EQ(fs::Result::success, levelingRunner.Mount());
-    EXPECT_EQ(0.0, leveling.LevelingOverhead());
 
     auto still = Pattern(20000, 1);
     auto file = levelingRunner.Open("/static", metrics::OpenMode::write);
@@ -98,10 +124,9 @@ TEST_F(NorSubjectTest, leveling_overhead_is_the_share_of_block_erases_that_moves
         levelingRunner.Idle(std::chrono::seconds(1));
     }
 
-    auto overhead = leveling.LevelingOverhead();
-    ASSERT_TRUE(overhead.has_value());
-    EXPECT_LT(0.0, overhead.value_or(0.0));
-    EXPECT_GT(0.5, overhead.value_or(1.0));
+    auto counters = leveling.Counters().value_or(metrics::VolumeCounters{});
+    EXPECT_LT(0, counters.movedBlocks);
+    EXPECT_LT(2 * counters.movedBlocks, counters.erasedBlocks);
 }
 
 TEST_F(NorSubjectTest, mount_of_an_erased_device_reports_corruption)

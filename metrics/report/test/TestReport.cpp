@@ -35,6 +35,11 @@ TEST(TargetTest, text_shows_the_comparison_and_the_reference_subjects)
     EXPECT_EQ("<= fatfs", metrics::AtMostOf("fatfs").Text());
 }
 
+TEST(TargetTest, text_shows_the_factor_of_the_reference_subjects)
+{
+    EXPECT_EQ(">= 0.97 baselines", metrics::AtLeastOf(std::string{ metrics::allBaselines }, 0.97).Text());
+}
+
 TEST(TargetTest, an_absolute_bound_holds_up_to_and_including_the_bound)
 {
     EXPECT_EQ(true, metrics::AtMost(1.1).Holds(1.1));

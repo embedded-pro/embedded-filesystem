@@ -112,13 +112,38 @@ TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_takes_the_free_and_erased_b
     EXPECT_EQ(fs::NorBlockState::pending, State().blocks.State(12));
 }
 
-TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_without_an_erased_block_erases_the_least_worn_free_block)
+TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_without_an_erased_block_erases_the_most_worn_free_block)
 {
     Builder().SetEraseCount(12, 0);
+    Builder().SetEraseCount(20, 9);
     Mount();
     MarkEveryFreeBlockNotErased();
 
-    EXPECT_EQ(12, AllocateMostWorn());
+    EXPECT_EQ(20, AllocateMostWorn());
+    EXPECT_EQ(10, HeaderOf(20).eraseCount);
+}
+
+TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_erases_a_free_block_more_worn_than_every_erased_one)
+{
+    Builder().SetEraseCount(9, 5);
+    Builder().SetEraseCount(20, 8);
+    Mount();
+    State().blocks.Set(20, fs::NorBlockState::freeNotErased);
+
+    EXPECT_EQ(20, AllocateMostWorn());
+    EXPECT_EQ(9, HeaderOf(20).eraseCount);
+}
+
+TEST_F(NorBlockAllocatorTest, a_most_worn_allocation_takes_an_erased_block_as_worn_as_every_free_one)
+{
+    Builder().SetEraseCount(9, 8);
+    Builder().SetEraseCount(20, 8);
+    Mount();
+    State().blocks.Set(20, fs::NorBlockState::freeNotErased);
+    device.recording = true;
+
+    EXPECT_EQ(9, AllocateMostWorn());
+    EXPECT_EQ(0, Erases());
 }
 
 TEST_F(NorBlockAllocatorTest, programs_part_b_with_the_type_the_next_sequence_and_the_owner)

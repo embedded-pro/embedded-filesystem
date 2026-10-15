@@ -25,6 +25,7 @@ namespace metrics
     {
         Better comparison;
         std::variant<double, std::string> reference;
+        double factor{ 1.0 };
 
         std::string Text() const;
         std::optional<bool> Holds(double value) const;
@@ -33,7 +34,7 @@ namespace metrics
     Target AtMost(double bound);
     Target AtLeast(double bound);
     Target AtMostOf(std::string subjects);
-    Target AtLeastOf(std::string subjects);
+    Target AtLeastOf(std::string subjects, double factor = 1.0);
 
     inline constexpr std::string_view allBaselines{ "baselines" };
 

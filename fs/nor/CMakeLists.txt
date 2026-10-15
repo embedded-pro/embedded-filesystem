@@ -125,6 +125,8 @@ target_sources(fs.nor PRIVATE
     NorVolume.hpp
     NorVolumeState.cpp
     NorVolumeState.hpp
+    NorWear.cpp
+    NorWear.hpp
     NorWearLeveler.cpp
     NorWearLeveler.hpp
     NorWrite.cpp

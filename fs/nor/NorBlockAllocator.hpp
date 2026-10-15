@@ -2,6 +2,7 @@
 #define FS_NOR_NOR_BLOCK_ALLOCATOR_HPP
 
 #include "fs/nor/NorBlockHeader.hpp"
+#include "fs/nor/NorWear.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/Function.hpp"
 #include <cstdint>
@@ -17,12 +18,6 @@ namespace fs
         used
     };
 
-    enum class NorWear : uint8_t
-    {
-        least,
-        most
-    };
-
     class NorBlockAllocator
     {
     public:
@@ -36,6 +31,7 @@ namespace fs
 
     private:
         std::optional<uint32_t> ErasedOfWear() const;
+        bool IsWornEnough(uint32_t erased) const;
         void TakeErased();
         void ProgramPartB();
 

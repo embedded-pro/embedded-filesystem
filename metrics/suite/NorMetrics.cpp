@@ -25,6 +25,16 @@ namespace
         measurement.Recorder().Record("WL-2", workload, "ratio", metrics::Better::higher, wear.Efficiency(), fill);
     }
 
+    void RecordLevelingOverhead(metrics::NorMeasurement& measurement, std::string_view workload)
+    {
+        auto counters = measurement.Workloads().Subject().Counters();
+        if (!counters.has_value())
+            return;
+
+        auto overhead = counters->erasedBlocks == 0 ? 0.0 : static_cast<double>(counters->movedBlocks) / static_cast<double>(counters->erasedBlocks);
+        measurement.Recorder().Record("WL-4", workload, "share", metrics::Better::lower, overhead);
+    }
+
     bool Deferred(const metrics::NorSetup& setup)
     {
         std::string_view name = testing::UnitTest::GetInstance()->current_test_info()->name();
@@ -132,9 +142,7 @@ TEST_P(NorMetrics, L5_static_fill)
             return flash.Counters().sectorsErased < erases;
         });
     RecordWear(measurement, "L5", std::nullopt);
-    auto overhead = measurement.LevelingOverhead();
-    if (overhead.has_value())
-        measurement.Recorder().Record("WL-4", "L5", "share", metrics::Better::lower, overhead.value_or(0.0));
+    RecordLevelingOverhead(measurement, "L5");
 
     EXPECT_EQ(std::nullopt, metrics::UnexpectedResult(measurement.Workloads()));
 }
@@ -147,6 +155,7 @@ TEST_P(NorMetrics, L6_reads)
     metrics::NorMeasurement measurement{ GetParam() };
 
     metrics::MeasureReads(measurement.Workloads(), measurement.Recorder(), measurement.Parameters());
+    metrics::MeasureRandomReadRatio(measurement.Workloads(), measurement.Recorder(), measurement.Parameters());
 
     EXPECT_EQ(std::nullopt, metrics::UnexpectedResult(measurement.Workloads()));
 }
@@ -177,6 +186,8 @@ TEST_P(NorLifetime, L5_lifetime)
         });
     auto userBytes = metrics::TotalUserBytes(metrics::Select(measurement.Workloads().Records(), "L5", metrics::Operation::write)) + metrics::TotalUserBytes(metrics::Select(measurement.Workloads().Records(), "fill", metrics::Operation::write));
     measurement.Recorder().Record("WL-3", "L5", "B", metrics::Better::higher, static_cast<double>(userBytes));
+    RecordWear(measurement, "L5", std::nullopt);
+    RecordLevelingOverhead(measurement, "L5");
 
     EXPECT_EQ(std::nullopt, metrics::UnexpectedResult(measurement.Workloads()));
 }

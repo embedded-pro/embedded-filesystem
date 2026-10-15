@@ -18,6 +18,18 @@ namespace
         return { .deviceTime = deviceTime };
     }
 
+    metrics::CallRecord Counted(metrics::Operation operation, std::string phase, metrics::DeviceSnapshot device, metrics::VolumeCounters counters, uint32_t fileSizeBefore = 0)
+    {
+        auto record = Record(operation, std::move(phase), device, 0, fileSizeBefore);
+        record.counters = counters;
+        return record;
+    }
+
+    metrics::CallRecord Checkpoint(metrics::Operation operation, infra::Duration deviceTime, uint32_t fileSizeBefore = 0)
+    {
+        return Counted(operation, "L2", DeviceTime(deviceTime), { .checkpoints = 1 }, fileSizeBefore);
+    }
+
     std::vector<infra::Duration> Milliseconds(int from, int to)
     {
         std::vector<infra::Duration> values;
@@ -199,4 +211,99 @@ TEST(MetricComputationsTest, mean_append_device_time_without_appends_is_zero)
     std::vector<metrics::CallRecord> records{ Record(metrics::Operation::write, "L2", DeviceTime(1ms), 64, 0) };
 
     EXPECT_EQ(infra::Duration{}, metrics::MeanAppendDeviceTime(records, "L2", 4096, 2));
+}
+
+TEST(MetricComputationsTest, charged_device_time_of_a_subject_that_does_not_count_is_its_device_time)
+{
+    std::vector<metrics::CallRecord> records{ Record(metrics::Operation::write, "L1", { .deviceTime = 50ms, .eraseTime = 45ms }) };
+
+    EXPECT_EQ(50ms, metrics::ChargedDeviceTime(metrics::Select(records, "L1"), 45ms));
+}
+
+TEST(MetricComputationsTest, charged_device_time_replaces_the_erases_by_one_sector_erase_per_allocated_sector)
+{
+    std::vector<metrics::CallRecord> records{
+        Counted(metrics::Operation::write, "L1", { .deviceTime = 50ms, .eraseTime = 45ms }, { .allocatedSectors = 2 }),
+        Counted(metrics::Operation::idle, "L1", { .deviceTime = 90ms, .eraseTime = 90ms }, {}),
+    };
+
+    EXPECT_EQ(5ms + 90ms, metrics::ChargedDeviceTime(metrics::Select(records, "L1"), 45ms));
+}
+
+TEST(MetricComputationsTest, charged_time_per_operation_spreads_the_charged_time_over_the_operations)
+{
+    std::vector<metrics::CallRecord> records{
+        Counted(metrics::Operation::write, "L3", { .deviceTime = 10ms }, { .allocatedSectors = 1 }),
+        Counted(metrics::Operation::write, "L3", { .deviceTime = 10ms }, {}),
+    };
+
+    EXPECT_EQ(15ms, metrics::ChargedTimePerOperation(metrics::Select(records, "L3"), metrics::Operation::write, 10ms));
+}
+
+TEST(MetricComputationsTest, checkpoint_periods_start_after_the_first_checkpoint_from_the_file_size)
+{
+    std::vector<metrics::CallRecord> records{
+        Checkpoint(metrics::Operation::write, 1ms, 0),
+        Record(metrics::Operation::write, "L2", DeviceTime(2ms), 64, 64),
+        Checkpoint(metrics::Operation::idle, 3ms),
+        Record(metrics::Operation::write, "L2", DeviceTime(4ms), 64, 128),
+        Checkpoint(metrics::Operation::idle, 5ms),
+        Record(metrics::Operation::write, "L2", DeviceTime(6ms), 64, 192),
+        Checkpoint(metrics::Operation::idle, 7ms),
+        Record(metrics::Operation::write, "L2", DeviceTime(8ms), 64, 256),
+    };
+
+    auto window = metrics::CheckpointPeriodsFrom(records, "L2", 64, 2);
+
+    ASSERT_EQ(4, window.size());
+    EXPECT_EQ(&records[3], window.front());
+    EXPECT_EQ(&records[6], window.back());
+}
+
+TEST(MetricComputationsTest, the_last_checkpoint_periods_end_at_the_last_checkpoint_of_the_phase)
+{
+    std::vector<metrics::CallRecord> records{
+        Checkpoint(metrics::Operation::idle, 1ms),
+        Record(metrics::Operation::write, "L2", DeviceTime(2ms), 64, 64),
+        Checkpoint(metrics::Operation::idle, 3ms),
+        Record(metrics::Operation::write, "L2", DeviceTime(4ms), 64, 128),
+        Checkpoint(metrics::Operation::idle, 5ms),
+        Record(metrics::Operation::write, "L2", DeviceTime(6ms), 64, 192),
+        Record(metrics::Operation::close, "other", DeviceTime(9ms)),
+    };
+
+    auto window = metrics::LastCheckpointPeriods(records, "L2", 1);
+
+    ASSERT_EQ(2, window.size());
+    EXPECT_EQ(&records[3], window.front());
+    EXPECT_EQ(&records[4], window.back());
+}
+
+TEST(MetricComputationsTest, checkpoint_periods_are_empty_without_enough_checkpoints)
+{
+    std::vector<metrics::CallRecord> records{
+        Checkpoint(metrics::Operation::idle, 1ms),
+        Record(metrics::Operation::write, "L2", DeviceTime(2ms), 64, 64),
+    };
+
+    EXPECT_TRUE(metrics::CheckpointPeriodsFrom(records, "L2", 0, 1).empty());
+    EXPECT_TRUE(metrics::LastCheckpointPeriods(records, "L2", 1).empty());
+}
+
+TEST(MetricComputationsTest, mean_append_time_spreads_the_charged_time_of_appends_over_the_writes)
+{
+    std::vector<metrics::CallRecord> records{
+        Counted(metrics::Operation::write, "L2", DeviceTime(2ms), { .allocatedSectors = 1 }),
+        Record(metrics::Operation::sync, "L2", DeviceTime(4ms)),
+        Record(metrics::Operation::idle, "L2", DeviceTime(6ms)),
+        Record(metrics::Operation::write, "L2", DeviceTime(8ms)),
+        Record(metrics::Operation::close, "L2", DeviceTime(100ms)),
+    };
+
+    EXPECT_EQ(15ms, metrics::MeanAppendTime(metrics::Select(records, "L2"), 10ms));
+}
+
+TEST(MetricComputationsTest, mean_append_time_without_writes_is_zero)
+{
+    EXPECT_EQ(infra::Duration{}, metrics::MeanAppendTime({}, 10ms));
 }

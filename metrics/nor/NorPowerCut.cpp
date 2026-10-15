@@ -45,7 +45,7 @@ namespace
 
     void SweepEveryMode(const metrics::NorModel& model, const std::string& caseName, std::size_t ramBytes, const metrics::NorPowerCutSweep::Phase& setUp, const metrics::NorPowerCutSweep::Phase& operate, const Verifier& verify)
     {
-        metrics::NorTargets targets;
+        metrics::NorTargets targets{ model, metrics::SweepConfig(model), 1 };
         metrics::MetricRecorder recorder{ metrics::GlobalReport(), "embedded-filesystem/nor", model.name, ramBytes, &targets };
 
         for (const auto& mode : modes)
@@ -1406,6 +1406,57 @@ public:
         volume.Unmount();
     }
 
+    void LevelInTheForeground(Context& context)
+    {
+        metrics::NorSweepVolume volume{ context, leveling };
+        if (volume.Mount() != fs::Result::success || volume.OpenFile("/g", fs::OpenMode::write) != fs::Result::success)
+            return;
+
+        if (volume.Write(FileBytes(1000, LeveledSize())) != fs::Result::success || volume.Close() != fs::Result::success)
+            return;
+
+        mostMoves = std::max(mostMoves, volume.Counters().movedBlocks);
+        volume.Unmount();
+    }
+
+    std::optional<std::string> VerifyLeveledInTheForeground(Context& context, bool uncut) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        const auto* file = check.Find("/f");
+        if (check.Find("/a/b") == nullptr || file == nullptr || metrics::ReadContents(image, check, *file) != FileBytes(0, LeveledSize()))
+            return "the set-up is lost";
+
+        const auto* written = check.Find("/g");
+        auto writtenContents = written != nullptr ? metrics::ReadContents(image, check, *written) : std::vector<uint8_t>{};
+        if (!writtenContents.empty() && writtenContents != FileBytes(1000, LeveledSize()))
+            return "/g holds neither nothing nor its contents";
+
+        if (uncut && writtenContents.empty())
+            return "the run without a cut did not write /g";
+
+        {
+            metrics::NorSweepVolume volume{ context, leveling };
+            if (volume.Mount() != fs::Result::success)
+                return "the volume does not mount";
+
+            if (volume.ReadFile("/f") != FileBytes(0, LeveledSize()) || volume.TypeOf("/g").has_value() != (written != nullptr))
+                return "the library and the checker disagree";
+
+            if (volume.MakeDirectory("/z") != fs::Result::success || volume.Unmount() != fs::Result::success)
+                return "a change after the mount fails";
+        }
+
+        auto after = metrics::CheckImage(context, model);
+        if (after.problem.has_value())
+            return "after a change after the mount: " + *after.problem;
+
+        return std::nullopt;
+    }
+
     std::optional<std::string> VerifyLeveled(Context& context, bool uncut) const
     {
         auto image = metrics::ReadImage(context);
@@ -1771,6 +1822,26 @@ TEST_P(NorAppendPowerCut, static_wear_leveling_moves_node_blocks_and_a_cut_leave
     SweepLeveling("leveling-nodes", false);
 
     EXPECT_LE(setUpNodeBlocks.size(), mostMoves);
+}
+
+TEST_P(NorAppendPowerCut, the_fallback_of_static_wear_leveling_erases_its_destination_on_an_empty_pool_and_a_cut_leaves_consistent)
+{
+    mostMoves = 0;
+    SweepEveryMode(
+        model, "leveling-fallback", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpLeveling(context, true);
+        },
+        [this](Context& context)
+        {
+            LevelInTheForeground(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return VerifyLeveledInTheForeground(context, uncut);
+        });
+
+    EXPECT_LE(1, mostMoves);
 }
 
 INSTANTIATE_TEST_SUITE_P(Nor, NorAppendPowerCut, testing::Values(&metrics::norSweep128k, &metrics::internalSweep96k, &metrics::norSweep128kTwoSectors), ParameterName);

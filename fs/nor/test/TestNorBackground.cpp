@@ -615,14 +615,16 @@ TEST_F(NorBackgroundMoveTest, a_fallback_that_is_no_longer_due_when_its_call_rel
     Close(*created);
 }
 
-TEST_F(NorBackgroundMoveTest, the_fallback_waits_until_the_pool_holds_the_blocks_of_a_move)
+TEST_F(NorBackgroundMoveTest, the_fallback_moves_into_the_most_worn_free_block_when_the_pool_is_empty)
 {
+    auto target = MostWornCandidate();
     auto created = OpenNewFile();
-    KeepErased(2 * Volume().Geometry().NodeBlocksPerCheckpoint());
+    KeepErased(0);
     Volume().Counters().erasedSectors = 4;
 
     ASSERT_EQ(fs::Result::success, Write(*created, infra::MakeRange(written)));
 
-    EXPECT_EQ(0, Volume().Counters().movedBlocks);
+    EXPECT_EQ(1, Volume().Counters().movedBlocks);
+    EXPECT_EQ(target, BlockInVolume(file, 0));
     Close(*created);
 }

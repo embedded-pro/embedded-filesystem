@@ -5,6 +5,7 @@
 #include "metrics/workload/CompletionQueue.hpp"
 #include "metrics/workload/FileSystemUnderTest.hpp"
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -39,6 +40,7 @@ namespace metrics
 
         void QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone) override;
         void IdleHint(const std::function<void()>& onDone) override;
+        std::optional<VolumeCounters> Counters() const override;
 
         bool completeSynchronously{ false };
         bool neverComplete{ false };
@@ -46,6 +48,8 @@ namespace metrics
         uint64_t unreportedBytes{ 0 };
         std::map<std::string, std::vector<uint8_t>> files;
         std::set<std::string> directories;
+        std::optional<VolumeCounters> counters;
+        VolumeCounters countedPerWrite;
 
     private:
         struct OpenFile

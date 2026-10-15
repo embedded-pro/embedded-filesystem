@@ -1,6 +1,7 @@
 #ifndef FS_NOR_NOR_BLOCK_ERASER_HPP
 #define FS_NOR_NOR_BLOCK_ERASER_HPP
 
+#include "fs/nor/NorWear.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/Function.hpp"
 #include <cstdint>
@@ -20,12 +21,12 @@ namespace fs
 
         bool HasWork() const;
         void Step(const infra::Function<void()>& onDone);
+        void Step(NorWear wear, const infra::Function<void()>& onDone);
         void Refill(const infra::Function<void()>& onDone);
         void CountAsRefill();
         void Reset();
 
     private:
-        std::optional<uint32_t> LeastWornNotErased() const;
         void ProgramPartA();
 
     private:
