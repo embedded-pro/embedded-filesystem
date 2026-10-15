@@ -5,8 +5,10 @@
 #include "metrics/workload/CompletionQueue.hpp"
 #include "metrics/workload/FileSystemUnderTest.hpp"
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace metrics
@@ -39,6 +41,7 @@ namespace metrics
 
         void QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone) override;
         void IdleHint(const std::function<void()>& onDone) override;
+        std::optional<VolumeCounters> Counters() const override;
 
         bool completeSynchronously{ false };
         bool neverComplete{ false };
@@ -46,6 +49,10 @@ namespace metrics
         uint64_t unreportedBytes{ 0 };
         std::map<std::string, std::vector<uint8_t>> files;
         std::set<std::string> directories;
+        std::optional<VolumeCounters> counters;
+        VolumeCounters countedPerWrite;
+        std::map<std::string, VolumeCounters, std::less<>> countedPerWriteTo;
+        std::set<std::string, std::less<>> writtenTwice;
 
     private:
         struct OpenFile
@@ -55,6 +62,7 @@ namespace metrics
         };
 
         void Complete(const std::function<void(fs::Result result)>& onDone, fs::Result result);
+        void Written();
         uint32_t DeviceAddress(FileHandle file, std::size_t size) const;
         uint64_t UsedBytes() const;
 
@@ -63,6 +71,7 @@ namespace metrics
         std::vector<OpenFile> openFiles;
         std::vector<uint8_t> deviceBuffer;
         std::function<void(fs::Result result)> pendingCompletion;
+        std::optional<std::pair<infra::ConstByteRange, uint32_t>> pendingRepeat;
         CompletionQueue completions;
     };
 }

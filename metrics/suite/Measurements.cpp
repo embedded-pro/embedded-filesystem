@@ -2,14 +2,14 @@
 #include "metrics/workload/MetricComputations.hpp"
 #include <algorithm>
 #include <chrono>
+#include <limits>
+#include <optional>
 
 namespace metrics
 {
     namespace
     {
         constexpr uint32_t mebibyte = 1024 * 1024;
-        constexpr std::size_t appendWindow = 64;
-        constexpr uint32_t smallLogSize = 4096;
 
         uint32_t Scaled(uint32_t size, const WorkloadParameters& parameters)
         {
@@ -19,6 +19,14 @@ namespace metrics
         std::array<uint32_t, 3> OverwriteSizes(const WorkloadParameters& parameters)
         {
             return { std::max(Scaled(64 * 1024, parameters), overwriteSize), std::max(Scaled(mebibyte, parameters), overwriteSize), std::max(Scaled(4 * mebibyte, parameters), overwriteSize) };
+        }
+
+        double WindowRatio(const std::optional<infra::Duration>& numerator, const std::optional<infra::Duration>& denominator)
+        {
+            if (!numerator.has_value() || !denominator.has_value())
+                return std::numeric_limits<double>::infinity();
+
+            return Ratio(numerator.value_or(infra::Duration{}), denominator.value_or(infra::Duration{}));
         }
 
         double Milliseconds(infra::Duration duration)
@@ -72,7 +80,7 @@ namespace metrics
         {
             auto device = TotalDevice(Select(runner.Records(), phase));
             auto userBytes = TotalUserBytes(Select(runner.Records(), phase, Operation::write));
-            recorder.Record("W-1", phase, "B/s", Better::higher, BytesPerSecond(userBytes, device.deviceTime));
+            recorder.Record("W-1", phase, "B/s", Better::higher, BytesPerSecond(userBytes, ChargedDeviceTime(Select(runner.Records(), phase), runner.Device().TypicalSectorErase())));
             recorder.Record("W-4", phase, "ratio", Better::lower, Amplification(device.bytesWritten, userBytes));
         }
     }
@@ -81,16 +89,27 @@ namespace metrics
     {
         DataLogger(runner, parameters);
 
-        auto logSize = Scaled(4 * mebibyte, parameters);
-        auto fullLog = MeanAppendDeviceTime(runner.Records(), "L2", logSize - appendWindow * appendSize, appendWindow);
-        auto smallLog = MeanAppendDeviceTime(runner.Records(), "L2", smallLogSize, appendWindow);
-        recorder.Record("W-2", "L2", "ratio", Better::lower, Ratio(fullLog, smallLog), parameters.fillPercent);
+        auto sectorErase = runner.Device().TypicalSectorErase();
+        const auto& records = runner.Records();
+        if (runner.Subject().Counters().has_value())
+        {
+            auto fullLog = MeanAppendTime(LastCheckpointPeriods(records, "L2", checkpointPeriods), sectorErase);
+            auto smallLog = MeanAppendTime(CheckpointPeriodsFrom(records, secondLogPhase, smallLogSize, checkpointPeriods), sectorErase);
+            recorder.Record("W-2", "L2", "ratio", Better::lower, WindowRatio(fullLog, smallLog), parameters.fillPercent);
+        }
+        else
+        {
+            auto logSize = Scaled(4 * mebibyte, parameters);
+            auto fullLog = MeanAppendDeviceTime(records, "L2", logSize - appendWindow * appendSize, appendWindow);
+            auto smallLog = MeanAppendDeviceTime(records, secondLogPhase, smallLogSize, appendWindow);
+            recorder.Record("W-2", "L2", "ratio", Better::lower, WindowRatio(fullLog, smallLog), parameters.fillPercent);
+        }
 
-        auto phase = Select(runner.Records(), "L2");
-        auto userBytes = TotalUserBytes(Select(runner.Records(), "L2", Operation::write));
+        auto phase = Select(records, "L2");
+        auto userBytes = TotalUserBytes(Select(records, "L2", Operation::write));
         recorder.Record("W-4", "L2", "ratio", Better::lower, Amplification(TotalDevice(phase).bytesWritten, userBytes), parameters.fillPercent);
 
-        return DeviceTimePerOperation(phase, Operation::write);
+        return ChargedTimePerOperation(phase, Operation::write, sectorErase);
     }
 
     void MeasureFillScaling(MetricRecorder& recorder, infra::Duration perAppendLowFill, infra::Duration perAppendHighFill)
@@ -101,7 +120,7 @@ namespace metrics
     void MeasureDataLoggerLatency(Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters)
     {
         DataLogger(runner, parameters);
-        RecordLatency(recorder, "L2", PhaseLatencies(runner, { "L2" }));
+        RecordLatency(recorder, "L2", PhaseLatencies(runner, { "L2", std::string{ secondLogPhase } }));
     }
 
     void MeasureRandomOverwrite(Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters)
@@ -109,8 +128,9 @@ namespace metrics
         RandomOverwrite(runner, parameters);
 
         auto phases = RandomOverwritePhases(parameters);
-        auto large = DeviceTimePerOperation(Select(runner.Records(), phases.back()), Operation::write);
-        auto small = DeviceTimePerOperation(Select(runner.Records(), phases.front()), Operation::write);
+        auto sectorErase = runner.Device().TypicalSectorErase();
+        auto large = ChargedTimePerOperation(Select(runner.Records(), phases.back()), Operation::write, sectorErase);
+        auto small = ChargedTimePerOperation(Select(runner.Records(), phases.front()), Operation::write, sectorErase);
         recorder.Record("W-5", "L3", "ratio", Better::lower, Ratio(large, small), parameters.fillPercent);
     }
 
@@ -135,6 +155,14 @@ namespace metrics
 
         for (auto entries : { 10u, 100u, 1000u })
             recorder.Record("R-3", Phase("L6 lookup", entries), "ms", Better::lower, Milliseconds(DeviceTimePerOperation(Select(records, Phase("L6 lookup", entries)), Operation::open)));
+    }
+
+    void MeasureRandomReadRatio(const Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters)
+    {
+        auto sizes = OverwriteSizes(parameters);
+        auto largest = ReadRequestsPerOperation(Select(runner.Records(), Phase("L6 random", sizes.back())), Operation::read);
+        auto smallest = ReadRequestsPerOperation(Select(runner.Records(), Phase("L6 random", sizes.front())), Operation::read);
+        recorder.Record("R-2", "L6 random ratio", "ratio", Better::lower, CountRatio(largest, smallest));
     }
 
     void MeasureMount(Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters)

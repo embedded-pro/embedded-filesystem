@@ -49,7 +49,13 @@ namespace metrics
     void NorSubject::Mount(const std::function<void(fs::Result result)>& onDone)
     {
         auto& call = Start();
-        call.onDone = onDone;
+        call.onDone = [this, onDone, counted = Counters().value_or(VolumeCounters{})](fs::Result result)
+        {
+            if (result == fs::Result::success)
+                earlierMounts = counted;
+
+            onDone(result);
+        };
         fileSystem.Mount(Finisher(call));
     }
 
@@ -179,14 +185,10 @@ namespace metrics
             });
     }
 
-    std::optional<double> NorSubject::LevelingOverhead() const
+    std::optional<VolumeCounters> NorSubject::Counters() const
     {
         auto counters = fileSystem.Counters();
-        auto erasedBlocks = counters.erasedSectors / sectorsPerBlock;
-        if (erasedBlocks == 0)
-            return 0.0;
-
-        return static_cast<double>(counters.movedBlocks) / erasedBlocks;
+        return earlierMounts + VolumeCounters{ uint64_t{ counters.allocatedBlocks } * sectorsPerBlock, counters.erasedSectors / sectorsPerBlock, counters.checkpoints, counters.movedBlocks };
     }
 
     NorSubject::Call& NorSubject::Start(std::string_view path)

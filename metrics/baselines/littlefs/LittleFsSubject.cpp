@@ -30,7 +30,13 @@ namespace metrics
     }
 
     const LittleFsConfiguration littleFsDefault{ "littlefs/default", 16, 16, 16, 16, 500, false };
-    const LittleFsConfiguration littleFsRamMatched{ "littlefs/ram-matched", 16, 16, 2048, 1536, 500, true };
+
+    LittleFsConfiguration LittleFsRamMatched(const NorModel& model)
+    {
+        constexpr lfs_size_t lookaheadUnit = 8;
+        auto lookahead = (model.numberOfSectors + lookaheadUnit * lookaheadUnit - 1) / (lookaheadUnit * lookaheadUnit) * lookaheadUnit;
+        return { "littlefs/ram-matched", 16, 16, model.sectorSize, lookahead, 500, true };
+    }
 
     fs::Result LittleFsResult(int error)
     {

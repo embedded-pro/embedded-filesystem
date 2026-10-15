@@ -40,6 +40,26 @@ namespace metrics
         bool operator==(const DirectoryEntry& other) const = default;
     };
 
+    struct VolumeCounters
+    {
+        uint64_t allocatedSectors{};
+        uint64_t erasedBlocks{};
+        uint64_t checkpoints{};
+        uint64_t movedBlocks{};
+
+        VolumeCounters operator-(const VolumeCounters& earlier) const
+        {
+            return { allocatedSectors - earlier.allocatedSectors, erasedBlocks - earlier.erasedBlocks, checkpoints - earlier.checkpoints, movedBlocks - earlier.movedBlocks };
+        }
+
+        VolumeCounters operator+(const VolumeCounters& other) const
+        {
+            return { allocatedSectors + other.allocatedSectors, erasedBlocks + other.erasedBlocks, checkpoints + other.checkpoints, movedBlocks + other.movedBlocks };
+        }
+
+        bool operator==(const VolumeCounters& other) const = default;
+    };
+
     class FileSystemUnderTest
     {
     protected:
@@ -72,7 +92,7 @@ namespace metrics
         virtual void QueryUsage(const std::function<void(fs::Result result, VolumeUsage usage)>& onDone) = 0;
         virtual void IdleHint(const std::function<void()>& onDone) = 0;
 
-        virtual std::optional<double> LevelingOverhead() const
+        virtual std::optional<VolumeCounters> Counters() const
         {
             return std::nullopt;
         }

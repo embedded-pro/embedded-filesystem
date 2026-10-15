@@ -25,10 +25,16 @@ namespace fs
 
     void NorBlockEraser::Step(const infra::Function<void()>& onDone)
     {
+        Step(NorWear::least, onDone);
+    }
+
+    void NorBlockEraser::Step(NorWear wear, const infra::Function<void()>& onDone)
+    {
         onStepped = onDone;
         if (!block.has_value())
         {
-            block = LeastWornNotErased();
+            const auto& state = volume.State();
+            block = WornBlock(state.blocks, state.eraseCounts, NorBlockState::freeNotErased, wear);
             really_assert(block.has_value());
             sector = volume.Geometry().FirstSectorOfBlock(block.value_or(0));
         }
@@ -64,18 +70,6 @@ namespace fs
     void NorBlockEraser::Reset()
     {
         block = std::nullopt;
-    }
-
-    std::optional<uint32_t> NorBlockEraser::LeastWornNotErased() const
-    {
-        const auto& state = volume.State();
-        std::optional<uint32_t> leastWorn;
-
-        for (uint32_t candidate = superblocks; candidate != volume.Geometry().blocks; ++candidate)
-            if (state.blocks.State(candidate) == NorBlockState::freeNotErased && (!leastWorn.has_value() || state.eraseCounts.Count(candidate) < state.eraseCounts.Count(*leastWorn)))
-                leastWorn = candidate;
-
-        return leastWorn;
     }
 
     void NorBlockEraser::ProgramPartA()

@@ -101,15 +101,25 @@ TEST(NorMeasurementTest, results_go_to_the_global_report_with_the_device_describ
     EXPECT_THAT(metrics::GlobalReport().Json(), testing::HasSubstr("\"measurement-nor\": {"));
 }
 
-TEST(NorMeasurementTest, a_setup_whose_results_are_diagnostic_records_them_as_diagnostic)
+TEST(NorMeasurementTest, a_setup_with_targets_attaches_them_to_its_results)
 {
+    class AtMostTwo
+        : public metrics::Targets
+    {
+    public:
+        std::optional<metrics::Target> For(std::string_view, std::string_view) const override
+        {
+            return metrics::AtMost(2.0);
+        }
+    } targets;
+
     auto setup = fakeSetup;
-    setup.diagnostic = true;
+    setup.targets = &targets;
     metrics::NorMeasurement measurement{ setup };
 
     measurement.Recorder().Record("R-4", "L7", "ms", metrics::Better::lower, 1.0, 10);
 
-    EXPECT_TRUE(metrics::GlobalReport().Results().back().diagnostic);
+    EXPECT_EQ(true, metrics::GlobalReport().Results().back().pass);
 }
 
 TEST(NorSetupTest, is_named_after_its_label)

@@ -63,7 +63,7 @@ The shim exists only in the metrics harness; it is the blocking adapter that an 
 | Subject                | Version                               | Configuration                                                                                                                                                                                             |
 |------------------------|---------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `littlefs/default`     | v2.11.3                               | The example of the littlefs README: read and program size 16 B, cache 16 B, lookahead 16 B, 500 block cycles                                                                                              |
-| `littlefs/ram-matched` | v2.11.3                               | Read and program size 16 B, cache and lookahead sized so that its buffers with one open file use the RAM of `embedded-filesystem/nor`, 500 block cycles, and `lfs_fs_gc` when the volume is idle          |
+| `littlefs/ram-matched` | v2.11.3                               | Read and program size 16 B, a cache of one block and a lookahead of one bit per block, the most RAM littlefs can use, 500 block cycles, and `lfs_fs_gc` when the volume is idle                           |
 | `fatfs/default`        | R0.16, from the `abbrev/fatfs` mirror | The `ffconf.h` of FatFs, with what the workloads need: formatting, long file names in a static buffer, code page 437 and no real-time clock                                                               |
 | `fatfs/tuned`          | R0.16, from the `abbrev/fatfs` mirror | As `fatfs/default`, with fast seek on files opened for reading (a link map of 64 entries), `f_expand` for `ExpectSize`, trim mapped to a discard, and `f_mkfs` aligned to the allocation unit of the card |
 
@@ -71,6 +71,7 @@ littlefs runs on `nor-qspi-16m` and `internal-flash`, and on `nor-qspi-1m` for t
 On `internal-flash`, the file sizes of the workloads are divided by 64, so that they fit on 512 KiB.
 FatFs symbols are global and its options are compile-time, so every FatFs variant is built from its own copy of the sources next to an `ffconf.h` generated from the upstream one, and runs in its own executable.
 The RAM reported for a subject is the size of its state and buffers with one open file, which is what every workload needs.
+littlefs cannot use the RAM of `embedded-filesystem/nor`: its cache divides the block size, and its lookahead holds one bit per block, so `littlefs/ram-matched` takes the largest of both, a cache of 4096 B and a lookahead of 512 B on `nor-qspi-16m`, 2048 B and 32 B on `internal-flash`, and 4096 B and 32 B on `nor-qspi-1m`, and both RAMs are reported.
 
 ### Subjects of embedded-filesystem
 
@@ -84,8 +85,7 @@ On `internal-flash`, the NOR subject divides the file sizes of the workloads by 
 On `internal-flash`, the NOR subject also uses blocks of 2 sectors and names of at most 32 bytes, because the directory of 1000 files of L6 does not fit with the defaults.
 A block of one 2 KiB sector holds 3 nodes, and a node 3 inode records with names of 64 bytes, so the live nodes of the directory take more than half the device, and the garbage collection, which runs only while the node blocks could hold more than twice the live nodes, leaves the directory at 794 files.
 Blocks of 4 KiB hold 7 nodes, and inode records with names of 32 bytes take 116 bytes, 4 to a node, and the directory fits.
-Until its targets, it skips the call latency of L2 and L3 on `nor-qspi-16m`: formatting 4096 blocks at the maximum erase time takes 27 minutes, longer than the 10 minutes the runner allows a call.
-Its results are diagnostic until then too, so they are not compared with `main`: the erases and checkpoints of its background count in the phase where the volume settles or idles, which changes W-1, W-2, W-5 and W-6 with every step that changes the background, until the charge of erases described below replaces them.
+It skips the call latency of L2 and L3 on `nor-qspi-16m`: formatting 4096 blocks at the maximum erase time takes 27 minutes, longer than the 10 minutes the runner allows a call, so W-6 is asserted on `internal-flash`.
 P-1 is recorded from the power-cut sweep of each filesystem, on the small device models of the sweep.
 
 ### Erases on NOR
@@ -93,14 +93,14 @@ P-1 is recorded from the power-cut sweep of each filesystem, on the small device
 `fs::NorFileSystem::Format` leaves every block erased, and the NOR filesystem erases free blocks in the background, so how many erases a phase of a workload performs depends on how much of the pre-erased pool the phases before it left, and not only on the phase itself.
 On `nor-qspi-16m`, the 4 KiB writes of L1 find a pre-erased pool and run several times faster than any erase-bound filesystem could, while on `internal-flash` the pool runs out during the largest file of L3, so that only that phase pays foreground erases.
 So W-1, W-2, W-3 and W-5 charge the NOR subject one typical erase of a whole block for every block it allocated during the phase, instead of the erases it performed during the phase.
-The volume counts the blocks it allocates, and the subject reports the count with every call.
+The volume counts the blocks it allocates, and the runner records the count of every call, in sectors.
 The charge measures what sustained work costs: every block that is written was erased once, wherever that erase happened.
 
 ### Baseline results
 
 These are the first results of the baselines, on the typical timings of the device models above, except W-6, which uses the maximum timings.
 The metrics workflow measures them again on every pull request, and the full report is its `metrics.md`.
-The results of `littlefs/ram-matched` were measured with a cache of 2048 B and a lookahead of 1536 B, 7680 B of buffers with one open file, before it was sized to the RAM of `embedded-filesystem/nor`.
+The results of `littlefs/ram-matched` were measured with a cache of 2048 B and a lookahead of 1536 B, 7680 B of buffers with one open file, before it was given the most RAM littlefs can use.
 
 On `nor-qspi-16m`, with the littlefs configurations of the [baselines](#baselines):
 
@@ -149,15 +149,15 @@ What the baselines show:
 
 All workloads use a fixed random seed.
 
-| Workload | Description                                                                                                                                     |
-|----------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| L1       | Write one file of 1 MiB and one of 4 MiB sequentially, in chunks of 64 B, 512 B and 4 KiB, after announcing the size with `ExpectSize`          |
-| L2       | Data logger: append 64 B and call `Sync`, until the file reaches 4 MiB, with a 100 ms idle period after each append                             |
-| L3       | Overwrite 512 B at random offsets in a file of 64 KiB, 1 MiB and 4 MiB                                                                          |
-| L4       | Create, write, close and remove many small files of 100 B to 8 KiB                                                                              |
-| L5       | Fill 70 % of the volume with files that are never changed, then rewrite a 4 KiB configuration file repeatedly                                   |
-| L6       | Read sequentially, read at random offsets, seek to the end, list a directory, and open files by path in directories of 10, 100 and 1000 entries |
-| L7       | Mount the volume when it is 10 %, 50 % and 90 % full                                                                                            |
+| Workload | Description                                                                                                                                                                                             |
+|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| L1       | Write one file of 1 MiB and one of 4 MiB sequentially, in chunks of 64 B, 512 B and 4 KiB, after announcing the size with `ExpectSize`                                                                  |
+| L2       | Data logger: append 64 B and call `Sync`, until the file reaches 4 MiB, with a 100 ms idle period after each append; then the same into a second file until it holds the window of W-2, at most 128 KiB |
+| L3       | Overwrite 512 B at random offsets in a file of 64 KiB, 1 MiB and 4 MiB                                                                                                                                  |
+| L4       | Create, write, close and remove many small files of 100 B to 8 KiB                                                                                                                                      |
+| L5       | Fill 70 % of the volume with files that are never changed, then rewrite a 4 KiB configuration file repeatedly                                                                                           |
+| L6       | Read sequentially, read at random offsets, seek to the end, list a directory, and open files by path in directories of 10, 100 and 1000 entries                                                         |
+| L7       | Mount the volume when it is 10 %, 50 % and 90 % full                                                                                                                                                    |
 
 Workloads L2, L3 and L4 are run on volumes that are 10 %, 50 % and 90 % full, to measure the effect of the fill level.
 The fill level is the share of the space that the workload does not need for its own files: static files take that share of the capacity left after the largest size the workload's files reach, so that the workload still fits on a volume that is 90 % full.
@@ -166,23 +166,31 @@ The volume is filled until the usage reported by the filesystem reaches the fill
 
 ## Write metrics
 
-| Id  | Metric                      | Definition                                                                                              | Workloads | Target                                                                                                                    |
-|-----|-----------------------------|---------------------------------------------------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------------------------------------------|
-| W-1 | Sequential write throughput | User bytes written divided by total device time                                                         | L1        | At least the best baseline; on NOR at least 0.97 times it                                                                 |
-| W-2 | Append scaling              | Device time of one append and `Sync` when the file holds 4 MiB, divided by the same when it holds 4 KiB | L2        | At most 1.1, for NOR and FAT                                                                                              |
-| W-3 | Fill scaling                | Device time of one append and `Sync` on a 90 % full volume, divided by the same on a 10 % full volume   | L2        | At most 1.2                                                                                                               |
-| W-4 | Write amplification         | Bytes programmed on the device divided by user bytes written                                            | L1, L2    | At most 1.1 for L1; reported for L2                                                                                       |
-| W-5 | Overwrite scaling           | Device time of one overwrite in a 4 MiB file, divided by the same in a 64 KiB file                      | L3        | At most 1.2 on NOR                                                                                                        |
-| W-6 | Call latency                | 99th percentile and maximum of the simulated latency of one call                                        | L2, L3    | Maximum at maximum timings, independent of file size and fill level: at most one commit, as defined below for FAT and NOR |
+| Id  | Metric                      | Definition                                                                                                           | Workloads | Target                                                                                                                    |
+|-----|-----------------------------|----------------------------------------------------------------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------------------------------------------|
+| W-1 | Sequential write throughput | User bytes written divided by total device time                                                                      | L1        | At least the best baseline; on NOR at least 0.97 times it                                                                 |
+| W-2 | Append scaling              | Device time of one append and `Sync` when the file holds 4 MiB, divided by the same when the second file holds 4 KiB | L2        | At most 1.1, for FAT, and for NOR on `nor-qspi-16m`                                                                       |
+| W-3 | Fill scaling                | Device time of one append and `Sync` on a 90 % full volume, divided by the same on a 10 % full volume                | L2        | At most 1.2                                                                                                               |
+| W-4 | Write amplification         | Bytes programmed on the device divided by user bytes written                                                         | L1, L2    | At most 1.1 for L1; reported for L2                                                                                       |
+| W-5 | Overwrite scaling           | Device time of one overwrite in a 4 MiB file, divided by the same in a 64 KiB file                                   | L3        | At most 1.2 on NOR                                                                                                        |
+| W-6 | Call latency                | 99th percentile and maximum of the simulated latency of one call                                                     | L2, L3    | Maximum at maximum timings, independent of file size and fill level: at most one commit, as defined below for FAT and NOR |
 
 On FAT, one commit is 2 block writes plus one per copy of the FAT, 3 flushes and two allocation unit openings, plus the one background read that a call may wait for.
 The card keeps only its most recently written allocation units open, so the first commit after writes elsewhere opens both the unit of its data and the unit of the FAT and the directory, whichever filesystem makes it; with 2 FAT copies on `sd-card-256m` the bound is 1021.0 ms.
 
 On NOR, one commit is one sector erase, either of the background or of the call itself when the pre-erased pool is below its watermark, plus one checkpoint or one static wear leveling move, whichever takes longer, plus the copy-on-write of two blocks with their part B, one record and the start of a new journal block.
-A checkpoint is the programming of `cachedNodes` nodes, of part B of the node blocks they need, and of the checkpoint block.
-`metrics::NorTargets` computes the bound from the maximum timings of the model and the default configuration; on `nor-qspi-16m` it is about 631 ms.
+A checkpoint is the programming of twice `cachedNodes` nodes, the most that a checkpoint with its collection step writes, of part B of the node blocks they need, and of the checkpoint block; a move is the erase of its destination after finishing a block that the eraser started, `2 × sectorsPerBlock - 1` sectors, the copy of one block and one record.
+`metrics::NorTargets` computes the bound from the maximum timings of the model and the configuration of the subject: 87.0 ms on `internal-flash`.
+The bound assumes that the background keeps the pre-erased pool, as it does in the idle periods of the data logger, so W-6 is asserted on L2.
+L3 overwrites without idle periods: the background never runs, the pool empties, and a call erases the blocks it allocates itself, up to 4 sectors for an overwrite that straddles two blocks, so W-6 is reported on L3.
 The 0.97 of W-1 on NOR allows for the header of every block, which leaves 4060 of 4096 bytes for data on `nor-qspi-16m`, where littlefs writes all of them.
+W-4 on the first phase of L1 is reported for NOR on `internal-flash`: its file of 16 KiB pays the first checkpoint after the mount, about 1.7 KB, as the FAT subject pays the clean-shutdown bit on M-2 of that phase.
+W-1 on the three phases of L1 with the file of 16 KiB is reported for NOR on `internal-flash` too, and asserted on the phases with the file of 64 KiB: what a file pays once, its creation and the commit of its close, and in the first phase the first checkpoint after the mount, weighs more on a file divided by 64, which reaches 0.90 times littlefs, and 0.57 in the first phase.
+W-2 measures its 4 KiB window on a second file, which L2 starts once the first holds 4 MiB, so that both windows see a volume of the same age: at 4 KiB into the first file, a fresh volume has not yet reached the steady state of its garbage collection and checkpoints.
+The second file stops once it holds its window: 64 appends from 4 KiB, or for a subject that counts its checkpoints, two checkpoints more than the periods of the window after 4 KiB, so that it takes little space on a full volume.
+W-2 on NOR is asserted on `nor-qspi-16m` and reported on `internal-flash`: there the first file of 64 KiB holds about 8 checkpoint periods, while the collection of node blocks runs in bursts further apart than a window at 50 % fill, so a window of 4 periods measures whether it holds a burst.
 W-2 on NOR averages windows that start after a checkpoint and span 4 whole checkpoint periods, counted by the volume, instead of 64 appends: a checkpoint costs more than 64 appends of 64 bytes, so a window of 64 appends would measure whether it holds a checkpoint rather than the size of the file.
+A window that the run cannot fill makes W-2 infinite, which fails its target.
 
 ## Read metrics
 
@@ -212,8 +220,9 @@ For SD cards and eMMC, wear leveling is done by the card, and the device metrics
 The short run of L5 on `nor-qspi-16m` stops at a mean of 4 erases per sector.
 That is too short to level 70 % of static data cheaply: keeping the highest count within 1.2 times the mean after 4 erases per block takes about three moves per static block, about half of all erases.
 On a long run, a static block moves once every `staticWearLevelingThreshold` erases of the others, so the moves cost about 0.7 divided by the threshold of all erases, and the spread stays within the threshold.
-So every NOR subject also records WL-1 and WL-2 on the lifetime run of L5 on `nor-qspi-1m`, which reaches a mean of several hundred erases, and the targets apply there; on L4 and on the short run of L5 they are reported.
-WL-4 counts the moves of static wear leveling and the erased blocks from the counters of the volume, and is recorded only for `embedded-filesystem/nor`; on the short run of L5 it is reported.
+So every NOR subject also records WL-1 and WL-2 on the lifetime run of L5 on `nor-qspi-1m`, which reaches a mean of several hundred erases, and the targets apply there, through the `metrics::NorTargets` of that run, made with `metrics::WearTargets::asserted`; on L4 and on the short run of L5 they are reported.
+WL-4 counts the moves of static wear leveling and the erased blocks from the counters of the volume, and is recorded only for `embedded-filesystem/nor`, with its target on the lifetime run; on the short run of L5 it is reported.
+L5 has no idle periods, so the background never runs there, and the moves on the lifetime run are those of the foreground fallback, which erases its destination when the pool is empty.
 WL-3 is reported, and `merge_report.py` adds its ratio to the best littlefs subject to the summary.
 
 ## Device metrics for SD cards and eMMC
@@ -278,7 +287,7 @@ Every metric executable writes a fragment with the device models it used and one
 The targets of a subject come from its `metrics::Targets`, which the metric executable gives to its `metrics::MetricRecorder`: `metrics::FatTargets` for the FAT subject and its power-cut sweep, and `metrics::NorTargets` for the NOR subject and its power-cut sweep, each computing the W-6 bound from the timings of the device model; baselines record no targets.
 A target is either a bound, such as `<= 1.1`, which the metric executable decides, or a comparison with other subjects, such as `>= baselines` (the best of FatFs and littlefs), `<= fatfs` (the best FatFs configuration) or `>= 0.97 baselines` (0.97 times the best baseline), which is decided when the fragments are merged.
 `metrics/report/merge_report.py` merges the fragments into `metrics.json`, with the same shape, and writes a Markdown summary of it, `metrics.md`.
-Given the `metrics.json` of `main` with `--baseline`, it marks a reported metric of embedded-filesystem as failed when it is worse than on `main` by more than 5 %, in the direction given by `better`; results on a device model whose parameters changed, and results that the metric executables mark as `diagnostic`, are not compared.
+Given the `metrics.json` of `main` with `--baseline`, it marks a reported metric of embedded-filesystem as failed when it is worse than on `main` by more than 5 %, in the direction given by `better`; results on a device model whose parameters changed, and results that the metric executables mark as `diagnostic` or that were diagnostic on `main`, are not compared.
 The metrics workflow posts the summary as a comment on the pull request, updating the same comment on every push.
 The `metrics.json` of `main` is kept as a workflow artifact and used to detect regressions.
 
@@ -286,7 +295,7 @@ The `metrics.json` of `main` is kept as a workflow artifact and used to detect r
 
 Every subject, embedded-filesystem and the baselines alike, implements `metrics::FileSystemUnderTest`, an asynchronous interface whose operations complete through callbacks.
 `metrics::Runner` calls the subject, checks that no call completes before the event dispatcher runs, runs the virtual clock until the call completes, and records the latency, the device work and the result of every call, together with the phase of the workload it belongs to.
-A subject whose volume counts its allocations and checkpoints, as `embedded-filesystem/nor` does, reports them too, and the runner records them with every call.
+A subject whose volume counts its work, as `embedded-filesystem/nor` does, reports the sectors of the blocks it allocated, the blocks it erased, its checkpoints and the blocks it moved, and the runner records how much each call and each idle period added.
 Idle periods and settling are recorded too, so that background work counts.
 The workloads in `metrics/workload/Workloads.cpp` drive the runner, and `metrics/workload/MetricComputations.cpp` turns the records of a phase into the metrics of this document.
 Phases are named after the workload and its parameters, such as `L1 1048576 64` for 64 B chunks in a 1 MiB file, or `L6 lookup 100` for lookups in a directory of 100 entries.

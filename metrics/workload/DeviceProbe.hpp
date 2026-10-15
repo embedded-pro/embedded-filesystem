@@ -18,6 +18,7 @@ namespace metrics
         uint64_t bytesRead{};
         uint64_t bytesWritten{};
         infra::Duration deviceTime{};
+        infra::Duration eraseTime{};
 
         DeviceSnapshot operator-(const DeviceSnapshot& earlier) const;
         DeviceSnapshot operator+(const DeviceSnapshot& other) const;
@@ -36,6 +37,7 @@ namespace metrics
         virtual DeviceSnapshot Snapshot() const = 0;
         virtual uint64_t CapacityBytes() const = 0;
         virtual std::string_view ModelName() const = 0;
+        virtual infra::Duration TypicalSectorErase() const = 0;
     };
 
     class MeteredFlashProbe
@@ -47,6 +49,7 @@ namespace metrics
         DeviceSnapshot Snapshot() const override;
         uint64_t CapacityBytes() const override;
         std::string_view ModelName() const override;
+        infra::Duration TypicalSectorErase() const override;
 
     private:
         const MeteredFlash& flash;
@@ -61,6 +64,7 @@ namespace metrics
         DeviceSnapshot Snapshot() const override;
         uint64_t CapacityBytes() const override;
         std::string_view ModelName() const override;
+        infra::Duration TypicalSectorErase() const override;
 
     private:
         const MeteredBlockDevice& device;

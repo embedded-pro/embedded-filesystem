@@ -204,6 +204,7 @@ namespace metrics
 
         auto startTime = time.Now();
         auto deviceBefore = device.Snapshot();
+        auto countersBefore = subject.Counters();
         bool hinted = false;
 
         subject.IdleHint([&hinted]
@@ -219,7 +220,7 @@ namespace metrics
         if (time.Now() < startTime + duration)
             time.RunFor(startTime + duration - time.Now());
 
-        RecordIdle(startTime, deviceBefore);
+        RecordIdle(startTime, deviceBefore, countersBefore);
     }
 
     bool Runner::Settle(infra::Duration limit)
@@ -229,8 +230,9 @@ namespace metrics
 
         auto startTime = time.Now();
         auto deviceBefore = device.Snapshot();
+        auto countersBefore = subject.Counters();
         auto idle = time.RunUntilIdle(limit);
-        RecordIdle(startTime, deviceBefore);
+        RecordIdle(startTime, deviceBefore, countersBefore);
         return idle;
     }
 
@@ -261,6 +263,7 @@ namespace metrics
 
         auto startTime = time.Now();
         auto deviceBefore = device.Snapshot();
+        auto countersBefore = subject.Counters();
         std::optional<fs::Result> result;
 
         start([&result](fs::Result completed)
@@ -279,12 +282,21 @@ namespace metrics
             return fs::Result::deviceError;
         }
 
-        records.push_back({ operation, phase, *result, userBytes, fileSizeBefore, time.Now() - startTime, device.Snapshot() - deviceBefore });
+        records.push_back({ operation, phase, *result, userBytes, fileSizeBefore, time.Now() - startTime, device.Snapshot() - deviceBefore, CountedSince(countersBefore) });
         return *result;
     }
 
-    void Runner::RecordIdle(infra::TimePoint startTime, const DeviceSnapshot& deviceBefore)
+    void Runner::RecordIdle(infra::TimePoint startTime, const DeviceSnapshot& deviceBefore, const std::optional<VolumeCounters>& countersBefore)
     {
-        records.push_back({ Operation::idle, phase, fs::Result::success, 0, 0, time.Now() - startTime, device.Snapshot() - deviceBefore });
+        records.push_back({ Operation::idle, phase, fs::Result::success, 0, 0, time.Now() - startTime, device.Snapshot() - deviceBefore, CountedSince(countersBefore) });
+    }
+
+    std::optional<VolumeCounters> Runner::CountedSince(const std::optional<VolumeCounters>& countersBefore) const
+    {
+        auto countersAfter = subject.Counters();
+        if (!countersBefore.has_value() || !countersAfter.has_value())
+            return std::nullopt;
+
+        return *countersAfter - *countersBefore;
     }
 }

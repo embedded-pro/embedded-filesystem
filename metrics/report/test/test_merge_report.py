@@ -86,6 +86,23 @@ class MergeTest(unittest.TestCase):
 
         self.assertTrue(self.find(results, "embedded-filesystem/nor")["pass"])
 
+    def test_a_factor_of_the_best_baseline_passes_when_the_value_reaches_the_factor_times_the_baseline(self):
+        results = self.merged([result(value=97.0, target=">= 0.97 baselines")], [result(subject="littlefs/default", value=100.0)])
+
+        own = self.find(results, "embedded-filesystem/nor")
+        self.assertTrue(own["pass"])
+        self.assertEqual(100.0, own["referenceValue"])
+
+    def test_a_factor_of_the_best_baseline_fails_below_the_factor_times_the_baseline(self):
+        results = self.merged([result(value=96.0, target=">= 0.97 baselines")], [result(subject="littlefs/default", value=100.0)])
+
+        self.assertFalse(self.find(results, "embedded-filesystem/nor")["pass"])
+
+    def test_a_factor_in_exponent_notation_scales_the_best_baseline(self):
+        results = self.merged([result(value=1500.0, target=">= 1e+01 baselines")], [result(subject="littlefs/default", value=100.0)])
+
+        self.assertTrue(self.find(results, "embedded-filesystem/nor")["pass"])
+
     def test_at_most_a_family_compares_with_its_lowest_member(self):
         results = self.merged(
             [result(metric="M-3", value=4.0, target="<= fatfs", better="lower")],
@@ -190,6 +207,12 @@ class RegressionTest(unittest.TestCase):
 
         self.assertNotIn("regression", compared)
 
+    def test_a_result_that_was_diagnostic_on_main_is_not_compared(self):
+        compared = self.compared(result(value=50.0), result(value=100.0, diagnostic=True))
+
+        self.assertNotIn("regression", compared)
+        self.assertNotIn("pass", compared)
+
     def test_a_changed_device_model_is_not_compared(self):
         compared = self.compared(result(value=50.0), result(value=100.0), {"nor-qspi-16m": {"sectors": "256"}})
 
@@ -210,6 +233,22 @@ class MarkdownTest(unittest.TestCase):
         text = merge_report.markdown(self.report(result(target="<= 1", **{"pass": True}), result(metric="W-2"), result(metric="W-4", **{"pass": False})))
 
         self.assertIn("3 results: 1 passed, 1 failed, 1 reported.", text)
+
+    def test_markdown_gives_the_lifetime_of_each_own_subject_against_the_best_littlefs(self):
+        text = merge_report.markdown(
+            self.report(
+                result(metric="WL-3", workload="L5", value=900.0),
+                result(metric="WL-3", workload="L5", subject="littlefs/default", value=300.0),
+                result(metric="WL-3", workload="L5", subject="littlefs/ram-matched", value=200.0),
+            )
+        )
+
+        self.assertIn("WL-3 on nor-qspi-16m: embedded-filesystem/nor writes 3 times the user data of littlefs/default.", text)
+
+    def test_markdown_without_a_littlefs_lifetime_gives_no_ratio(self):
+        text = merge_report.markdown(self.report(result(metric="WL-3", workload="L5", value=900.0)))
+
+        self.assertNotIn("times the user data", text)
 
     def test_markdown_has_a_table_per_device_with_a_column_per_subject(self):
         text = merge_report.markdown(

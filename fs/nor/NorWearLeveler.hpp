@@ -40,6 +40,7 @@ namespace fs
         bool IsWorthAMove() const;
         Candidates Scan() const;
         bool IsMovable(uint32_t block) const;
+        bool NodeDestinationIsMoreWorn() const;
         void MoveNodes();
         void MoveData();
         void HeaderRead();

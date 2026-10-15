@@ -5,11 +5,6 @@
 
 namespace fs
 {
-    namespace
-    {
-        constexpr uint32_t superblocks = 2;
-    }
-
     NorBlockAllocator::NorBlockAllocator(NorVolume& volume)
         : volume(volume)
     {}
@@ -23,12 +18,12 @@ namespace fs
 
     void NorBlockAllocator::Allocate(NorBlockType allocationType, const NorBlockOwner& allocationOwner, NorReserve reserve, NorWear allocationWear, const infra::Function<void(std::optional<uint32_t> block)>& onAllocated)
     {
+        const auto& blocks = volume.State().blocks;
         type = allocationType;
         owner = allocationOwner;
-        wear = allocationWear;
+        wear = allocationWear == NorWear::most && blocks.Count(NorBlockState::freeErased) == 0 ? NorWear::mostFree : allocationWear;
         onDone = onAllocated;
 
-        const auto& blocks = volume.State().blocks;
         if (reserve == NorReserve::kept && blocks.Count(NorBlockState::freeErased) + blocks.Count(NorBlockState::freeNotErased) <= volume.Geometry().ReserveBlocks())
             onDone(std::nullopt);
         else
@@ -38,28 +33,29 @@ namespace fs
     std::optional<uint32_t> NorBlockAllocator::ErasedOfWear() const
     {
         const auto& state = volume.State();
-        std::optional<uint32_t> chosen;
+        return WornBlock(state.blocks, state.eraseCounts, NorBlockState::freeErased, wear);
+    }
 
-        for (uint32_t candidate = superblocks; candidate != volume.Geometry().blocks; ++candidate)
-            if (state.blocks.State(candidate) == NorBlockState::freeErased && (!chosen.has_value() || (wear == NorWear::least ? state.eraseCounts.Count(candidate) < state.eraseCounts.Count(*chosen) : state.eraseCounts.Count(candidate) > state.eraseCounts.Count(*chosen))))
-                chosen = candidate;
-
-        return chosen;
+    bool NorBlockAllocator::IsWornEnough(uint32_t erased) const
+    {
+        const auto& state = volume.State();
+        auto notErased = WornBlock(state.blocks, state.eraseCounts, NorBlockState::freeNotErased, NorWear::most);
+        return wear != NorWear::mostFree || !notErased.has_value() || state.eraseCounts.Count(erased) >= state.eraseCounts.Count(notErased.value_or(0));
     }
 
     void NorBlockAllocator::TakeErased()
     {
         auto erased = ErasedOfWear();
         auto& eraser = volume.Eraser();
-        if (erased.has_value())
+        if (erased.has_value() && IsWornEnough(erased.value_or(0)))
         {
-            block = *erased;
+            block = erased.value_or(0);
             ProgramPartB();
         }
         else if (eraser.HasWork())
         {
             eraser.CountAsRefill();
-            eraser.Step([this]
+            eraser.Step(wear, [this]
                 {
                     TakeErased();
                 });

@@ -240,3 +240,53 @@ TEST_F(RunnerTest, settle_returns_false_when_work_continues_past_the_limit)
 
     EXPECT_FALSE(runner.Settle(10ms));
 }
+
+TEST_F(RunnerTest, a_call_of_a_subject_that_counts_records_the_counters_it_changed)
+{
+    subject.counters = metrics::VolumeCounters{};
+    subject.countedPerWrite = metrics::VolumeCounters{ .allocatedSectors = 2, .checkpoints = 1 };
+    auto file = OpenForWriting();
+
+    runner.Write(file, infra::MakeRange(data));
+
+    EXPECT_EQ((metrics::VolumeCounters{ .allocatedSectors = 2, .checkpoints = 1 }), runner.Records().back().counters);
+}
+
+TEST_F(RunnerTest, a_call_of_a_subject_that_does_not_count_records_no_counters)
+{
+    auto file = OpenForWriting();
+
+    runner.Write(file, infra::MakeRange(data));
+
+    EXPECT_EQ(std::nullopt, runner.Records().back().counters);
+}
+
+TEST_F(RunnerTest, idle_records_the_counters_changed_in_the_background)
+{
+    subject.counters = metrics::VolumeCounters{};
+    infra::TimerSingleShot background{ 50ms, [this]
+        {
+            subject.counters->movedBlocks += 1;
+        } };
+
+    runner.Idle(100ms);
+
+    EXPECT_EQ((metrics::VolumeCounters{ .movedBlocks = 1 }), runner.Records().back().counters);
+}
+
+TEST_F(RunnerTest, idle_records_the_time_the_device_spent_erasing)
+{
+    infra::TimerSingleShot background{ 50ms, [this]
+        {
+            metered.EraseSectors(0, 1, [] {});
+        } };
+
+    runner.Idle(100ms);
+
+    EXPECT_EQ(45ms, runner.Records().back().device.eraseTime);
+}
+
+TEST_F(RunnerTest, the_device_gives_the_typical_time_to_erase_a_sector)
+{
+    EXPECT_EQ(45ms, probe.TypicalSectorErase());
+}

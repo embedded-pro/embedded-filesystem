@@ -24,6 +24,7 @@ namespace metrics
     void MeasureRandomOverwrite(Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters);
     void MeasureRandomOverwriteLatency(Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters);
     void MeasureReads(Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters);
+    void MeasureRandomReadRatio(const Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters);
     void MeasureMount(Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters);
 }
 

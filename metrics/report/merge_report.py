@@ -11,6 +11,8 @@ OWN_SUBJECT_PREFIX = "embedded-filesystem"
 ALL_BASELINES = "baselines"
 REGRESSION_TOLERANCE = 0.05
 TARGET_PATTERN = re.compile(r"^(<=|>=) (.+)$")
+LIFETIME_METRIC = "WL-3"
+LIFETIME_FAMILY = "littlefs"
 METRIC_PATTERN = re.compile(r"^([A-Z]+)-(\d+)$")
 NUMBER_PATTERN = re.compile(r"(\d+)")
 
@@ -35,9 +37,14 @@ def parse_target(text):
         raise ReportError(f"unknown target '{text}'")
     comparison, reference = match.groups()
     try:
-        return comparison, float(reference)
+        return comparison, float(reference), 1.0
     except ValueError:
-        return comparison, reference
+        pass
+    factor, _, family = reference.partition(" ")
+    try:
+        return comparison, family, float(factor)
+    except ValueError:
+        return comparison, reference, 1.0
 
 
 def comparison_key(result):
@@ -85,7 +92,7 @@ def best_reference(results, result, comparison, family):
 
 
 def decide_relative_target(results, result):
-    comparison, reference = parse_target(result["target"])
+    comparison, reference, factor = parse_target(result["target"])
     if isinstance(reference, float):
         return
     best = best_reference(results, result, comparison, reference)
@@ -94,7 +101,7 @@ def decide_relative_target(results, result):
         return
     result["referenceSubject"] = best["subject"]
     result["referenceValue"] = best["value"]
-    result["pass"] = result.get("value") is not None and holds(comparison, result["value"], best["value"])
+    result["pass"] = result.get("value") is not None and holds(comparison, result["value"], factor * best["value"])
 
 
 def decide_relative_targets(results):
@@ -121,7 +128,7 @@ def compare_with_baseline(results, devices, baseline):
         if devices.get(result["device"]) != earlier_devices.get(result["device"]):
             result["note"] = "device model changed since the baseline"
             continue
-        if "target" not in result and not result.get("diagnostic") and is_own(result["subject"]) and worsening(result, earlier["value"]) > REGRESSION_TOLERANCE:
+        if "target" not in result and not result.get("diagnostic") and not earlier.get("diagnostic") and is_own(result["subject"]) and worsening(result, earlier["value"]) > REGRESSION_TOLERANCE:
             result["regression"] = True
             result["pass"] = False
 
@@ -218,6 +225,19 @@ def failure_lines(results):
     return lines + [""]
 
 
+def lifetime_lines(results):
+    lines = []
+    for result in results:
+        if result["metric"] != LIFETIME_METRIC or not is_own(result["subject"]) or result.get("value") is None:
+            continue
+        best = best_reference(results, result, ">=", LIFETIME_FAMILY)
+        if best is None or not best["value"]:
+            continue
+        ratio = result["value"] / best["value"]
+        lines.append(f"{LIFETIME_METRIC} on {result['device']}: {result['subject']} writes {format_value(ratio)} times the user data of {best['subject']}.")
+    return lines + [""] if lines else []
+
+
 def device_rows(devices):
     for name in sorted(devices):
         for parameter, value in devices[name].items():
@@ -227,6 +247,7 @@ def device_rows(devices):
 def markdown(report):
     results = report["results"]
     lines = ["## Metrics", "", summary(results), ""]
+    lines.extend(lifetime_lines(results))
     lines.extend(failure_lines(results))
     for device in sorted({result["device"] for result in results}):
         lines.extend([f"### {device}", ""])

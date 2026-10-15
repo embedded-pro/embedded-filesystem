@@ -6,6 +6,7 @@
 #include "fs/nor/NorRadixTree.hpp"
 #include "fs/nor/NorRecord.hpp"
 #include "fs/nor/NorVolume.hpp"
+#include "fs/nor/NorWear.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 
@@ -16,6 +17,11 @@ namespace fs
         constexpr uint32_t superblocks = 2;
         constexpr uint32_t blockNumberBytes = 4;
         constexpr std::size_t nodesOfARecord = 2 * norMaxLevels;
+
+        bool IsFree(NorBlockState state)
+        {
+            return state == NorBlockState::freeErased || state == NorBlockState::freeNotErased;
+        }
     }
 
     NorWearLeveler::NorWearLeveler(NorVolume& volume)
@@ -49,7 +55,8 @@ namespace fs
         really_assert(from.has_value());
         source = from.value_or(0);
 
-        if (volume.State().nodeBlocks.Contains(source))
+        // A node move that is not worth it reads part B as a data move does, which gives it up
+        if (volume.State().nodeBlocks.Contains(source) && NodeDestinationIsMoreWorn())
             MoveNodes();
         else
             MoveData();
@@ -87,7 +94,7 @@ namespace fs
             auto count = counts.Count(candidate);
             candidates.highest = std::max(candidates.highest, count);
 
-            if (state.blocks.State(candidate) == NorBlockState::freeErased && (!candidates.destination.has_value() || count > counts.Count(candidates.destination.value_or(0))))
+            if (IsFree(state.blocks.State(candidate)) && (!candidates.destination.has_value() || count > counts.Count(candidates.destination.value_or(0))))
                 candidates.destination = candidate;
             else if (IsMovable(candidate) && (!candidates.source.has_value() || count < counts.Count(candidates.source.value_or(0))))
                 candidates.source = candidate;
@@ -103,6 +110,14 @@ namespace fs
             return false;
 
         return std::ranges::find(state.epoch, block) == state.epoch.end();
+    }
+
+    bool NorWearLeveler::NodeDestinationIsMoreWorn() const
+    {
+        const auto& state = volume.State();
+        auto erased = WornBlock(state.blocks, state.eraseCounts, NorBlockState::freeErased, NorWear::most);
+        auto destination = erased.has_value() ? erased : WornBlock(state.blocks, state.eraseCounts, NorBlockState::freeNotErased, NorWear::most);
+        return state.eraseCounts.Count(destination.value_or(source)) > state.eraseCounts.Count(source);
     }
 
     void NorWearLeveler::MoveNodes()
@@ -175,7 +190,7 @@ namespace fs
             return;
         }
 
-        volume.Allocator().Allocate(NorBlockType::data, owner, NorReserve::kept, NorWear::most, [this](std::optional<uint32_t> allocated)
+        volume.Allocator().Allocate(NorBlockType::data, owner, NorReserve::kept, NorWear::mostFree, [this](std::optional<uint32_t> allocated)
             {
                 Allocated(allocated);
             });

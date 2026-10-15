@@ -143,7 +143,44 @@ TEST_F(WorkloadsTest, data_logger_appends_syncs_and_idles)
     EXPECT_EQ(expected, Operations("L2"));
     EXPECT_EQ(1024, subject.files.at("/log").size());
     EXPECT_TRUE(HoldsPattern("/log", 200));
-    EXPECT_EQ(16, subject.idleHints);
+}
+
+TEST_F(WorkloadsTest, data_logger_appends_a_second_log_once_the_first_is_full)
+{
+    parameters.scaleDivisor = 4096;
+
+    metrics::DataLogger(runner, parameters);
+
+    std::vector<metrics::Operation> expected{ metrics::Operation::open };
+    for (int append = 0; append != 16; ++append)
+        expected.insert(expected.end(), { metrics::Operation::write, metrics::Operation::sync, metrics::Operation::idle });
+    expected.push_back(metrics::Operation::close);
+
+    EXPECT_EQ(expected, Operations(metrics::secondLogPhase));
+    EXPECT_EQ(1024, subject.files.at("/log2").size());
+    EXPECT_TRUE(HoldsPattern("/log2", 201));
+    EXPECT_EQ(32, subject.idleHints);
+}
+
+TEST_F(WorkloadsTest, the_second_log_stops_once_it_holds_64_appends_from_4_kib)
+{
+    parameters.scaleDivisor = 64;
+
+    metrics::DataLogger(runner, parameters);
+
+    EXPECT_EQ(64 * 1024, subject.files.at("/log").size());
+    EXPECT_EQ(8192, subject.files.at("/log2").size());
+}
+
+TEST_F(WorkloadsTest, the_second_log_of_a_subject_that_counts_stops_two_checkpoints_after_the_periods_from_4_kib)
+{
+    parameters.scaleDivisor = 64;
+    subject.counters = metrics::VolumeCounters{};
+    subject.countedPerWrite = metrics::VolumeCounters{ .checkpoints = 1 };
+
+    metrics::DataLogger(runner, parameters);
+
+    EXPECT_EQ(4096 + (metrics::checkpointPeriods + 2) * metrics::appendSize, subject.files.at("/log2").size());
 }
 
 TEST_F(WorkloadsTest, data_logger_records_the_growing_file_size)
@@ -157,13 +194,13 @@ TEST_F(WorkloadsTest, data_logger_records_the_growing_file_size)
     EXPECT_EQ(960, writes.back()->fileSizeBefore);
 }
 
-TEST_F(WorkloadsTest, workloads_fill_the_volume_first_when_asked)
+TEST_F(WorkloadsTest, data_logger_reserves_both_logs_when_filling)
 {
     parameters.fillPercent = 50;
 
     metrics::DataLogger(runner, parameters);
 
-    EXPECT_EQ(96 * 1024, metrics::TotalUserBytes(Phase("fill", metrics::Operation::write)));
+    EXPECT_EQ(64 * 1024, metrics::TotalUserBytes(Phase("fill", metrics::Operation::write)));
 }
 
 TEST_F(WorkloadsTest, random_overwrite_reserves_twice_its_largest_file_when_filling)

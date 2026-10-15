@@ -62,7 +62,8 @@ namespace
 }
 
 INSTANTIATE_TEST_SUITE_P(Default, LittleFsSubjectTest, testing::Values(&metrics::littleFsDefault));
-INSTANTIATE_TEST_SUITE_P(RamMatched, LittleFsSubjectTest, testing::Values(&metrics::littleFsRamMatched));
+const metrics::LittleFsConfiguration ramMatchedOnTestNor = metrics::LittleFsRamMatched(testNor);
+INSTANTIATE_TEST_SUITE_P(RamMatched, LittleFsSubjectTest, testing::Values(&ramMatchedOnTestNor));
 
 TEST(LittleFsResultTest, maps_littlefs_errors)
 {
@@ -94,14 +95,29 @@ TEST_P(LittleFsSubjectTest, ram_counts_the_filesystem_its_buffers_and_one_open_f
     EXPECT_EQ(sizeof(lfs_t) + 3 * cache + GetParam()->lookaheadSize + sizeof(lfs_file_t), subject.RamBytes());
 }
 
-TEST_P(LittleFsSubjectTest, reports_no_leveling_overhead)
+TEST_P(LittleFsSubjectTest, reports_no_volume_counters)
 {
-    EXPECT_EQ(std::nullopt, subject.LevelingOverhead());
+    EXPECT_EQ(std::nullopt, subject.Counters());
 }
 
-TEST(LittleFsConfigurationTest, the_ram_matched_configuration_uses_the_ram_budget)
+TEST(LittleFsConfigurationTest, the_ram_matched_configuration_caches_a_whole_block_and_looks_ahead_over_every_block)
 {
-    EXPECT_EQ(7680, 3 * metrics::littleFsRamMatched.cacheSize + metrics::littleFsRamMatched.lookaheadSize);
+    auto onNorQspi16m = metrics::LittleFsRamMatched(metrics::norQspi16m);
+    EXPECT_EQ("littlefs/ram-matched", onNorQspi16m.name);
+    EXPECT_EQ(4096, onNorQspi16m.cacheSize);
+    EXPECT_EQ(512, onNorQspi16m.lookaheadSize);
+    EXPECT_TRUE(onNorQspi16m.collectGarbageWhenIdle);
+
+    auto onInternalFlash = metrics::LittleFsRamMatched(metrics::internalFlash);
+    EXPECT_EQ(2048, onInternalFlash.cacheSize);
+    EXPECT_EQ(32, onInternalFlash.lookaheadSize);
+}
+
+TEST(LittleFsConfigurationTest, the_lookahead_is_a_multiple_of_8_bytes)
+{
+    const metrics::NorModel oddNor{ "odd-nor", 100, 4096, 256, 1, metrics::norQspi16m.typical, metrics::norQspi16m.maximum };
+
+    EXPECT_EQ(16, metrics::LittleFsRamMatched(oddNor).lookaheadSize);
 }
 
 TEST_P(LittleFsSubjectTest, mount_of_an_unformatted_device_reports_corruption)

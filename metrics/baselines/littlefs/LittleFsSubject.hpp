@@ -3,6 +3,7 @@
 
 #include "lfs.h"
 #include "metrics/baselines/SynchronousDevices.hpp"
+#include "metrics/device/DeviceModels.hpp"
 #include "metrics/workload/CompletionQueue.hpp"
 #include "metrics/workload/FileSystemUnderTest.hpp"
 #include <array>
@@ -24,7 +25,7 @@ namespace metrics
     };
 
     extern const LittleFsConfiguration littleFsDefault;
-    extern const LittleFsConfiguration littleFsRamMatched;
+    LittleFsConfiguration LittleFsRamMatched(const NorModel& model);
 
     fs::Result LittleFsResult(int error);
 

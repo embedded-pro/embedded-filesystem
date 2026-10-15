@@ -331,7 +331,8 @@ During the mount scan, the fourth state marks the checkpoint and journal blocks 
 The erase count of every block is kept in RAM as one byte, relative to the lowest erase count of all blocks except the superblocks; counts are clamped at 255, and when no block remains at the lowest count, the counts are moved down to the new lowest one.
 
 Allocation takes the free erased block with the lowest erase count; this is dynamic wear leveling, and it needs no flash access.
-Erasing a block erases one sector per request, then programs part A with the erase count, so an erase in the background keeps a foreground call waiting for at most one sector erase.
+Static wear leveling takes the opposite: a data move takes the most-worn free block, which it erases first when it is not erased, after finishing a block that the eraser started, and a node move takes the most-worn erased blocks, erasing the most-worn free block in the same way only when no block is erased.
+Erasing a block erases one sector per request, then programs part A with the erase count, so an erase in the background keeps a foreground call waiting for at most one sector erase; a move is one unit, so a call that waits for a move waits for up to `2 × sectorsPerBlock - 1` sector erases.
 The background and the calls share one block in erasure: a call that finds the pool empty finishes the block that the background started before it takes another one, and a mount forgets it, because the block is no longer erased in part.
 The background erases every free block that is not erased, lowest erase count first, so when the volume has been idle long enough, every free block is in the pre-erased pool.
 
@@ -375,7 +376,10 @@ Live file data is never relocated by garbage collection; only static wear leveli
 A move is due when the spread exceeds `staticWearLevelingThreshold`, 64 by default, and the volume has erased at least `staticWearLevelingInterval` blocks since the last move, 32 by default; the first move after a mount does not wait for the interval, so a device that erases few blocks between two power cycles is leveled too.
 The volume counts the erased blocks as the erased sectors divided by `sectorsPerBlock`.
 The spread is the highest erase count of all blocks, the superblocks aside, minus the lowest erase count of a block that can be moved: a block in use that is not the checkpoint block, a journal block of the epoch, the node block being filled, or the block that the last move gave up.
-That least-worn block is the source, and the most-worn erased block of the pool the destination; a move is due only when the destination is more worn than the source.
+That least-worn block is the source, and the most-worn free block the destination, erased or not; a move is due only when the destination is more worn than the source.
+A data move takes the most-worn erased block of the pool when no free block that is not erased is more worn, and otherwise erases the most-worn free block; a node move takes the most-worn erased blocks, and erases the most-worn free block only when the pool is empty.
+A node move whose first node block, chosen this way, would not be more worn than the source is given up, because its nodes would land on a younger block.
+So static wear leveling also works on a volume whose pool is empty because it is never idle, and a node move, whose checkpoint may take several blocks, erases none of them while the pool holds erased ones.
 The least-worn block in use usually holds data that never changes; after the move, the data rests on a worn block, and the young block returns to the pool for frequently changing data.
 A move that is given up counts as a move for the interval, and the next move passes over its block, so a block that cannot be moved, such as the block that a log kept open appends into, does not stop the leveling of the others.
 
@@ -385,13 +389,14 @@ A move that is given up counts as a move for the interval, and the next move pas
   It allocates the destination as a write does, keeping the reserve, and copies only the committed bytes of the source: its payload up to the committed size, rounded up to the program unit.
   A record with a block set then maps the destination in place of the source, which is released; when the record could not be written, the destination is freed instead, and when it was written but not applied, the destination stays allocated until the next mount, which replays the record.
 * A node block: the move points the cursor of the collection at the block, closes the node block being filled, and writes a checkpoint at once.
-  Its collection step moves the live nodes of the block whether or not a collection is due, and its node blocks are the most-worn erased blocks of the pool; the block is freed when the checkpoint is complete, as a collected block is.
+  Its collection step moves the live nodes of the block whether or not a collection is due, and its node blocks are the most-worn erased blocks, as above; the block is freed when the checkpoint is complete, as a collected block is.
   When the step stops before the last slot of the block, the following checkpoints continue the move, and take their node blocks from the most-worn erased blocks until it is complete.
 * Checkpoint and journal blocks are not moved; they become free at the next checkpoint anyway.
 
 The background makes a move when one is due and the pool holds more erased blocks than twice the node blocks of a checkpoint.
 When the volume is never idle, the foreground makes it: an allocation of a call after `2 × staticWearLevelingInterval` erased blocks without a move, with a move due, arms the fallback.
-When that call releases the queue and the fallback is still due, with the pool as above, the background claims the queue ahead of every waiting call and makes one move; the next call waits for it.
+When that call releases the queue and the fallback is still due, the background claims the queue ahead of every waiting call and makes one move, whatever the pool holds; the next call waits for the move, with the erase of the destination when it was not erased.
+The fallback needs more free blocks than twice the node blocks of a checkpoint, erased or not, so that the checkpoint of a node move finds its blocks.
 An allocation of the background does not arm the fallback, so a call that waits for the background waits for one unit only, and the fallback is disarmed whenever the background releases the queue.
 So at most one move happens per interval and per mount, and its overhead is bounded by the configuration and measured by WL-4.
 
@@ -422,6 +427,7 @@ A power loss before step 5 leaves a device that completes `Mount` with `corrupte
    Only a configuration with a smaller cache than the one that wrote the journal can fill the cache during replay; the mount then writes a checkpoint whose epoch starts at the next record to replay, which is why a checkpoint names where its records start.
 5. Classify the remaining blocks: blocks with a valid part A and an erased part B are free and erased; every other block that is not in use is free and not erased.
    A block whose part A is not valid, because its erase was interrupted, gets the average erase count of the device as an estimate, as UBI does on Linux; this happens at most once per power loss and per block.
+   Static wear leveling erases the most-worn blocks, so such an estimate usually lowers the count of a worn block, by at most the spread, until its next erase.
 6. Continue the sequence after the highest one found.
 
 Step 2 reads the header of every block, so the time to mount grows with the size of the device, and is measured by R-4.
@@ -440,14 +446,13 @@ Background work runs when the volume has been idle for the idle delay, 10 ms by 
 Its lifecycle is a `services::TableStateMachine` with the states `Stopped`, `Waiting`, `Claiming` and `Working`.
 While it holds the queue, it does one unit of work at a time, in this order of priority:
 
-1. The move of the fallback of static wear leveling, when it is armed and still due, and the pool holds more erased blocks than twice the node blocks of a checkpoint.
-2. A checkpoint, when the journal is more than half full, when more than half the cache holds modified nodes, or when a collection is due, and only when the pool holds every block it may need: more erased blocks than the node blocks of a checkpoint of the whole cache, or than twice as many when a collection is due.
+1. The move of the fallback of static wear leveling, when it is armed and still due.
+2. A checkpoint, when the journal is more than half full or when more than half the cache holds modified nodes, and only when the pool holds every block it may need: more erased blocks than the node blocks of a checkpoint of the whole cache, or than twice as many when a collection is due.
 3. One sector erase of the free block that is not erased and has the lowest erase count, followed by its part A once its last sector is erased.
 4. A static wear leveling move, when one is due and the pool holds more erased blocks than twice the node blocks of a checkpoint.
 
-A checkpoint and a move are units that are not interrupted; an erase is one device request.
-Between two calls, the background checkpoints for a collection only until the cursor has left as many node blocks as could be collected at the first of these checkpoints.
-When the nodes it moves fill new blocks as fast as it frees others, or a block cannot be checked, the collection stays due, and the background then waits for the next call instead of moving the same nodes again and again.
+A checkpoint and a move are units that are not interrupted, and a move includes the erase of its destination; an erase is one device request.
+A collection that is due does not start a checkpoint by itself: it runs as the collection step of the next checkpoint, so the checkpoints, and the collection with them, follow the records and modified nodes of the calls.
 After each unit, the background releases the queue when a foreground operation waits, and continues after the next idle delay; it also releases it when no work is left, and the next idle delay looks again.
 The fallback claims the queue as soon as a call releases it, as described under [Static wear leveling](#static-wear-leveling), and does not wait for the idle delay.
 The machine starts when the volume is mounted and stops when it is unmounted; a claim that still waits then is withdrawn.
@@ -474,16 +479,16 @@ The power-cut sweep in [Testing.md](Testing.md) interrupts every operation and b
 
 ## Cost of operations
 
-| Operation                       | Flash work                                                                      | Independent of           |
-|---------------------------------|---------------------------------------------------------------------------------|--------------------------|
-| Small append followed by `Sync` | Programming the bytes in place and one record                                   | File size and fill level |
-| Append that completes a block   | Programming the bytes, part B of the next block and one record                  | File size and fill level |
-| Overwrite within one block      | One block read and programmed, one record, at most 3 node reads when not cached | File size and fill level |
-| Seek and read                   | At most 3 node reads when not cached, then the data                             | File size and fill level |
-| Allocation                      | None, unless the pre-erased pool is below its watermark; then one sector erase  | File size and fill level |
-| Checkpoint                      | The modified nodes, one collection step with the nodes it moves, the checkpoint | File size                |
-| Static wear leveling move       | The committed bytes of one data block and one record, or one checkpoint         | File size and fill level |
-| Mount                           | One header read per block, the checkpoint and the journal                       | File size                |
+| Operation                       | Flash work                                                                               | Independent of           |
+|---------------------------------|------------------------------------------------------------------------------------------|--------------------------|
+| Small append followed by `Sync` | Programming the bytes in place and one record                                            | File size and fill level |
+| Append that completes a block   | Programming the bytes, part B of the next block and one record                           | File size and fill level |
+| Overwrite within one block      | One block read and programmed, one record, at most 3 node reads when not cached          | File size and fill level |
+| Seek and read                   | At most 3 node reads when not cached, then the data                                      | File size and fill level |
+| Allocation                      | None, unless the pre-erased pool is below its watermark; then one sector erase           | File size and fill level |
+| Checkpoint                      | The modified nodes, one collection step with the nodes it moves, the checkpoint          | File size                |
+| Static wear leveling move       | The erase of the destination when needed, one data block and a record, or one checkpoint | File size and fill level |
+| Mount                           | One header read per block, the checkpoint and the journal                                | File size                |
 
 ## RAM use
 
@@ -497,7 +502,7 @@ The power-cut sweep in [Testing.md](Testing.md) interrupts every operation and b
 | Each open file | Position, size, 8 uncommitted entries and a buffer of one page, or of the inline area if larger |
 
 For a 16 MiB device with 4 KiB blocks, that is 4096 blocks, so 1 KiB for the block states, 4 KiB for the erase counts and 0.5 KiB for the node blocks, plus 8 KiB for the default cache of 16 nodes of 512 bytes, and about 0.6 KiB per open file: about 14 KiB with one open file.
-The state of the volume, its handles and its operations comes on top: the metrics report 19,544 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M.
+The state of the volume, its handles and its operations comes on top: the metrics report 19,528 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M.
 Using larger blocks reduces the tables proportionally: with 64 KiB blocks, the same device needs 352 bytes for block states, erase counts and node blocks, and about 9 KiB in all.
 This is more RAM than littlefs needs for the same device; it is the price of allocation without traversal and of wear leveling based on actual erase counts.
 

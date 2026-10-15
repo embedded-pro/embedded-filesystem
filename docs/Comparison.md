@@ -61,7 +61,7 @@ Measured by WL-1 and WL-2 (spread of erase counts), WL-3 (data written until the
 littlefs erases a block inside the write operation that needs it, so the write that happens to need a fresh block pays the full erase time.
 
 embedded-filesystem erases obsolete blocks while the event dispatcher is idle and keeps a pool of pre-erased blocks ready.
-A reserve of spare blocks guarantees that foreground writes never wait for a large relocation.
+A reserve of spare blocks guarantees that foreground writes never wait for a large relocation; when the volume is never idle, a write may wait for one static wear leveling move, bounded by the erase of one block.
 Measured by W-6.
 
 ## Large files on FAT
@@ -89,6 +89,7 @@ embedded-filesystem reads the header of every block at mount to build its free-b
 
 littlefs needs less RAM.
 A littlefs configuration with caches of a few hundred bytes is common, while embedded-filesystem keeps two bits and one byte per block plus a node cache of 8 KiB by default, about 14 KiB for a 16 MiB device with 4 KiB blocks, or about 9 KiB with 64 KiB blocks; see [NorFilesystem.md](NorFilesystem.md#ram-use).
+littlefs cannot use as much: its caches hold at most one block and its lookahead one bit per block, about 13 KiB on the same device.
 This is the price of allocation without traversal and of wear leveling based on actual erase counts.
 
 On SD cards, FatFs needs less RAM as well: about 1.7 KiB with one open file, against about 5.8 KiB for `fs::FatFileSystem::WithStorage<2, 8>` on a 32-bit target.

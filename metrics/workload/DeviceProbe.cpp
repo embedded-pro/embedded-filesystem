@@ -13,6 +13,7 @@ namespace metrics
             bytesRead - earlier.bytesRead,
             bytesWritten - earlier.bytesWritten,
             deviceTime - earlier.deviceTime,
+            eraseTime - earlier.eraseTime,
         };
     }
 
@@ -27,6 +28,7 @@ namespace metrics
             bytesRead + other.bytesRead,
             bytesWritten + other.bytesWritten,
             deviceTime + other.deviceTime,
+            eraseTime + other.eraseTime,
         };
     }
 
@@ -37,7 +39,7 @@ namespace metrics
     DeviceSnapshot MeteredFlashProbe::Snapshot() const
     {
         const auto& counters = flash.Counters();
-        return DeviceSnapshot{ counters.readRequests, counters.programRequests, counters.eraseRequests, 0, 0, counters.bytesRead, counters.bytesProgrammed, counters.DeviceTime() };
+        return DeviceSnapshot{ counters.readRequests, counters.programRequests, counters.eraseRequests, 0, 0, counters.bytesRead, counters.bytesProgrammed, counters.DeviceTime(), counters.eraseTime };
     }
 
     uint64_t MeteredFlashProbe::CapacityBytes() const
@@ -48,6 +50,11 @@ namespace metrics
     std::string_view MeteredFlashProbe::ModelName() const
     {
         return flash.Model().name;
+    }
+
+    infra::Duration MeteredFlashProbe::TypicalSectorErase() const
+    {
+        return flash.Model().typical.sectorErase;
     }
 
     MeteredBlockDeviceProbe::MeteredBlockDeviceProbe(const MeteredBlockDevice& device)
@@ -70,5 +77,10 @@ namespace metrics
     std::string_view MeteredBlockDeviceProbe::ModelName() const
     {
         return device.Model().name;
+    }
+
+    infra::Duration MeteredBlockDeviceProbe::TypicalSectorErase() const
+    {
+        return infra::Duration{};
     }
 }
