@@ -5,6 +5,7 @@
 #include "metrics/workload/MetricComputations.hpp"
 #include "gtest/gtest.h"
 #include <algorithm>
+#include <string_view>
 
 using metrics::NorLifetime;
 using metrics::NorMetrics;
@@ -24,6 +25,12 @@ namespace
         measurement.Recorder().Record("WL-2", workload, "ratio", metrics::Better::higher, wear.Efficiency(), fill);
     }
 
+    bool Deferred(const metrics::NorSetup& setup)
+    {
+        std::string_view name = testing::UnitTest::GetInstance()->current_test_info()->name();
+        return setup.deferredWorkloads.contains(name.substr(0, name.find('/')));
+    }
+
     uint64_t MaximumEraseCount(const metrics::MeteredFlash& flash)
     {
         const auto& counts = flash.EraseCounts();
@@ -33,6 +40,9 @@ namespace
 
 TEST_P(NorMetrics, L1_sequential_write)
 {
+    if (Deferred(GetParam()))
+        GTEST_SKIP() << "deferred for " << GetParam().label;
+
     metrics::NorMeasurement measurement{ GetParam() };
 
     metrics::MeasureSequentialWrite(measurement.Workloads(), measurement.Recorder(), measurement.Parameters());
@@ -42,6 +52,9 @@ TEST_P(NorMetrics, L1_sequential_write)
 
 TEST_P(NorMetrics, L2_data_logger)
 {
+    if (Deferred(GetParam()))
+        GTEST_SKIP() << "deferred for " << GetParam().label;
+
     std::vector<infra::Duration> perAppend;
     for (auto fill : metrics::fillLevels)
     {
@@ -56,6 +69,9 @@ TEST_P(NorMetrics, L2_data_logger)
 
 TEST_P(NorMetrics, L2_call_latency)
 {
+    if (Deferred(GetParam()))
+        GTEST_SKIP() << "deferred for " << GetParam().label;
+
     metrics::NorMeasurement measurement{ GetParam(), metrics::TimingCase::maximum };
 
     metrics::MeasureDataLoggerLatency(measurement.Workloads(), measurement.Recorder(), measurement.Parameters(metrics::latencyFillLevel));
@@ -65,6 +81,9 @@ TEST_P(NorMetrics, L2_call_latency)
 
 TEST_P(NorMetrics, L3_random_overwrite)
 {
+    if (Deferred(GetParam()))
+        GTEST_SKIP() << "deferred for " << GetParam().label;
+
     for (auto fill : metrics::fillLevels)
     {
         metrics::NorMeasurement measurement{ GetParam() };
@@ -75,6 +94,9 @@ TEST_P(NorMetrics, L3_random_overwrite)
 
 TEST_P(NorMetrics, L3_call_latency)
 {
+    if (Deferred(GetParam()))
+        GTEST_SKIP() << "deferred for " << GetParam().label;
+
     metrics::NorMeasurement measurement{ GetParam(), metrics::TimingCase::maximum };
 
     metrics::MeasureRandomOverwriteLatency(measurement.Workloads(), measurement.Recorder(), measurement.Parameters(metrics::latencyFillLevel));
@@ -84,6 +106,9 @@ TEST_P(NorMetrics, L3_call_latency)
 
 TEST_P(NorMetrics, L4_small_files)
 {
+    if (Deferred(GetParam()))
+        GTEST_SKIP() << "deferred for " << GetParam().label;
+
     for (auto fill : metrics::fillLevels)
     {
         metrics::NorMeasurement measurement{ GetParam() };
@@ -95,6 +120,9 @@ TEST_P(NorMetrics, L4_small_files)
 
 TEST_P(NorMetrics, L5_static_fill)
 {
+    if (Deferred(GetParam()))
+        GTEST_SKIP() << "deferred for " << GetParam().label;
+
     metrics::NorMeasurement measurement{ GetParam() };
     const auto& flash = measurement.Flash();
     auto erases = staticFillErasesPerSector * flash.NumberOfSectors();
@@ -110,6 +138,9 @@ TEST_P(NorMetrics, L5_static_fill)
 
 TEST_P(NorMetrics, L6_reads)
 {
+    if (Deferred(GetParam()))
+        GTEST_SKIP() << "deferred for " << GetParam().label;
+
     metrics::NorMeasurement measurement{ GetParam() };
 
     metrics::MeasureReads(measurement.Workloads(), measurement.Recorder(), measurement.Parameters());
@@ -119,6 +150,9 @@ TEST_P(NorMetrics, L6_reads)
 
 TEST_P(NorMetrics, L7_mount)
 {
+    if (Deferred(GetParam()))
+        GTEST_SKIP() << "deferred for " << GetParam().label;
+
     metrics::NorMeasurement measurement{ GetParam() };
 
     metrics::MeasureMount(measurement.Workloads(), measurement.Recorder(), measurement.Parameters());
@@ -128,6 +162,9 @@ TEST_P(NorMetrics, L7_mount)
 
 TEST_P(NorLifetime, L5_lifetime)
 {
+    if (Deferred(GetParam()))
+        GTEST_SKIP() << "deferred for " << GetParam().label;
+
     metrics::NorMeasurement measurement{ GetParam() };
     const auto& flash = measurement.Flash();
 

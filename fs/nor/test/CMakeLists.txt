@@ -46,6 +46,7 @@ target_sources(fs.nor_test PRIVATE
     TestNorRecord.cpp
     TestNorRecordApply.cpp
     TestNorRemove.cpp
+    TestNorRename.cpp
     TestNorSuperblock.cpp
     TestNorTruncate.cpp
 )

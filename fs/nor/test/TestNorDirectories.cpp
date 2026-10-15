@@ -279,9 +279,17 @@ TEST_F(NorDirectoriesTest, a_call_beyond_the_path_slots_completes_with_busy)
         {
             done.callback(result);
         });
+    volume.Rename("/h", "/i", [&done](fs::Result result)
+        {
+            done.callback(result);
+        });
+    volume.Usage([&done](fs::Result result, fs::VolumeUsage)
+        {
+            done.callback(result);
+        });
 
     EXPECT_CALL(done, callback(fs::Result::notFound)).Times(2);
-    EXPECT_CALL(done, callback(fs::Result::busy)).Times(5);
+    EXPECT_CALL(done, callback(fs::Result::busy)).Times(7);
     ExecuteAllActions();
 }
 

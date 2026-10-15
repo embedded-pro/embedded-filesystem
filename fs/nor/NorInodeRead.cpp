@@ -1,6 +1,5 @@
 #include "fs/nor/NorInodeRead.hpp"
 #include "fs/nor/NorBTree.hpp"
-#include "infra/util/ReallyAssert.hpp"
 #include <optional>
 
 namespace fs
@@ -30,7 +29,12 @@ namespace fs
 
     void NorInodeRead::Fetched(NorFetchResult result)
     {
-        really_assert(result != NorFetchResult::cacheFull);
+        // The cache fills with modified nodes only after a checkpoint failed for want of space
+        if (result == NorFetchResult::cacheFull)
+        {
+            onDone(Result::noSpace);
+            return;
+        }
 
         std::optional<NorInodeRecord> parsed;
         if (result == NorFetchResult::fetched)

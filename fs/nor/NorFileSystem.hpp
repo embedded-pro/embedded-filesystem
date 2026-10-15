@@ -68,13 +68,16 @@ namespace fs
         virtual infra::SharedPtr<NorFile> AllocateFile() = 0;
 
         bool IsMounted() const;
-        template<class Callback>
-        void Refuse(const Callback& onDone);
         template<class Call>
         void StartPathCall(infra::BoundedConstString path, Call&& call);
+        template<class Call>
+        void StartPathCall(Result validation, Call&& call);
+        template<class Call>
+        void StartCall(Call&& call);
         NorPathSlot* FreePathSlot() const;
         void RunPathCall(NorPathSlot& slot);
         void RunOperation(NorPathSlot& slot, NorPathCall& call);
+        void ReportUsage(NorPathSlot& slot, NorUsageCall& call);
 
         void BeginFormat();
         void StartFormat();

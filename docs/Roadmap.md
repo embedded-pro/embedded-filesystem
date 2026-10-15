@@ -84,11 +84,11 @@ As for FAT, the formatter and an independent checker come early, and every step 
 8. Writing records and checkpoints, with replay through the same path, and `MakeDirectory` as the first operation in the sweep.
 9. Creating files and appending in place, with the buffer of a page, the inline area, `Sync` and `Close`.
 10. Overwriting by copy-on-write, `Truncate` and `Remove`.
-11. `Rename`, and the NOR subject of the metrics, reported without targets.
-12. Background work: the pre-erased pool and its watermark, dynamic wear leveling, the background checkpoint, `Usage` and the reserve.
-13. Garbage collection of node blocks.
+11. `Rename`, `Usage` without the reserve, and the NOR subject of the metrics, reported without targets; it skips L4, L5, L6 on `internal-flash`, and the call latency of L2 and L3 on `nor-qspi-16m`.
+12. Background work: the pre-erased pool and its watermark, dynamic wear leveling, the background checkpoint, and the reserve in `Usage`.
+13. Garbage collection of node blocks, with L4, L5, and L6 on `internal-flash` in the metrics.
 14. Static wear leveling with its foreground fallback, the counters of the volume, and WL-4.
-15. The other targets of the NOR subject in `metrics::NorTargets`: the W-6 bound, the charge of erases, the W-2 periods, the ratio of R-2, the wear metrics on the lifetime run, the factor and the ratio in `merge_report.py`, and `littlefs/ram-matched` sized to the NOR subject.
+15. The other targets of the NOR subject in `metrics::NorTargets`: the W-6 bound with the call latency of L2 and L3 on `nor-qspi-16m`, whose format at maximum timings outlasts the time the runner allows a call, the charge of erases, the W-2 periods, the ratio of R-2, the wear metrics on the lifetime run, the factor and the ratio in `merge_report.py`, and `littlefs/ram-matched` sized to the NOR subject.
 16. The exhaustive sweep of every operation and background step, and P-1.
 
 ## Phase 8: on target

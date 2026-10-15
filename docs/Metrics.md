@@ -81,6 +81,8 @@ The RAM reported for a subject is the size of its state and buffers with one ope
 
 The subjects of embedded-filesystem measure the defaults a product gets, such as the 2 copies of the FAT that the formatter writes, not a configuration chosen to match a baseline.
 On `internal-flash`, the NOR subject divides the file sizes of the workloads by 64, as littlefs does.
+Until garbage collection, the NOR subject skips L4 and L5, which rewrite the volume many times, and L6 on `internal-flash`, whose directory of 1000 files fills the device with node blocks that only garbage collection frees.
+Until its targets, it skips the call latency of L2 and L3 on `nor-qspi-16m`: formatting 4096 blocks at the maximum erase time takes 27 minutes, longer than the 10 minutes the runner allows a call.
 P-1 is recorded from the power-cut sweep of each filesystem, on the small device models of the sweep.
 
 ### Erases on NOR

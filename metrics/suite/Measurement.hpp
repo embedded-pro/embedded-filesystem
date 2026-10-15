@@ -15,6 +15,7 @@
 #include <functional>
 #include <memory>
 #include <ostream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,7 @@ namespace metrics
         const NorModel* model;
         uint32_t scaleDivisor;
         std::function<std::shared_ptr<FileSystemUnderTest>(VirtualTime& time, hal::Flash& flash)> create;
+        std::set<std::string, std::less<>> deferredWorkloads;
     };
 
     struct BlockSetup
