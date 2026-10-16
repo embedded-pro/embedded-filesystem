@@ -145,7 +145,7 @@ namespace fs
             {
                 return FatMountDone{ result };
             });
-        volume.Operation().emplace<FatMount>(volume.Device(), volume.Cache(), volume.State(), [this](Result result)
+        volume.Operation().emplace<FatMount>(volume.Device(), volume.Cache(), volume.State(), volume.Operations().readCleanState, [this](Result result)
                               {
                                   LifecycleOperationDone(result);
                               })
@@ -287,6 +287,21 @@ namespace fs
         void StartFatExpectSize(FatVolume& volume, FatOpenFile& file, FatExtentCache& extents, uint32_t size, const infra::Function<void(Result result)>& onDone)
         {
             volume.Operation().emplace<FatExpectSize>(volume, file, extents, size, onDone).Start();
+        }
+
+        void MarkFatDirty(FatDirtyFlag& flag, const infra::Function<void(Result result)>& onDone)
+        {
+            flag.MarkDirty(onDone);
+        }
+
+        void MarkFatClean(FatDirtyFlag& flag, const infra::Function<void(Result result)>& onDone)
+        {
+            flag.MarkClean(onDone);
+        }
+
+        void ReadFatCleanState(FatMount& mount)
+        {
+            mount.ReadCleanState();
         }
     }
 }

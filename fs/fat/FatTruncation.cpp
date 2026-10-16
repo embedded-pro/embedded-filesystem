@@ -61,7 +61,7 @@ namespace fs
 
     void FatTruncation::Commit()
     {
-        volume.DirtyFlag().MarkDirty([this](Result result)
+        volume.MarkDirty([this](Result result)
             {
                 if (result != Result::success)
                     onDone(result);

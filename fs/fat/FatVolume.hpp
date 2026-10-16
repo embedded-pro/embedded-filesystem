@@ -92,7 +92,6 @@ namespace fs
         FatAllocator& Allocator();
         FatEntryUpdate& EntryUpdate();
         FatChainFree& ChainFree();
-        FatDirtyFlag& DirtyFlag();
         FatTableWriter& TableWriter();
         FatClosedFiles& ClosedFiles();
         FatFreeSpaceScan& FreeSpace();
@@ -114,6 +113,8 @@ namespace fs
         void MarkUnmounted(Result reason);
         void Report(Result result) const;
         void AttachBackground(FatBackgroundScan& scan);
+        void MarkDirty(const infra::Function<void(Result result)>& onDone);
+        void MarkClean(const infra::Function<void(Result result)>& onDone);
 
         template<class Callback>
         void Defer(const Callback& onDone, Result result);

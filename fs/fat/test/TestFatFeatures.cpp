@@ -1,5 +1,7 @@
 #include "fs/fat/FatFileSystem.hpp"
 #include "fs/fat/FatFormatter.hpp"
+#include "fs/fat/FatTable.hpp"
+#include "fs/fat/test_doubles/FatImageBuilder.hpp"
 #include "fs/fat/test_doubles/SparseBlockDevice.hpp"
 #include "infra/timer/test_helper/ClockFixture.hpp"
 #include "infra/util/test_helper/MockCallback.hpp"
@@ -12,7 +14,7 @@ namespace
 {
     constexpr fs::FatFeatures withoutChanges{ .makeDirectory = false, .remove = false, .rename = false, .expectSize = false, .usage = false };
 
-    template<fs::FatFeatures Features>
+    template<fs::FatFeatures Features, uint32_t Blocks = 4096>
     class FatFeaturesFixture
         : public testing::Test
         , public infra::ClockFixture
@@ -21,7 +23,7 @@ namespace
         FatFeaturesFixture()
         {
             std::optional<fs::Result> formatted;
-            formatter.Format(fs::FatFormatConfig{}, [&formatted](fs::Result result)
+            formatter.Format(fs::FatFormatConfig{ .sectorsPerCluster = Blocks > 4096 ? std::optional<uint8_t>(1) : std::nullopt }, [&formatted](fs::Result result)
                 {
                     formatted = result;
                 });
@@ -67,7 +69,7 @@ namespace
                 });
         }
 
-        fs::SparseBlockDevice::WithStorage<64> device{ 4096 };
+        fs::SparseBlockDevice::WithStorage<192> device{ Blocks };
         fs::FatFormatter::WithStorage<8> formatter{ device };
         fs::FatFileSystem::WithStorage<1, 4, fs::FatLimits{}, Features> volume{ device };
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
@@ -76,6 +78,23 @@ namespace
 
     class FatFeaturesTest
         : public FatFeaturesFixture<withoutChanges>
+    {};
+
+    constexpr fs::FatFeatures withoutCleanShutdown{ .cleanShutdown = false };
+
+    class FatWithoutCleanShutdownOnFat16Test
+        : public FatFeaturesFixture<withoutCleanShutdown, 16384>
+    {
+    public:
+        bool CleanBit()
+        {
+            fs::FatImageBuilder builder{ device };
+            return fs::CleanShutdown(builder.Geometry().type, builder.FatEntry(1)) == true;
+        }
+    };
+
+    class FatWithoutCleanShutdownOnFat32Test
+        : public FatFeaturesFixture<withoutCleanShutdown, 81920>
     {};
 
     class FatWithoutBackgroundScanTest
@@ -194,4 +213,34 @@ TEST_F(FatWithoutBackgroundScanTest, usage_counts_the_free_clusters_on_its_first
     reads = device.ReadRequests();
     ExpectUsage(fs::Result::success);
     EXPECT_EQ(reads, device.ReadRequests());
+}
+
+TEST_F(FatWithoutCleanShutdownOnFat16Test, writing_leaves_the_clean_shutdown_bit_alone)
+{
+    volume.Mount(Done());
+    ExpectDone(fs::Result::success);
+    ASSERT_TRUE(CleanBit());
+    data.fill(0x5a);
+
+    auto file = Open("/log.txt", fs::OpenMode::write);
+    file->Write(infra::MakeRange(data), Done());
+    ExpectDone(fs::Result::success);
+    file->Sync(Done());
+    ExpectDone(fs::Result::success);
+    EXPECT_TRUE(CleanBit());
+
+    file = nullptr;
+    volume.Unmount(Done());
+    ExpectDone(fs::Result::success);
+    EXPECT_TRUE(CleanBit());
+}
+
+TEST_F(FatWithoutCleanShutdownOnFat32Test, a_mount_reads_only_the_partition_table_and_the_boot_sector)
+{
+    auto reads = device.ReadRequests();
+
+    volume.Mount(Done());
+    ExpectDone(fs::Result::success);
+
+    EXPECT_EQ(reads + 2, device.ReadRequests());
 }

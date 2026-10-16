@@ -32,7 +32,7 @@ namespace fs
         if (data.empty())
             Step();
         else
-            volume.DirtyFlag().MarkDirty([this](Result result)
+            volume.MarkDirty([this](Result result)
                 {
                     if (result != Result::success)
                         onDone(result);

@@ -117,6 +117,9 @@ namespace fs
         }
 
         void StartFatExpectSize(FatVolume& volume, FatOpenFile& file, FatExtentCache& extents, uint32_t size, const infra::Function<void(Result result)>& onDone);
+        void MarkFatDirty(FatDirtyFlag& flag, const infra::Function<void(Result result)>& onDone);
+        void MarkFatClean(FatDirtyFlag& flag, const infra::Function<void(Result result)>& onDone);
+        void ReadFatCleanState(FatMount& mount);
 
         template<bool Enabled>
         struct FatBackgroundStorage
@@ -158,6 +161,12 @@ namespace fs
             operations.usage = &detail::StartFatOperation<FatUsage, FatUsageCall>;
         if constexpr (Features.timestamps)
             operations.now = &FatNow;
+        if constexpr (Features.cleanShutdown)
+        {
+            operations.markDirty = &detail::MarkFatDirty;
+            operations.markClean = &detail::MarkFatClean;
+            operations.readCleanState = &detail::ReadFatCleanState;
+        }
 
         return operations;
     }

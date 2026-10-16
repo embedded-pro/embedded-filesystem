@@ -102,11 +102,6 @@ namespace fs
         return chainFree;
     }
 
-    FatDirtyFlag& FatVolume::DirtyFlag()
-    {
-        return dirtyFlag;
-    }
-
     FatTableWriter& FatVolume::TableWriter()
     {
         return tableWriter;
@@ -246,5 +241,21 @@ namespace fs
     void FatVolume::AttachBackground(FatBackgroundScan& scan)
     {
         background = &scan;
+    }
+
+    void FatVolume::MarkDirty(const infra::Function<void(Result result)>& onDone)
+    {
+        if (operations.markDirty != nullptr)
+            operations.markDirty(dirtyFlag, onDone);
+        else
+            dirtyFlag.Skip(onDone);
+    }
+
+    void FatVolume::MarkClean(const infra::Function<void(Result result)>& onDone)
+    {
+        if (operations.markClean != nullptr)
+            operations.markClean(dirtyFlag, onDone);
+        else
+            dirtyFlag.Skip(onDone);
     }
 }

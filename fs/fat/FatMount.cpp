@@ -5,10 +5,11 @@
 
 namespace fs
 {
-    FatMount::FatMount(hal::BlockDevice& device, SectorCache& cache, FatVolumeState& volume, const infra::Function<void(Result result)>& onDone)
+    FatMount::FatMount(hal::BlockDevice& device, SectorCache& cache, FatVolumeState& volume, FatCleanState readCleanState, const infra::Function<void(Result result)>& onDone)
         : device(device)
         , cache(cache)
         , volume(volume)
+        , readCleanState(readCleanState)
         , onDone(onDone)
     {}
 
@@ -87,9 +88,15 @@ namespace fs
         if (volume.geometry.mirrored && volume.geometry.fatCopies > 1)
             cache.SetMirroredRegion(SectorCache::MirroredRegion{ volume.geometry.firstFatSector, volume.geometry.sectorsPerFat, volume.geometry.fatCopies });
 
-        if (volume.geometry.type != FatType::fat32)
+        if (volume.geometry.type != FatType::fat32 || readCleanState == nullptr)
             Done(Result::success);
-        else if (volume.geometry.fsInfoSector.has_value())
+        else
+            readCleanState(*this);
+    }
+
+    void FatMount::ReadCleanState()
+    {
+        if (volume.geometry.fsInfoSector.has_value())
             ReadFsInfo();
         else
             ReadFatHeader();

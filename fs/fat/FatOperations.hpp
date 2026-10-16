@@ -9,7 +9,9 @@
 
 namespace fs
 {
+    class FatDirtyFlag;
     class FatExtentCache;
+    class FatMount;
     class FatVolume;
     struct FatOpenFile;
 
@@ -17,6 +19,8 @@ namespace fs
     using FatPathOperation = void (*)(FatVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished);
     using FatExpectSizeOperation = void (*)(FatVolume& volume, FatOpenFile& file, FatExtentCache& extents, uint32_t size, const infra::Function<void(Result result)>& onDone);
     using FatClock = FatDateTime (*)(uint32_t timerServiceId);
+    using FatDirtyMark = void (*)(FatDirtyFlag& flag, const infra::Function<void(Result result)>& onDone);
+    using FatCleanState = void (*)(FatMount& mount);
 
     struct FatOperations
     {
@@ -26,6 +30,9 @@ namespace fs
         FatExpectSizeOperation expectSize{ nullptr };
         FatPathOperation<FatUsageCall> usage{ nullptr };
         FatClock now{ nullptr };
+        FatDirtyMark markDirty{ nullptr };
+        FatDirtyMark markClean{ nullptr };
+        FatCleanState readCleanState{ nullptr };
     };
 }
 

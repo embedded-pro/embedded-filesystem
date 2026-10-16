@@ -22,6 +22,7 @@ namespace fs
         void Reset();
         void MarkDirty(const infra::Function<void(Result result)>& onDone);
         void MarkClean(const infra::Function<void(Result result)>& onDone);
+        void Skip(const infra::Function<void(Result result)>& onDone);
 
     private:
         enum class Mark : uint8_t

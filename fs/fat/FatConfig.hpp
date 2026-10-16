@@ -27,6 +27,7 @@ namespace fs
         bool usage{ true };
         bool backgroundScan{ true };
         bool timestamps{ true };
+        bool cleanShutdown{ true };
     };
 
     struct FatConfig
