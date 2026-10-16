@@ -31,6 +31,7 @@ target_sources(fs.common PRIVATE
     SectorCache.cpp
     SectorCache.hpp
     SectorSource.hpp
+    SectorStore.hpp
 )
 
 if (EMFS_BUILD_TESTS)

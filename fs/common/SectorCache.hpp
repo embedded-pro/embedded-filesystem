@@ -2,7 +2,7 @@
 #define FS_COMMON_SECTOR_CACHE_HPP
 
 #include "fs/common/FlushBarrier.hpp"
-#include "fs/common/SectorSource.hpp"
+#include "fs/common/SectorStore.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -18,7 +18,7 @@
 namespace fs
 {
     class SectorCache
-        : public SectorSource
+        : public SectorStore
     {
     public:
         struct Entry
@@ -50,7 +50,7 @@ namespace fs
 
         void Read(uint32_t sector, const infra::Function<void(Result result, infra::ConstByteRange contents)>& onDone) final;
         void ReadOnce(uint32_t sector, const infra::Function<void(Result result, infra::ConstByteRange contents)>& onDone);
-        void Modify(uint32_t sector, uint8_t rank, const infra::Function<void(Result result, infra::ByteRange contents)>& onDone);
+        void Modify(uint32_t sector, uint8_t rank, const infra::Function<void(Result result, infra::ByteRange contents)>& onDone) final;
         void Overwrite(uint32_t sector, uint8_t rank, const infra::Function<void(Result result, infra::ByteRange contents)>& onDone);
         void WriteBack(const infra::Function<void(Result result)>& onDone);
         void Flush(const infra::Function<void(Result result)>& onDone);
