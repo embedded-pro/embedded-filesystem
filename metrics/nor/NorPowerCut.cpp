@@ -1508,6 +1508,8 @@ public:
     }
 
     static constexpr std::size_t lowSpaceDirectories = 30;
+    static constexpr std::size_t lowSpaceCut = 100;
+    static constexpr std::size_t lowSpaceOverwrite = 10;
     std::size_t lowSpaceFileSize{ 0 };
 
     static std::string LowSpaceName(std::size_t index)
@@ -1527,6 +1529,8 @@ public:
             lowSpaceFileSize = 0;
             while (volume.Write(FileBytes(lowSpaceFileSize, payload)) == fs::Result::success)
                 lowSpaceFileSize += payload;
+            volume.Seek(static_cast<uint32_t>(lowSpaceFileSize - lowSpaceCut));
+            ASSERT_EQ(fs::Result::success, volume.Truncate());
             ASSERT_EQ(fs::Result::success, volume.Close());
             for (std::size_t index = 0; index != lowSpaceDirectories; ++index)
                 ASSERT_EQ(fs::Result::success, volume.Remove(LowSpaceName(index)));
@@ -1557,6 +1561,58 @@ public:
             return;
 
         volume.Unmount();
+    }
+
+    void OverwriteWhenSpaceRunsLow(Context& context) const
+    {
+        metrics::NorSweepVolume volume{ context, config };
+        if (volume.Mount() != fs::Result::success || volume.OpenFile("/f", fs::OpenMode::readWrite) != fs::Result::success)
+            return;
+
+        volume.Seek(lowSpaceOverwrite);
+        if (volume.Write(OtherBytes(lowSpaceOverwrite, lowSpaceOverwrite)) != fs::Result::success || volume.Close() != fs::Result::success)
+            return;
+
+        volume.Unmount();
+    }
+
+    std::optional<std::string> VerifyOverwrittenWhenSpaceRunsLow(Context& context, bool uncut) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        const auto* file = check.Find("/f");
+        if (file == nullptr)
+            return "/f is lost";
+
+        auto before = FileBytes(0, lowSpaceFileSize);
+        auto after = before;
+        auto other = OtherBytes(lowSpaceOverwrite, lowSpaceOverwrite);
+        std::ranges::copy(other, after.begin() + lowSpaceOverwrite);
+        auto contents = metrics::ReadContents(image, check, *file);
+        if (contents != before && contents != after)
+            return "/f holds neither its contents before nor after the overwrite";
+
+        if (uncut && contents != after)
+            return "the run without a cut did not overwrite /f";
+
+        auto collected = [&](const auto& setUp)
+        {
+            return check.blocks[setUp.first] != metrics::NorBlockUse::node || AllocationOf(image, setUp.first) != setUp.second;
+        };
+        if (uncut && std::ranges::none_of(setUpNodeBlocks, collected))
+            return "the run without a cut collected no node block of the set-up";
+
+        metrics::NorSweepVolume volume{ context, config };
+        if (volume.Mount() != fs::Result::success)
+            return "the volume does not mount";
+
+        if (volume.ReadFile("/f") != contents)
+            return "the library reads other contents of /f than the checker";
+
+        return std::nullopt;
     }
 
     void SettleWhenSpaceRunsLow(Context& context) const
@@ -2141,6 +2197,23 @@ TEST_P(NorAppendPowerCut, a_write_that_finds_the_free_blocks_at_the_reserve_coll
         [this](Context& context, bool uncut)
         {
             return VerifyLowSpace(context, uncut, payload);
+        });
+}
+
+TEST_P(NorAppendPowerCut, an_overwrite_that_finds_the_free_blocks_at_the_reserve_collects_node_blocks_and_a_cut_leaves_consistent)
+{
+    SweepEveryMode(
+        model, "overwrite when space runs low", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpLowSpace(context);
+        },
+        [this](Context& context)
+        {
+            OverwriteWhenSpaceRunsLow(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return VerifyOverwrittenWhenSpaceRunsLow(context, uncut);
         });
 }
 
