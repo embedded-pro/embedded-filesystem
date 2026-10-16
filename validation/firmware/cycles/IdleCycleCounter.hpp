@@ -10,7 +10,7 @@ namespace validation
     class IdleCycleSource
     {
     protected:
-        IdleCycleSource() = default;
+        IdleCycleSource();
         IdleCycleSource(const IdleCycleSource& other) = delete;
         IdleCycleSource& operator=(const IdleCycleSource& other) = delete;
         ~IdleCycleSource() = default;

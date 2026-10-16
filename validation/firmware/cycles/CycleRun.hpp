@@ -23,12 +23,11 @@ namespace validation
         uint32_t bigFileBytes{ 1024 * 1024 };
         uint32_t appendBytes{ 64 };
         uint32_t transferBytes{ 512 };
-        uint32_t rewindEvery{ 32 };
+        uint32_t truncateEvery{ 32 };
         infra::Duration pollInterval{ std::chrono::milliseconds(1) };
         infra::Duration calibration{ std::chrono::milliseconds(100) };
     };
 
-    // Runs the operations of F-2 on a subject and prints one cycles record per operation (docs/Validation.md)
     class CycleRun
     {
     public:
@@ -60,11 +59,12 @@ namespace validation
         CycleSubject::Done Then(Step next);
         void Resume(int32_t status);
         void Fail(int32_t status);
-        void Finish(bool success);
+        void Finish(bool succeeded);
         void RunStep(Step step, Step done);
 
+        void ResetDone();
         void Calibrate();
-        void Calibrated();
+        void CalibrationPoll();
         void StartOperation();
         void Prepared();
         void StartRun();
@@ -74,11 +74,10 @@ namespace validation
         void Settled();
         void AfterDone();
         void Finished();
-        void Report();
+        void Report() const;
         void WaitIdle(Step next);
         void PollIdle();
 
-        void ResetSubject();
         void SetupFormat();
         void SetupMount();
         void SetupDirectory();
@@ -106,12 +105,12 @@ namespace validation
         void OpenLog();
         void Append();
         void OpenStream();
-        void RewindStream();
+        void TruncateStream();
         void WriteStream();
         void Rename();
         void Remove();
 
-        void SetPath(const char* prefix, uint32_t index);
+        void SetPath(const char* prefix, uint32_t number);
         uint32_t RandomOffset();
 
     private:

@@ -55,7 +55,7 @@ namespace validation
         return nullptr;
     }
 
-    void CyclesCommands::PrintDevice(const CycleDevice& device)
+    void CyclesCommands::PrintDevice(const CycleDevice& device) const
     {
         const bool nor = device.kind == CycleDeviceKind::nor;
         results.Record("device")

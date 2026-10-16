@@ -6,7 +6,6 @@ namespace validation
 {
     namespace
     {
-        constexpr int32_t success = 0;
         constexpr uint32_t randomSeed = 0x2545f491;
 
         uint32_t BusyCycles(uint32_t elapsed, uint64_t idle)
@@ -16,7 +15,7 @@ namespace validation
     }
 
     const std::array<CycleRun::Operation, 12> CycleRun::operations{ {
-        { "format", &CycleRun::ResetSubject, nullptr, &CycleRun::Format, nullptr, nullptr },
+        { "format", nullptr, nullptr, &CycleRun::Format, nullptr, nullptr },
         { "mount", &CycleRun::SetupFormat, &CycleRun::UnmountAfterFirst, &CycleRun::Mount, nullptr, nullptr },
         { "open", nullptr, nullptr, &CycleRun::OpenSmallFile, &CycleRun::Close, nullptr },
         { "list", nullptr, nullptr, &CycleRun::List, nullptr, nullptr },
@@ -24,7 +23,7 @@ namespace validation
         { "overwrite", &CycleRun::OpenBigForOverwrite, nullptr, &CycleRun::OverwriteAtRandom, nullptr, &CycleRun::Close },
         { "create", nullptr, nullptr, &CycleRun::Create, &CycleRun::Close, nullptr },
         { "append", &CycleRun::OpenLog, nullptr, &CycleRun::Append, nullptr, &CycleRun::Close },
-        { "write", &CycleRun::OpenStream, &CycleRun::RewindStream, &CycleRun::WriteStream, nullptr, &CycleRun::Close },
+        { "write", &CycleRun::OpenStream, &CycleRun::TruncateStream, &CycleRun::WriteStream, nullptr, &CycleRun::Close },
         { "rename", nullptr, nullptr, &CycleRun::Rename, nullptr, nullptr },
         { "remove", nullptr, nullptr, &CycleRun::Remove, nullptr, nullptr },
         { "unmount", nullptr, &CycleRun::MountAfterFirst, &CycleRun::Unmount, nullptr, nullptr },
@@ -38,7 +37,8 @@ namespace validation
     {
         really_assert(plan.smallFiles >= 1 && plan.smallFileBytes <= writeBytes && plan.appendBytes <= writeBytes);
         really_assert(plan.transferBytes >= 1 && plan.transferBytes <= writeBytes && plan.bigFileBytes % writeBytes == 0 && plan.bigFileBytes >= plan.transferBytes);
-        really_assert(plan.rewindEvery >= 1 && plan.pollInterval > infra::Duration::zero() && plan.calibration >= plan.pollInterval);
+        really_assert(plan.truncateEvery >= 1 && plan.pollInterval > infra::Duration::zero() && plan.calibration >= plan.pollInterval);
+        really_assert(plan.calibration / plan.pollInterval <= CycleSamples::capacity);
 
         for (std::size_t position = 0; position != data.size(); ++position)
             data[position] = static_cast<uint8_t>(position * 7 + 1);
@@ -55,7 +55,7 @@ namespace validation
         this->onDone = onDone;
         operation = 0;
         random = randomSeed;
-        Calibrate();
+        subject.Reset(Then(&CycleRun::ResetDone));
     }
 
     bool CycleRun::Running() const
@@ -74,7 +74,7 @@ namespace validation
 
     void CycleRun::Resume(int32_t status)
     {
-        if (status != success)
+        if (status != CycleSubject::success)
             Fail(status);
         else
             (this->*resumeWith)();
@@ -104,27 +104,41 @@ namespace validation
             (this->*done)();
     }
 
-    // Every poll of a wait brings the same timer interrupt and the same poll, so a wait costs the busy cycles of a poll for each
-    // poll, whether or not the cycle counter runs while the processor sleeps
+    void CycleRun::ResetDone()
+    {
+        WaitIdle(&CycleRun::Calibrate);
+    }
+
+    // Every poll of a wait brings the same timer interrupt and the same check of Idle(), so a wait costs the busy cycles of a poll
+    // for each poll, whether or not the cycle counter runs while the processor sleeps; the median leaves out the polls that
+    // output on the terminal delays
     void CycleRun::Calibrate()
     {
+        callSamples.Clear();
         startCycles = cycles.Cycles();
         startIdle = idle.IdleCycles();
-        polls = 0;
         pollTimer.Start(plan.pollInterval, [this]
             {
-                if (++polls == plan.calibration / plan.pollInterval)
-                {
-                    pollTimer.Cancel();
-                    Calibrated();
-                }
+                CalibrationPoll();
             });
     }
 
-    void CycleRun::Calibrated()
+    void CycleRun::CalibrationPoll()
     {
-        busyCyclesPerPoll = BusyCycles(cycles.Cycles() - startCycles, idle.IdleCycles() - startIdle) / polls;
-        StartOperation();
+        static_cast<void>(subject->Idle());
+
+        auto now = cycles.Cycles();
+        auto idleNow = idle.IdleCycles();
+        callSamples.Add(BusyCycles(now - startCycles, idleNow - startIdle));
+        startCycles = now;
+        startIdle = idleNow;
+
+        if (callSamples.Size() == plan.calibration / plan.pollInterval)
+        {
+            pollTimer.Cancel();
+            busyCyclesPerPoll = callSamples.Median();
+            StartOperation();
+        }
     }
 
     void CycleRun::StartOperation()
@@ -195,7 +209,7 @@ namespace validation
             StartOperation();
     }
 
-    void CycleRun::Report()
+    void CycleRun::Report() const
     {
         results.Record("cycles")
             .Add("subject", subject->Name())
@@ -232,11 +246,6 @@ namespace validation
             pollTimer.Cancel();
             (this->*afterIdle)();
         }
-    }
-
-    void CycleRun::ResetSubject()
-    {
-        subject->Reset(Then(stepDone));
     }
 
     void CycleRun::SetupFormat()
@@ -394,12 +403,12 @@ namespace validation
         subject->Open("/w", CycleOpenMode::write, Then(stepDone));
     }
 
-    void CycleRun::RewindStream()
+    void CycleRun::TruncateStream()
     {
-        if (run % plan.rewindEvery == 0)
-            subject->Seek(0);
-
-        (this->*stepDone)();
+        if (run != 0 && run % plan.truncateEvery == 0)
+            subject->Close(Then(&CycleRun::OpenStream));
+        else
+            (this->*stepDone)();
     }
 
     void CycleRun::WriteStream()

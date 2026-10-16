@@ -8,12 +8,11 @@
 
 namespace validation
 {
-    // The baselines block in every call; their completions go through the event dispatcher, as those of the other subjects do
+    // The calls of the baselines block, yet complete through the event dispatcher, so that every subject pays for one dispatch per call
     class BlockingSubject
         : public CycleSubject
     {
     public:
-        static constexpr int32_t shortTransfer = 100;
         static constexpr std::size_t maxPath = 32;
 
         bool Idle() const override;
@@ -22,11 +21,11 @@ namespace validation
         BlockingSubject() = default;
         BlockingSubject(const BlockingSubject& other) = delete;
         BlockingSubject& operator=(const BlockingSubject& other) = delete;
-        ~BlockingSubject() = default;
+        ~BlockingSubject();
 
         void Complete(const Done& onDone, int32_t status);
-        const char* Terminated(infra::BoundedConstString path);
-        const char* TerminatedTarget(infra::BoundedConstString path);
+        const char* Terminated(infra::BoundedConstString text);
+        const char* TerminatedTarget(infra::BoundedConstString text);
 
     private:
         infra::AutoResetFunction<void(int32_t status)> pending;

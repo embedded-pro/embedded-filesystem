@@ -15,6 +15,8 @@ namespace validation
         }
     }
 
+    BlockingSubject::~BlockingSubject() = default;
+
     bool BlockingSubject::Idle() const
     {
         return true;

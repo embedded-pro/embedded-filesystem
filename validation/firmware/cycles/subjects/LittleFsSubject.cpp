@@ -1,4 +1,5 @@
 #include "validation/firmware/cycles/subjects/LittleFsSubject.hpp"
+#include "infra/event/EventDispatcher.hpp"
 
 namespace validation
 {
@@ -45,6 +46,11 @@ namespace validation
         return sizeof(lfs_t) + readBuffer.size() + programBuffer.size() + lookaheadBuffer.size() + sizeof(lfs_file_t) + fileBuffer.size();
     }
 
+    bool LittleFsSubject::Idle() const
+    {
+        return !collecting;
+    }
+
     void LittleFsSubject::Reset(const Done& onDone)
     {
         if (fileOpen)
@@ -55,37 +61,37 @@ namespace validation
 
         fileOpen = false;
         mounted = false;
-        Complete(onDone, LFS_ERR_OK);
+        CompleteAndCollect(onDone, LFS_ERR_OK);
     }
 
     void LittleFsSubject::Format(const Done& onDone)
     {
-        Complete(onDone, lfs_format(&lfs, &config));
+        CompleteAndCollect(onDone, lfs_format(&lfs, &config));
     }
 
     void LittleFsSubject::Mount(const Done& onDone)
     {
         auto result = lfs_mount(&lfs, &config);
         mounted = result == LFS_ERR_OK;
-        Complete(onDone, result);
+        CompleteAndCollect(onDone, result);
     }
 
     void LittleFsSubject::Unmount(const Done& onDone)
     {
         mounted = false;
-        Complete(onDone, lfs_unmount(&lfs));
+        CompleteAndCollect(onDone, lfs_unmount(&lfs));
     }
 
     void LittleFsSubject::MakeDirectory(infra::BoundedConstString path, const Done& onDone)
     {
-        Complete(onDone, lfs_mkdir(&lfs, Terminated(path)));
+        CompleteAndCollect(onDone, lfs_mkdir(&lfs, Terminated(path)));
     }
 
     void LittleFsSubject::Open(infra::BoundedConstString path, CycleOpenMode mode, const Done& onDone)
     {
         auto result = lfs_file_opencfg(&lfs, &file, Terminated(path), Flags(mode), &fileConfig);
         fileOpen = result == LFS_ERR_OK;
-        Complete(onDone, result);
+        CompleteAndCollect(onDone, result);
     }
 
     void LittleFsSubject::Seek(uint32_t position)
@@ -95,39 +101,58 @@ namespace validation
 
     void LittleFsSubject::Read(infra::ByteRange buffer, const Done& onDone)
     {
-        Complete(onDone, Transferred(lfs_file_read(&lfs, &file, buffer.begin(), static_cast<lfs_size_t>(buffer.size())), buffer.size()));
+        CompleteAndCollect(onDone, Transferred(lfs_file_read(&lfs, &file, buffer.begin(), static_cast<lfs_size_t>(buffer.size())), buffer.size()));
     }
 
     void LittleFsSubject::Write(infra::ConstByteRange data, const Done& onDone)
     {
-        Complete(onDone, Transferred(lfs_file_write(&lfs, &file, data.begin(), static_cast<lfs_size_t>(data.size())), data.size()));
+        CompleteAndCollect(onDone, Transferred(lfs_file_write(&lfs, &file, data.begin(), static_cast<lfs_size_t>(data.size())), data.size()));
     }
 
     void LittleFsSubject::Sync(const Done& onDone)
     {
-        Complete(onDone, lfs_file_sync(&lfs, &file));
+        CompleteAndCollect(onDone, lfs_file_sync(&lfs, &file));
     }
 
     void LittleFsSubject::Close(const Done& onDone)
     {
         fileOpen = false;
-        Complete(onDone, lfs_file_close(&lfs, &file));
+        CompleteAndCollect(onDone, lfs_file_close(&lfs, &file));
     }
 
     void LittleFsSubject::List(infra::BoundedConstString path, const Done& onDone)
     {
         auto result = lfs_dir_open(&lfs, &directory, Terminated(path));
-        Complete(onDone, result != LFS_ERR_OK ? result : ListEntries());
+        CompleteAndCollect(onDone, result != LFS_ERR_OK ? result : ListEntries());
     }
 
     void LittleFsSubject::Rename(infra::BoundedConstString from, infra::BoundedConstString to, const Done& onDone)
     {
-        Complete(onDone, lfs_rename(&lfs, Terminated(from), TerminatedTarget(to)));
+        CompleteAndCollect(onDone, lfs_rename(&lfs, Terminated(from), TerminatedTarget(to)));
     }
 
     void LittleFsSubject::Remove(infra::BoundedConstString path, const Done& onDone)
     {
-        Complete(onDone, lfs_remove(&lfs, Terminated(path)));
+        CompleteAndCollect(onDone, lfs_remove(&lfs, Terminated(path)));
+    }
+
+    // As littlefs/ram-matched does on the host when the volume is idle, so that the settled cycles count it as they count the
+    // background work of embedded-filesystem
+    void LittleFsSubject::CompleteAndCollect(const Done& onDone, int32_t status)
+    {
+        Complete(onDone, status);
+
+        if (mounted && !collecting)
+        {
+            collecting = true;
+            infra::EventDispatcher::Instance().Schedule([this]
+                {
+                    if (mounted)
+                        lfs_fs_gc(&lfs);
+
+                    collecting = false;
+                });
+        }
     }
 
     int32_t LittleFsSubject::Transferred(int32_t result, std::size_t size) const

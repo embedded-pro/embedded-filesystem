@@ -17,7 +17,6 @@ namespace validation
         readWrite
     };
 
-    // A file system as F-2 drives it: one open file at a time, and every call completes from the event dispatcher
     class CycleSubject
     {
     protected:
@@ -27,14 +26,15 @@ namespace validation
         ~CycleSubject() = default;
 
     public:
-        // 0 for success, otherwise an error code of the file system
+        static constexpr int32_t success = 0;
+        static constexpr int32_t shortTransfer = 100;
+
         using Done = infra::Function<void(int32_t status)>;
 
         virtual infra::BoundedConstString Name() const = 0;
         virtual std::size_t RamBytes() const = 0;
         virtual bool Idle() const = 0;
 
-        // Closes the open file and unmounts, whatever an earlier run left, and always succeeds
         virtual void Reset(const Done& onDone) = 0;
         virtual void Format(const Done& onDone) = 0;
         virtual void Mount(const Done& onDone) = 0;

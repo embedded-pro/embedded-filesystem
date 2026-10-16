@@ -5,7 +5,7 @@
 #include "lfs.h"
 #include "validation/firmware/baselines/LittleFsFlash.hpp"
 #include "validation/firmware/cycles/subjects/BlockingSubject.hpp"
-#include "validation/footprint/Configurations.hpp"
+#include "validation/firmware/cycles/subjects/CycleConfigurations.hpp"
 #include <array>
 
 namespace validation
@@ -14,12 +14,13 @@ namespace validation
         : public BlockingSubject
     {
     public:
-        static constexpr auto configuration = footprint::littleFsRamMatched;
+        static constexpr auto configuration = cycles::littleFsRamMatched;
 
         explicit LittleFsSubject(hal::Flash& flash);
 
         infra::BoundedConstString Name() const override;
         std::size_t RamBytes() const override;
+        bool Idle() const override;
 
         void Reset(const Done& onDone) override;
         void Format(const Done& onDone) override;
@@ -37,6 +38,7 @@ namespace validation
         void Remove(infra::BoundedConstString path, const Done& onDone) override;
 
     private:
+        void CompleteAndCollect(const Done& onDone, int32_t status);
         int32_t Transferred(int32_t result, std::size_t size) const;
         int32_t ListEntries();
 
@@ -50,6 +52,7 @@ namespace validation
         lfs_info entry{};
         bool mounted{ false };
         bool fileOpen{ false };
+        bool collecting{ false };
         std::array<uint8_t, configuration.cacheSize> readBuffer{};
         std::array<uint8_t, configuration.cacheSize> programBuffer{};
         std::array<uint8_t, configuration.lookaheadSize> lookaheadBuffer{};

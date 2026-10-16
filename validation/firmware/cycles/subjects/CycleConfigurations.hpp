@@ -3,11 +3,12 @@
 
 #include "fs/fat/FatFileSystem.hpp"
 #include "fs/nor/NorFileSystem.hpp"
+#include "validation/footprint/Configurations.hpp"
 #include <cstdint>
 
 namespace validation::cycles
 {
-    constexpr uint32_t ramFlashSectors = 512;
+    constexpr uint32_t ramFlashSectors = 1024;
     constexpr uint32_t ramFlashSectorSize = 4096;
     constexpr uint32_t ramBlockDeviceBlocks = 4096;
 
@@ -19,6 +20,8 @@ namespace validation::cycles
     // As on the host, the RAM of a FAT volume is counted with one open file
     constexpr std::size_t fatRamBytes = sizeof(fs::FatFileSystem::WithStorage<1, 8>);
     constexpr std::size_t norRamBytes = sizeof(NorFileSystem);
+
+    constexpr footprint::LittleFsConfiguration littleFsRamMatched{ 16, 16, ramFlashSectorSize, ramFlashSectors / 8, 500, true };
 }
 
 #endif

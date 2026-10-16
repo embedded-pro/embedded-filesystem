@@ -13,8 +13,6 @@ namespace validation
         : public CycleSubject
     {
     public:
-        static constexpr int32_t shortTransfer = 100;
-
         infra::BoundedConstString Name() const override;
         std::size_t RamBytes() const override;
         bool Idle() const override;
@@ -64,6 +62,7 @@ namespace validation
         struct EmfsFatVolume
         {
             explicit EmfsFatVolume(hal::BlockDevice& device);
+            ~EmfsFatVolume();
 
             cycles::FatFileSystem volume;
             fs::FatFormatter::WithStorage<8> formatter;
@@ -72,6 +71,7 @@ namespace validation
         struct EmfsNorVolume
         {
             explicit EmfsNorVolume(hal::Flash& flash);
+            ~EmfsNorVolume();
 
             cycles::NorFileSystem volume;
         };

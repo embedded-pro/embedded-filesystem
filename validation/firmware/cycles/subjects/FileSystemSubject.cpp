@@ -194,9 +194,13 @@ namespace validation
         , formatter(device)
     {}
 
+    detail::EmfsFatVolume::~EmfsFatVolume() = default;
+
     detail::EmfsNorVolume::EmfsNorVolume(hal::Flash& flash)
         : volume(flash)
     {}
+
+    detail::EmfsNorVolume::~EmfsNorVolume() = default;
 
     EmfsFatSubject::EmfsFatSubject(hal::BlockDevice& device)
         : detail::EmfsFatVolume(device)

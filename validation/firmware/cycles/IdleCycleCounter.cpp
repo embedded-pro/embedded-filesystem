@@ -2,6 +2,8 @@
 
 namespace validation
 {
+    IdleCycleSource::IdleCycleSource() = default;
+
     IdleCycleCounter::IdleCycleCounter(infra::LowPowerStrategy& strategy, const CycleCounter& counter)
         : strategy(strategy)
         , counter(counter)

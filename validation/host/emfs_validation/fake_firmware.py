@@ -16,14 +16,14 @@ DEFAULT_CYCLE_RUNS = 100
 MAXIMUM_CYCLE_RUNS = 200
 CYCLE_OPERATIONS = ("format", "mount", "open", "list", "read", "overwrite", "create", "append", "write", "rename", "remove", "unmount")
 RAM_DEVICES = {
-    "ramflash": "kind=nor sectors=512 sectorSize=4096 memory=sdram",
+    "ramflash": "kind=nor sectors=1024 sectorSize=4096 memory=sdram",
     "ramblock": "kind=block blocks=4096 blockSize=512 memory=sdram",
 }
 CYCLE_SUBJECTS = {
-    "embedded-filesystem/fat": ("ramblock", 7748, 3),
-    "embedded-filesystem/nor": ("ramflash", 17764, 4),
-    "fatfs/tuned": ("ramblock", 1916, 1),
-    "littlefs/ram-matched": ("ramflash", 13120, 1),
+    "embedded-filesystem/fat": ("ramblock", 7712, 3),
+    "embedded-filesystem/nor": ("ramflash", 13504, 4),
+    "fatfs/tuned": ("ramblock", 1888, 1),
+    "littlefs/ram-matched": ("ramflash", 12628, 2),
 }
 
 

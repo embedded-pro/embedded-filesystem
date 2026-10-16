@@ -35,10 +35,10 @@ unsigned int hse_value = validation::board::hseValue;
 
 namespace
 {
-    constexpr std::size_t ramDeviceBytes = std::size_t{ validation::cycles::ramFlashSectors } * validation::cycles::ramFlashSectorSize;
+    constexpr std::size_t ramFlashBytes = std::size_t{ validation::cycles::ramFlashSectors } * validation::cycles::ramFlashSectorSize;
+    constexpr std::size_t ramBlockBytes = std::size_t{ validation::cycles::ramBlockDeviceBlocks } * validation::RamBlockDevice::blockSize;
 
-    static_assert(std::size_t{ validation::cycles::ramBlockDeviceBlocks } * validation::RamBlockDevice::blockSize == ramDeviceBytes);
-    static_assert(2 * ramDeviceBytes <= validation::board::sdRamSize);
+    static_assert(ramFlashBytes + ramBlockBytes <= validation::board::sdRamSize);
 
     const validation::CycleDevice ramFlash{ "ramflash", validation::CycleDeviceKind::nor, validation::cycles::ramFlashSectors, validation::cycles::ramFlashSectorSize };
     const validation::CycleDevice ramBlock{ "ramblock", validation::CycleDeviceKind::block, validation::cycles::ramBlockDeviceBlocks, validation::RamBlockDevice::blockSize };
@@ -79,8 +79,8 @@ int main()
     static validation::FirmwareCommands firmware{ context, validation::FirmwareInfo{ EMFS_VALIDATION_COMMIT, cortexM4Stopped } };
 
     // The baselines block, so they use views of the RAM devices that complete within the call
-    auto flashMemory = infra::Head(sdram.Memory(), ramDeviceBytes);
-    auto blockMemory = infra::Head(infra::DiscardHead(sdram.Memory(), ramDeviceBytes), ramDeviceBytes);
+    auto flashMemory = infra::Head(sdram.Memory(), ramFlashBytes);
+    auto blockMemory = infra::Head(infra::DiscardHead(sdram.Memory(), ramFlashBytes), ramBlockBytes);
     static validation::RamFlash flash{ flashMemory, validation::cycles::ramFlashSectorSize };
     static validation::RamFlash blockingFlash{ flashMemory, validation::cycles::ramFlashSectorSize, validation::RamCompletion::immediate };
     static validation::RamBlockDevice blockDevice{ blockMemory };

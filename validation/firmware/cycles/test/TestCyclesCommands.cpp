@@ -85,6 +85,20 @@ TEST_F(CyclesCommandsTest, a_run_that_outlasts_the_timeout_answers_timeout_once)
     EXPECT_THAT(Output(), testing::EndsWith("ERR timeout\r\n"));
 }
 
+TEST_F(CyclesCommandsTest, a_run_that_ends_after_the_timeout_answers_nothing_more)
+{
+    subject.busyPollsAfterEachCall = 610000;
+    subject.failAtCall = 1;
+
+    Execute("cycles.run fake n=1");
+    ForwardTime(validation::CyclesCommands::timeout + 20s);
+
+    const auto output = Output();
+    EXPECT_THAT(output, testing::HasSubstr("EVT cycles.failed"));
+    EXPECT_THAT(output, testing::Not(testing::HasSubstr("ERR failed")));
+    EXPECT_FALSE(run.Running());
+}
+
 TEST_F(CyclesCommandsTest, a_second_run_while_one_runs_is_busy)
 {
     Execute("cycles.run fake n=1");

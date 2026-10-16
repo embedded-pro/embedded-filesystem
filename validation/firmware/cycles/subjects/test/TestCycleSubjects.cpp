@@ -72,17 +72,17 @@ namespace
             return status.value_or(notCompleted);
         }
 
-        void ExpectFullRun(validation::CycleSubject& subject, const char* device)
+        void ExpectFullRun(validation::CycleSubject& subject, const char* device, const validation::CyclePlan& plan = SmallPlan(), uint32_t runs = 2)
         {
-            validation::CycleRun run{ results, counter, idle, SmallPlan() };
+            validation::CycleRun run{ results, counter, idle, plan };
             testing::StrictMock<infra::MockCallback<void(bool)>> done;
-            run.Start(subject, device, 2, [&done](bool succeeded)
+            run.Start(subject, device, runs, [&done](bool succeeded)
                 {
                     done.callback(succeeded);
                 });
 
             EXPECT_CALL(done, callback(true));
-            ForwardTime(60s);
+            ForwardTime(60min);
 
             const auto output = Output();
             std::size_t records = 0;
@@ -92,7 +92,7 @@ namespace
 
             infra::BoundedString::WithStorage<128> expected;
             infra::StringOutputStream stream{ expected };
-            stream << "subject=" << subject.Name() << " device=" << device << " op=unmount n=2 ramBytes=" << static_cast<uint32_t>(subject.RamBytes()) << " ";
+            stream << "subject=" << subject.Name() << " device=" << device << " op=unmount n=" << runs << " ramBytes=" << static_cast<uint32_t>(subject.RamBytes()) << " ";
             EXPECT_NE(std::string::npos, output.find(expected.data(), 0, expected.size())) << output;
         }
 
@@ -223,6 +223,11 @@ TEST_F(EmfsFatSubjectTest, runs_f2_on_the_ram_block_device)
     ExpectFullRun(subject, "ramblock");
 }
 
+TEST_F(EmfsFatSubjectTest, runs_the_default_plan_of_f2_as_often_as_the_samples_hold)
+{
+    ExpectFullRun(subject, "ramblock", validation::CyclePlan(), validation::CycleSamples::capacity);
+}
+
 TEST_F(EmfsFatSubjectTest, a_reset_closes_the_open_file_and_unmounts)
 {
     ExpectResetWithAnOpenFileUnmounts(subject);
@@ -230,7 +235,7 @@ TEST_F(EmfsFatSubjectTest, a_reset_closes_the_open_file_and_unmounts)
 
 TEST_F(EmfsFatSubjectTest, a_read_beyond_the_end_of_the_file_is_short)
 {
-    EXPECT_EQ(validation::FileSystemSubject::shortTransfer, ReadMoreThanTheFileHolds(subject));
+    EXPECT_EQ(validation::CycleSubject::shortTransfer, ReadMoreThanTheFileHolds(subject));
 }
 
 TEST_F(EmfsFatSubjectTest, listing_a_missing_directory_completes_with_the_result_of_the_volume)
@@ -245,10 +250,34 @@ TEST_F(EmfsNorSubjectTest, runs_f2_on_the_ram_flash)
     ExpectFullRun(subject, "ramflash");
 }
 
+TEST_F(EmfsNorSubjectTest, runs_the_default_plan_of_f2_as_often_as_the_samples_hold)
+{
+    ExpectFullRun(subject, "ramflash", validation::CyclePlan(), validation::CycleSamples::capacity);
+}
+
+TEST_F(EmfsNorSubjectTest, opening_more_files_than_the_volume_holds_completes_with_the_result_of_the_volume)
+{
+    FormatAndMount(subject);
+    EXPECT_EQ(0, Await([&](const auto& done)
+                     {
+                         subject.Open("/first", validation::CycleOpenMode::write, done);
+                     }));
+
+    EXPECT_EQ(static_cast<int32_t>(fs::Result::tooManyOpenFiles), Await([&](const auto& done)
+                                                                      {
+                                                                          subject.Open("/second", validation::CycleOpenMode::write, done);
+                                                                      }));
+}
+
 TEST_F(FatFsSubjectTest, runs_f2_on_the_ram_block_device)
 {
     EXPECT_EQ("fatfs/tuned", subject.Name());
     ExpectFullRun(subject, "ramblock");
+}
+
+TEST_F(FatFsSubjectTest, runs_the_default_plan_of_f2_as_often_as_the_samples_hold)
+{
+    ExpectFullRun(subject, "ramblock", validation::CyclePlan(), validation::CycleSamples::capacity);
 }
 
 TEST_F(FatFsSubjectTest, a_reset_closes_the_open_file_and_unmounts)
@@ -258,7 +287,7 @@ TEST_F(FatFsSubjectTest, a_reset_closes_the_open_file_and_unmounts)
 
 TEST_F(FatFsSubjectTest, a_read_beyond_the_end_of_the_file_is_short)
 {
-    EXPECT_EQ(validation::BlockingSubject::shortTransfer, ReadMoreThanTheFileHolds(subject));
+    EXPECT_EQ(validation::CycleSubject::shortTransfer, ReadMoreThanTheFileHolds(subject));
 }
 
 TEST_F(FatFsSubjectTest, listing_a_missing_directory_completes_with_the_result_of_fatfs)
@@ -285,6 +314,14 @@ TEST_F(FatFsSubjectTest, reads_a_file_with_more_fragments_than_its_link_map_hold
                              subject.Remove(path, done);
                          }));
     }
+    ASSERT_EQ(0, Await([&](const auto& done)
+                     {
+                         subject.Unmount(done);
+                     }));
+    ASSERT_EQ(0, Await([&](const auto& done)
+                     {
+                         subject.Mount(done);
+                     }));
     ASSERT_EQ(0, Await([&](const auto& done)
                      {
                          subject.Open("/frag", validation::CycleOpenMode::write, done);
@@ -318,6 +355,11 @@ TEST_F(LittleFsSubjectTest, runs_f2_on_the_ram_flash)
     ExpectFullRun(subject, "ramflash");
 }
 
+TEST_F(LittleFsSubjectTest, runs_the_default_plan_of_f2_as_often_as_the_samples_hold)
+{
+    ExpectFullRun(subject, "ramflash", validation::CyclePlan(), validation::CycleSamples::capacity);
+}
+
 TEST_F(LittleFsSubjectTest, a_reset_closes_the_open_file_and_unmounts)
 {
     ExpectResetWithAnOpenFileUnmounts(subject);
@@ -325,12 +367,53 @@ TEST_F(LittleFsSubjectTest, a_reset_closes_the_open_file_and_unmounts)
 
 TEST_F(LittleFsSubjectTest, a_read_beyond_the_end_of_the_file_is_short)
 {
-    EXPECT_EQ(validation::BlockingSubject::shortTransfer, ReadMoreThanTheFileHolds(subject));
+    EXPECT_EQ(validation::CycleSubject::shortTransfer, ReadMoreThanTheFileHolds(subject));
 }
 
 TEST_F(LittleFsSubjectTest, listing_a_missing_directory_completes_with_the_error_of_littlefs)
 {
     EXPECT_EQ(LFS_ERR_NOENT, ListAMissingDirectory(subject));
+}
+
+TEST_F(LittleFsSubjectTest, has_a_lookahead_of_one_bit_per_block)
+{
+    EXPECT_EQ(validation::cycles::ramFlashSectors / 8, validation::LittleFsSubject::configuration.lookaheadSize);
+    EXPECT_EQ(validation::cycles::ramFlashSectorSize, validation::LittleFsSubject::configuration.cacheSize);
+}
+
+TEST_F(LittleFsSubjectTest, collects_garbage_once_a_call_on_a_mounted_volume_completes)
+{
+    FormatAndMount(subject);
+    EXPECT_TRUE(subject.Idle());
+
+    subject.MakeDirectory("/g", [](int32_t) {});
+    EXPECT_FALSE(subject.Idle());
+
+    ExecuteAllActions();
+    EXPECT_TRUE(subject.Idle());
+}
+
+TEST_F(LittleFsSubjectTest, collects_no_garbage_on_an_unmounted_volume)
+{
+    subject.Format([](int32_t) {});
+
+    EXPECT_TRUE(subject.Idle());
+    ExecuteAllActions();
+}
+
+TEST_F(LittleFsSubjectTest, a_reset_before_the_collection_leaves_the_volume_unmounted)
+{
+    FormatAndMount(subject);
+    subject.MakeDirectory("/g", [](int32_t) {});
+    ExecuteFirstAction();
+    subject.Reset([](int32_t) {});
+
+    ExecuteAllActions();
+    EXPECT_TRUE(subject.Idle());
+    EXPECT_EQ(LFS_ERR_OK, Await([&](const auto& done)
+                              {
+                                  subject.Mount(done);
+                              }));
 }
 
 TEST_F(LittleFsSubjectTest, a_write_beyond_the_space_completes_with_the_error_of_littlefs)

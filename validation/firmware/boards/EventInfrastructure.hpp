@@ -25,7 +25,6 @@ namespace validation
         hal::cortex::DataWatchpointAndTrace dwt;
     };
 
-    // The low-power event infrastructure of hal-st, with a strategy that also counts the cycles the processor sleeps, for F-2
     struct EventInfrastructure
     {
         EventInfrastructure();

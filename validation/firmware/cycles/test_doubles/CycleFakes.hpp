@@ -10,6 +10,7 @@
 #include "validation/firmware/cycles/CycleCounter.hpp"
 #include "validation/firmware/cycles/CycleSubject.hpp"
 #include "validation/firmware/cycles/IdleCycleCounter.hpp"
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <optional>
@@ -100,7 +101,7 @@ namespace validation
 
         void Open(infra::BoundedConstString path, validation::CycleOpenMode mode, const Done& onDone) override
         {
-            static constexpr const char* modes[] = { "r", "w", "a", "+" };
+            static constexpr std::array<const char*, 4> modes{ { "r", "w", "a", "+" } };
             Log("O").Log(path).Log(modes[static_cast<std::size_t>(mode)]);
             Complete(onDone);
         }
@@ -183,6 +184,9 @@ namespace validation
 
         void Complete(const Done& onDone)
         {
+            if (busyPollsLeft != 0)
+                log.append("!");
+
             log.append(" ");
             counter.added += cyclesPerCall;
             busyPollsLeft = busyPollsAfterEachCall;

@@ -1,4 +1,5 @@
 #include "infra/stream/StringOutputStream.hpp"
+#include "infra/timer/Timer.hpp"
 #include "infra/timer/test_helper/ClockFixture.hpp"
 #include "infra/util/BoundedVector.hpp"
 #include "infra/util/test_helper/MockCallback.hpp"
@@ -6,9 +7,11 @@
 #include "validation/firmware/cycles/CycleRun.hpp"
 #include "validation/firmware/cycles/test_doubles/CycleFakes.hpp"
 #include "gmock/gmock.h"
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <optional>
+#include <string>
 
 using namespace std::chrono_literals;
 
@@ -58,7 +61,7 @@ TEST_F(CycleRunTest, runs_the_operations_of_f2_after_setting_up_the_volume)
               "O/big+ Sw512 s Sw512 s C "
               "O/c0w C O/c1w C "
               "O/loga w64 s w64 s C "
-              "O/ww Sw4096 w4096 C "
+              "O/ww w4096 w4096 C "
               "N/c0>/r0 N/c1>/r1 "
               "X/r0 X/r1 "
               "U M U ",
@@ -70,7 +73,7 @@ TEST_F(CycleRunTest, prints_one_cycles_record_per_operation)
     Run(2);
 
     const auto output = Output();
-    const char* operations[] = { "format", "mount", "open", "list", "read", "overwrite", "create", "append", "write", "rename", "remove", "unmount" };
+    const std::array<const char*, 12> operations{ { "format", "mount", "open", "list", "read", "overwrite", "create", "append", "write", "rename", "remove", "unmount" } };
     std::size_t position = 0;
     for (const char* operation : operations)
     {
@@ -123,14 +126,57 @@ TEST_F(CycleRunTest, the_settled_cycles_leave_out_the_busy_cycles_of_waiting_tha
     EXPECT_THAT(Output(), testing::HasSubstr("op=list n=2 ramBytes=1234 minCycles=100 medianCycles=100 maxCycles=100 settledCycles=100\r\n"));
 }
 
+TEST_F(CycleRunTest, the_calibration_leaves_out_a_poll_that_other_work_delays)
+{
+    idle.idlePermille = 1000;
+    subject.cyclesPerCall = 100;
+    subject.busyPollsAfterEachCall = 3;
+    subject.busyCyclesPerPoll = 500;
+    infra::TimerSingleShot output{ 50ms, [this]
+        {
+            counter.added += 100000;
+        } };
+
+    Run(2);
+
+    EXPECT_THAT(Output(), testing::HasSubstr("op=list n=2 ramBytes=1234 minCycles=100 medianCycles=100 maxCycles=100 settledCycles=1600\r\n"));
+}
+
 TEST_F(CycleRunTest, waits_until_the_subject_is_idle_before_each_measured_call)
 {
     subject.busyPollsAfterEachCall = 2;
 
     Run(2);
 
-    EXPECT_EQ("R F F F M", subject.log.substr(0, 9));
-    EXPECT_THAT(Output(), testing::HasSubstr("op=unmount n=2"));
+    EXPECT_EQ("R F F "
+              "F M! D/d! O/d/f0w! w64! C! O/d/f1w! w64! C! O/bigw! w4096! w4096! C! U! "
+              "M U M "
+              "O/d/f0r C O/d/f1r C "
+              "L/d L/d "
+              "O/bigr Sr512 Sr512 C "
+              "O/big+! Sw512 s! Sw512 s! C "
+              "O/c0w C O/c1w C "
+              "O/loga! w64 s! w64 s! C "
+              "O/ww! w4096 w4096 C "
+              "N/c0>/r0 N/c1>/r1 "
+              "X/r0 X/r1 "
+              "U M U ",
+        (std::string{ subject.log.data(), subject.log.size() }));
+}
+
+TEST_F(CycleRunTest, write_truncates_its_file_every_few_runs_so_that_every_write_appends)
+{
+    validation::CyclePlan plan = SmallPlan();
+    plan.truncateEvery = 1;
+    validation::CycleRun truncating{ results, counter, idle, plan };
+    truncating.Start(subject, "ramdisk", 2, [this](bool succeeded)
+        {
+            done.callback(succeeded);
+        });
+    EXPECT_CALL(done, callback(true));
+    ForwardTime(10s);
+
+    EXPECT_THAT((std::string{ subject.log.data(), subject.log.size() }), testing::HasSubstr(" O/ww w4096 C O/ww w4096 C "));
 }
 
 TEST_F(CycleRunTest, a_failed_call_ends_the_run_with_a_failure_record)
@@ -156,7 +202,7 @@ TEST_F(CycleRunTest, reads_and_overwrites_whole_transfers_at_varying_offsets_wit
     EXPECT_CALL(done, callback(true));
     ForwardTime(10s);
 
-    ASSERT_EQ(41, subject.seeks.size());
+    ASSERT_EQ(40, subject.seeks.size());
     for (std::size_t seek = 0; seek != 40; ++seek)
     {
         EXPECT_EQ(0, subject.seeks[seek] % 512);

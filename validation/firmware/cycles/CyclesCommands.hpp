@@ -49,7 +49,7 @@ namespace validation
     private:
         services::HilStatus Run(const services::HilArguments& arguments);
         const CycleTarget* Find(infra::BoundedConstString name) const;
-        void PrintDevice(const CycleDevice& device);
+        void PrintDevice(const CycleDevice& device) const;
         void Completed(uint32_t operation, bool success);
 
     private:

@@ -130,7 +130,7 @@ def test_cycles_run_describes_the_ram_devices(terminal):
     assert {key: value for key, value in devices[0].items() if key != "id"} == {
         "device": "ramflash",
         "kind": "nor",
-        "sectors": "512",
+        "sectors": "1024",
         "sectorSize": "4096",
         "memory": "sdram",
     }
