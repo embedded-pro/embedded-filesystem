@@ -32,6 +32,8 @@ Exception: `metrics/` is host-only benchmark code and may use the standard libra
 - Multi-step operations are explicit state machines: small classes whose steps are named member functions chained through device callbacks. Do **not** use `infra::Sequencer`
 - Buffers passed to `Read`/`Write` stay valid until the completion is called
 
+Exception: `validation/firmware/baselines` adapts the synchronous FatFs and littlefs to EmIL's devices, so it waits for each completion with `infra::EventDispatcher::ExecuteUntil`, the blocking adapter an EmIL application would need for them; it is never linked into `fs.*` targets.
+
 ## Storage rules
 
 - NOR: never program a program unit twice without an erase in between; align records to `NorConfig::programUnit`

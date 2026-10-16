@@ -1,3 +1,5 @@
+add_subdirectory(baselines)
+add_subdirectory(devices)
 add_subdirectory(hil)
 add_subdirectory(results)
 
