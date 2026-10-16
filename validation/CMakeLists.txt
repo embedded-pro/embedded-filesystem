@@ -9,3 +9,5 @@ if (TARGET_MCU_VENDOR STREQUAL st)
 
     FetchContent_MakeAvailable(halst)
 endif()
+
+add_subdirectory(firmware)
