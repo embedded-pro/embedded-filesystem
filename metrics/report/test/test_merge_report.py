@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -353,6 +355,27 @@ class MainTest(unittest.TestCase):
         self.fragments.add([result()])
 
         self.assertEqual(0, self.run_main("--check", "--baseline", str(self.fragments.path / "missing.json")))
+
+    def test_main_takes_the_fragments_of_every_fragment_directory(self):
+        self.fragments.add([result()])
+        other = FragmentDirectory()
+        self.addCleanup(other.cleanup)
+        other.add([result(subject="littlefs/default")], {"stm32h757i-eval/qspi": {"run": "2026_10_20"}})
+
+        self.assertEqual(0, self.run_main("--fragment-directory", str(other.path)))
+
+        report = json.loads(self.json.read_text(encoding="utf-8"))
+        self.assertEqual(2, len(report["results"]))
+        self.assertIn("stm32h757i-eval/qspi", report["devices"])
+
+    def test_main_warns_about_a_missing_fragment_directory(self):
+        self.fragments.add([result()])
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            self.assertEqual(0, self.run_main("--fragment-directory", str(self.fragments.path / "missing")))
+
+        self.assertIn("no fragment directory", stderr.getvalue())
 
     def test_main_reports_conflicting_fragments(self):
         self.fragments.add([], {"nor-qspi-16m": NOR})

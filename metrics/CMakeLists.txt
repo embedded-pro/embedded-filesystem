@@ -7,5 +7,3 @@ add_subdirectory(baselines)
 add_subdirectory(fat)
 add_subdirectory(nor)
 add_subdirectory(interop)
-
-emfs_add_metrics_merge()

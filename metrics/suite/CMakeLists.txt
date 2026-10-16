@@ -33,6 +33,7 @@ target_sources(metrics.suite_tests PRIVATE
 
 set(EMFS_METRICS_FRAGMENT_DIRECTORY "${CMAKE_BINARY_DIR}/metrics/fragments" CACHE INTERNAL "")
 set(EMFS_METRICS_BASELINE "" CACHE FILEPATH "metrics.json of main, to detect regressions of the reported metrics")
+set(EMFS_METRICS_EXTRA_FRAGMENTS "" CACHE STRING "Absolute directories of report fragments made outside the build, such as the F-1 fragments of the metrics workflow")
 
 add_test(NAME metrics.clean_fragments
     COMMAND ${CMAKE_COMMAND} -E rm -rf "${EMFS_METRICS_FRAGMENT_DIRECTORY}"
@@ -66,17 +67,28 @@ function(emfs_add_metrics target)
     endforeach()
 endfunction()
 
+function(emfs_add_metrics_fragments test directory)
+    set_property(GLOBAL APPEND PROPERTY EMFS_METRICS_TESTS ${test})
+    set_property(GLOBAL APPEND PROPERTY EMFS_METRICS_FRAGMENT_DIRECTORIES "${directory}")
+endfunction()
+
 function(emfs_add_metrics_merge)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     get_property(metric_tests GLOBAL PROPERTY EMFS_METRICS_TESTS)
+    get_property(fragment_directories GLOBAL PROPERTY EMFS_METRICS_FRAGMENT_DIRECTORIES)
 
     if (EMFS_METRICS_BASELINE)
         set(baseline_argument "--baseline=${EMFS_METRICS_BASELINE}")
     endif()
 
+    set(directory_arguments --fragment-directory "${EMFS_METRICS_FRAGMENT_DIRECTORY}")
+    foreach(directory IN LISTS fragment_directories EMFS_METRICS_EXTRA_FRAGMENTS)
+        list(APPEND directory_arguments --fragment-directory "${directory}")
+    endforeach()
+
     add_test(NAME metrics.merge
         COMMAND Python3::Interpreter "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../report/merge_report.py"
-            --fragment-directory "${EMFS_METRICS_FRAGMENT_DIRECTORY}"
+            ${directory_arguments}
             --json "${CMAKE_BINARY_DIR}/metrics/metrics.json"
             --markdown "${CMAKE_BINARY_DIR}/metrics/metrics.md"
             ${baseline_argument}

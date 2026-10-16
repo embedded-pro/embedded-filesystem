@@ -76,7 +76,12 @@ The directory of `--results` holds what a run sends back:
 | `junit.xml`      | The JUnit report of pytest                                                                                       |
 | `run.json`       | The board, the port, the commits of the firmware and of the host checkout, the options, the times and the result |
 
-It is committed as `validation/results/<board>/<run>/`, where `<run>` is the date, as `2026_10_20`.
+It is committed as `validation/results/<board>/<run>/`, where `<board>` is the name of the board file and `<run>` the date, as `2026_10_20`; [results/README.md](results/README.md) describes the conversion.
+Before sending a run, its result lines can be checked by converting it, in `validation/host`:
+
+```bash
+.venv/bin/python -m emfs_validation.convert --run ~/emfs-run --output-directory ~/emfs-fragments
+```
 
 ## Unit tests of the host package
 
