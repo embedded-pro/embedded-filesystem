@@ -9,8 +9,10 @@ from typing import Any, TextIO
 
 from ad3_waveforms_bench.terminal import FirmwareTerminal, PendingCommand
 
-TRANSCRIPT = "transcript.log"
-RUN = "run.json"
+from emfs_validation.convert import RUN, TRANSCRIPT
+
+__all__ = ["JUNIT", "RUN", "TRANSCRIPT", "RecordingTerminal", "source_commit", "write_run"]
+
 JUNIT = "junit.xml"
 
 
