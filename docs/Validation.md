@@ -176,10 +176,10 @@ Results follow the framing of the terminal of EmIL, so the host reads them with 
 EVT <kind> id=<number> <key>=<value> ...
 ```
 
-* The `id` numbers the records of a run; a record may take several lines with the same `id`, so that every line stays shorter than 255 characters, and the host joins them.
+* The `id` numbers the records from 1 after a reset; a record may take several lines with the same `id`, which follow one another, so that every line stays shorter than 255 characters, and the host joins them; a list that does not fit continues under the same key.
 * Values contain no spaces, and lists are separated by commas: the phase `L1 1048576 64` is written `phase=L1,1048576,64`.
 * Numbers are decimal; durations are in nanoseconds, in keys ending in `Ns`, cycles in keys ending in `Cycles`, and sizes in bytes.
-* The host ignores keys it does not know, so a later firmware can add keys without breaking the conversion of older runs.
+* The host ignores kinds and keys it does not know, so a later firmware can add them without breaking the conversion of older runs; only a `device` record keeps every key, as a parameter of the device.
 
 | Kind     | Keys                                                                                                                                                                                                                                                         | Record                               |
 |----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------|
@@ -297,12 +297,14 @@ The layouts of every card and the result of the check on the PC are recorded in 
 * every result carries `ramBytes`, as the merge needs: the size of the state of the subject on the board.
 
 The device models come from `metrics.device_models`, a host program of the metrics harness that prints the parameters of every model of `metrics/device/DeviceModels.cpp`, and the W-6 bound that `metrics::NorTargets` and `metrics::FatTargets` give for the configuration of every device of the boards.
+It writes them as a JSON object keyed by the device of a board, which the conversion takes with `--models`: `{"stm32h757i-eval/qspi": {"model": "nor-qspi-16m", "sectorErase": "..."}}`; a device takes `model` and every other parameter as `model.<parameter>` among its parameters, and a device without an entry, such as a RAM device, takes the run only.
+Each kind of record has its converter, and the step that adds a kind adds its converter; records of other kinds are ignored.
 The conversion imports only the standard library of Python, and the package imports `ad3-waveforms-bench` only in the modules that talk to a board, so the metrics build runs `python3 -m emfs_validation.convert` without installing the package.
 
 ## Results
 
 A run that is sent back is committed in `validation/results/<board>/<run>/`, with the transcript, the JUnit report and `run.json`, which names the commit of the firmware, the board, the card or the chip, and the options of the run; `<run>` is the date, as `2026_10_20`.
-The metrics build, with `EMFS_BUILD_VALIDATION` in the `metrics` preset, converts the latest run of every board with the current device models, and the merge takes the fragments with the others, so that the comment on the pull request shows them.
+The metrics build, with `EMFS_BUILD_VALIDATION` in the `metrics` preset, converts the latest run of every board, by the date in the name of its directory, in the test `validation.convert_runs`, with the current device models once `metrics.device_models` writes them, and `metrics.merge` takes the fragments with the others, so that the comment on the pull request shows them.
 The parameters of a device of a run hold the run and the parameters of the model, so a new run or a recalibration is not compared with `main`, while a pull request that changes the conversion of an unchanged run is held to the 5 % rule by `merge_report.py --check`.
 Because the committed run is the transcript and not the fragments, C-1 and C-2 follow a recalibration of the models without running the boards again.
 The results of the runs are summarized in [Metrics.md](Metrics.md#on-target-results), and the layouts of the cards in [Fat.md](Fat.md#formatting).

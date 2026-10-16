@@ -40,3 +40,19 @@ An unknown command, or a command with the wrong arguments, answers `ERR usage`.
 
 `commit` is what `git describe --always --dirty --abbrev=40` gave when the preset was configured, so configuring again, as the bench guide does before every build, keeps it up to date.
 `cm4` is `stopped` when the Cortex-M4 entered stop mode before the Cortex-M7 set up the clocks, as the parked image does, and `running` when another image on the Cortex-M4 kept it running.
+
+## Result lines
+
+Results are records of `EVT` lines, written by `validation::ResultLines`:
+
+```text
+EVT <kind> id=<number> <key>=<value> ...
+```
+
+* `id` numbers the records from 1 after a reset.
+* No line is longer than 254 characters: a record that does not fit continues on the next line, with the same kind and `id`, and the lines of a record follow one another; a pair longer than a line of its own aborts the firmware.
+* Keys hold no spaces and no `=`, and values no spaces; the firmware aborts on one. A list is written with commas, `histogram=0,12,7`; an empty list is `histogram=`; a list that does not fit continues under the same key on the next line, `histogram=3,4`, so that the host joins it as `histogram=0,12,7,3,4`.
+* Numbers are decimal and unsigned, up to 64 bits; durations are in nanoseconds, in keys ending in `Ns`, cycles in keys ending in `Cycles`, and sizes in bytes.
+
+`emfs_validation.convert` joins the lines of every record and ignores kinds and keys it does not know, so that a later firmware can add them; only a `device` record keeps every key, as a parameter of the device, except `run`, `model` and `model.<parameter>`, which the conversion adds.
+The kinds are described with the commands that print them.
