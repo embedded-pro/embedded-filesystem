@@ -295,3 +295,86 @@ TEST_F(OperationQueueTest, releasing_a_queued_background_claim_withdraws_it)
     EXPECT_CALL(idle, callback());
     ForwardTime(1s);
 }
+
+TEST_F(OperationQueueTest, is_idle_without_claims)
+{
+    EXPECT_TRUE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_not_idle_while_a_claim_waits_to_be_granted)
+{
+    Grant(first, 1);
+
+    EXPECT_FALSE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_not_idle_while_a_claim_is_granted)
+{
+    ClaimAndGrantFirst();
+
+    EXPECT_FALSE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_not_idle_during_the_idle_delay_after_a_foreground_release)
+{
+    ClaimAndGrantFirst();
+    first.Release();
+
+    EXPECT_FALSE(queue.Idle());
+    EXPECT_CALL(idle, callback());
+    ForwardTime(100ms);
+    EXPECT_TRUE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_not_idle_while_a_background_claim_is_queued_or_granted)
+{
+    GrantBackground();
+    EXPECT_FALSE(queue.Idle());
+
+    EXPECT_CALL(granted, callback(0));
+    ExecuteAllActions();
+    EXPECT_FALSE(queue.Idle());
+
+    background.Release();
+    EXPECT_TRUE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_not_idle_while_an_urgent_background_claim_is_queued)
+{
+    background.ClaimUrgent([] {});
+
+    EXPECT_FALSE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_idle_once_queued_claims_are_withdrawn)
+{
+    Grant(first, 1);
+    GrantBackground();
+
+    first.Release();
+    background.Release();
+
+    EXPECT_TRUE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, a_second_release_does_not_count_the_claim_twice)
+{
+    Grant(first, 1);
+    Grant(second, 2);
+    first.Release();
+    first.Release();
+
+    EXPECT_FALSE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_idle_once_claimers_with_outstanding_claims_are_destroyed)
+{
+    {
+        fs::OperationQueue::Claimer foreground{ queue };
+        fs::OperationQueue::BackgroundClaimer inBackground{ queue };
+        foreground.Claim([] {});
+        inBackground.Claim([] {});
+    }
+
+    EXPECT_TRUE(queue.Idle());
+}

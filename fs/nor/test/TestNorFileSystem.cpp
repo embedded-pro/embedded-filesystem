@@ -324,3 +324,27 @@ TEST_F(NorFileSystemTest, a_directory_made_before_unmount_is_there_after_the_nex
 
     ExpectMakeDirectory("/a", fs::Result::alreadyExists);
 }
+
+TEST_F(NorFileSystemTest, is_idle_before_its_first_operation)
+{
+    EXPECT_TRUE(volume.Idle());
+}
+
+TEST_F(NorFileSystemTest, is_not_idle_until_the_idle_delay_after_an_operation_has_passed)
+{
+    ExpectFormat();
+    EXPECT_FALSE(volume.Idle());
+
+    ForwardTime(fs::NorFileSystem::defaultIdleDelay);
+    EXPECT_TRUE(volume.Idle());
+}
+
+TEST_F(NorFileSystemTest, is_idle_once_the_work_after_a_mount_is_done)
+{
+    ExpectFormat();
+    ExpectMount();
+    EXPECT_FALSE(volume.Idle());
+
+    ForwardTime(std::chrono::seconds(1));
+    EXPECT_TRUE(volume.Idle());
+}

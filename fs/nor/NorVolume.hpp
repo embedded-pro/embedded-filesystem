@@ -107,6 +107,7 @@ namespace fs
         infra::IntrusiveList<NorFile>& OpenFiles();
         infra::IntrusiveList<NorDirectory>& OpenDirectories();
         OperationQueue& Queue();
+        const OperationQueue& Queue() const;
         NorOperation& Operation();
 
         uint32_t Generation() const;

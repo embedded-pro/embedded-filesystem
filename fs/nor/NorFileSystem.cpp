@@ -102,6 +102,11 @@ namespace fs
         StartCall(NorUsageCall{ onDone });
     }
 
+    bool NorFileSystem::Idle() const
+    {
+        return volume.Queue().Idle();
+    }
+
     NorVolume& NorFileSystem::Volume()
     {
         return volume;

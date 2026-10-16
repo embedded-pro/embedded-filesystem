@@ -87,6 +87,11 @@ namespace fs
         StartCall(FatUsageCall{ onDone });
     }
 
+    bool FatFileSystem::Idle() const
+    {
+        return volume.Queue().Idle();
+    }
+
     FatVolume& FatFileSystem::Volume()
     {
         return volume;

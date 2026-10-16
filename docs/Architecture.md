@@ -230,9 +230,14 @@ namespace fs
         virtual void Rename(infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone) = 0;
         virtual void MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone) = 0;
         virtual void Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone) = 0;
+
+        virtual bool Idle() const = 0;
     };
 }
 ```
+
+`Idle()` is true while no call is queued or running and no background work is scheduled, so the volume does nothing until it is called again: the queue holds no claim, granted or waiting, and its idle delay is not running.
+A product can use it before it powers the device down or sleeps deeply, and F-2 in [Validation.md](Validation.md#processor-cycles) uses it to count the cycles of the background work that an operation leaves.
 
 Formatting a volume is not part of `FileSystem`: FAT volumes are formatted by `fs::FatFormatter`, and NOR volumes by `fs::NorFileSystem::Format`.
 

@@ -182,6 +182,11 @@ namespace fs
         return queue;
     }
 
+    const OperationQueue& NorVolume::Queue() const
+    {
+        return queue;
+    }
+
     NorOperation& NorVolume::Operation()
     {
         return operation;

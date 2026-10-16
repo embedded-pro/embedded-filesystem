@@ -211,6 +211,21 @@ TEST_F(FatFileSystemTest, calls_before_mount_are_not_mounted)
     ExpectUnmount(fs::Result::notMounted);
 }
 
+TEST_F(FatFileSystemTest, is_idle_before_its_first_operation)
+{
+    EXPECT_TRUE(volume.Idle());
+}
+
+TEST_F(FatFileSystemTest, is_not_idle_until_the_free_space_scan_after_a_mount_is_done)
+{
+    Format();
+    ExpectMount();
+    EXPECT_FALSE(volume.Idle());
+
+    ForwardTime(std::chrono::seconds(1));
+    EXPECT_TRUE(volume.Idle());
+}
+
 TEST_F(FatFileSystemTest, mount_completes_from_the_event_dispatcher)
 {
     Format();

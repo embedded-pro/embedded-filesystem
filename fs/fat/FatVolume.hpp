@@ -97,6 +97,7 @@ namespace fs
         infra::IntrusiveList<FatFile>& OpenFiles();
         infra::IntrusiveList<FatDirectory>& OpenDirectories();
         OperationQueue& Queue();
+        const OperationQueue& Queue() const;
         FatOperation& Operation();
         const FatReservations& Reservations() const;
         FatDateTime Timestamp() const;
