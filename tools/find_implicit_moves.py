@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""List the classes and structs of fs/ that hold a function and declare no copy, move or destructor.
+"""List the classes and structs of fs/ and validation/firmware that hold a function and declare no copy, move or destructor.
 
 A member infra::Function, or a std::variant of calls, gives them an implicit move that is not
 noexcept, which Sonar reports. infra::AutoResetFunction, or a declared noexcept move, avoids it.
@@ -24,7 +24,7 @@ def git(*arguments):
 
 
 def headers(ref):
-    names = git("ls-tree", "-r", "--name-only", ref, "fs").split()
+    names = git("ls-tree", "-r", "--name-only", ref, "fs", "validation/firmware").split()
     return [name for name in names if name.endswith(".hpp") and not TEST_DIRECTORY.search(name)]
 
 

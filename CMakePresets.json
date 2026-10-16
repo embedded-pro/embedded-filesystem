@@ -17,7 +17,8 @@
       "inherits": "defaults",
       "cacheVariables": {
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo;MinSizeRel",
-        "EMFS_BUILD_TESTS": true
+        "EMFS_BUILD_TESTS": true,
+        "EMFS_BUILD_VALIDATION": true
       },
       "generator": "Ninja Multi-Config"
     },
@@ -27,7 +28,8 @@
       "inherits": "defaults",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "EMFS_BUILD_TESTS": true
+        "EMFS_BUILD_TESTS": true,
+        "EMFS_BUILD_VALIDATION": true
       }
     },
     {
@@ -36,7 +38,8 @@
       "inherits": "defaults",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "MinSizeRel",
-        "EMFS_BUILD_TESTS": true
+        "EMFS_BUILD_TESTS": true,
+        "EMFS_BUILD_VALIDATION": true
       }
     },
     {
@@ -61,7 +64,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "EMFS_BUILD_TESTS": true,
-        "EMFS_BUILD_METRICS": true
+        "EMFS_BUILD_METRICS": true,
+        "EMFS_BUILD_VALIDATION": true
       }
     },
     {
@@ -73,7 +77,8 @@
         "CCACHE_COMPILERTYPE": "clang-cl"
       },
       "cacheVariables": {
-        "EMFS_BUILD_TESTS": true
+        "EMFS_BUILD_TESTS": true,
+        "EMFS_BUILD_VALIDATION": true
       },
       "generator": "Ninja Multi-Config"
     },
@@ -85,7 +90,8 @@
         "CMAKE_TOOLCHAIN_FILE": ""
       },
       "cacheVariables": {
-        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo;MinSizeRel"
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo;MinSizeRel",
+        "EMFS_BUILD_VALIDATION": true
       },
       "generator": "Ninja Multi-Config"
     },
@@ -117,6 +123,59 @@
       "toolchainFile": "${sourceDir}/build/${presetName}/_deps/emil-src/cmake/toolchain-arm-gcc-m33-fpv5-sp-d16.cmake",
       "cacheVariables": {
         "TARGET_CORTEX": "m33"
+      }
+    },
+    {
+      "name": "stm32",
+      "hidden": true,
+      "inherits": "cortex",
+      "cacheVariables": {
+        "TARGET_MCU_VENDOR": "st",
+        "TARGET_MCU_FAMILY": "stm32h7xx"
+      }
+    },
+    {
+      "name": "stm32h757-cm7",
+      "displayName": "stm32h757-cm7",
+      "description": "Validation firmware for the Cortex-M7 of the STM32H757I-EVAL",
+      "inherits": "stm32",
+      "toolchainFile": "${sourceDir}/build/${presetName}/_deps/emil-src/cmake/toolchain-arm-gcc-m7-fpv5-d16.cmake",
+      "cacheVariables": {
+        "TARGET_CORTEX": "m7",
+        "TARGET_MCU": "stm32h757"
+      }
+    },
+    {
+      "name": "stm32h757-cm4",
+      "displayName": "stm32h757-cm4",
+      "description": "Parked image for the Cortex-M4 of the STM32H757I-EVAL",
+      "inherits": "stm32",
+      "toolchainFile": "${sourceDir}/build/${presetName}/_deps/emil-src/cmake/toolchain-arm-gcc-m4-fpv4-sp-d16.cmake",
+      "cacheVariables": {
+        "TARGET_CORTEX": "m4",
+        "TARGET_MCU": "stm32h757"
+      }
+    },
+    {
+      "name": "stm32h745-cm7",
+      "displayName": "stm32h745-cm7",
+      "description": "Validation firmware for the Cortex-M7 of the STM32H745I-DISCO",
+      "inherits": "stm32",
+      "toolchainFile": "${sourceDir}/build/${presetName}/_deps/emil-src/cmake/toolchain-arm-gcc-m7-fpv5-d16.cmake",
+      "cacheVariables": {
+        "TARGET_CORTEX": "m7",
+        "TARGET_MCU": "stm32h745"
+      }
+    },
+    {
+      "name": "stm32h745-cm4",
+      "displayName": "stm32h745-cm4",
+      "description": "Parked image for the Cortex-M4 of the STM32H745I-DISCO",
+      "inherits": "stm32",
+      "toolchainFile": "${sourceDir}/build/${presetName}/_deps/emil-src/cmake/toolchain-arm-gcc-m4-fpv4-sp-d16.cmake",
+      "cacheVariables": {
+        "TARGET_CORTEX": "m4",
+        "TARGET_MCU": "stm32h745"
       }
     }
   ],
@@ -196,6 +255,46 @@
       "name": "cortex-m33-MinSizeRel",
       "configuration": "MinSizeRel",
       "configurePreset": "cortex-m33"
+    },
+    {
+      "name": "stm32h757-cm7-RelWithDebInfo",
+      "configuration": "RelWithDebInfo",
+      "configurePreset": "stm32h757-cm7"
+    },
+    {
+      "name": "stm32h757-cm7-MinSizeRel",
+      "configuration": "MinSizeRel",
+      "configurePreset": "stm32h757-cm7"
+    },
+    {
+      "name": "stm32h757-cm4-RelWithDebInfo",
+      "configuration": "RelWithDebInfo",
+      "configurePreset": "stm32h757-cm4"
+    },
+    {
+      "name": "stm32h757-cm4-MinSizeRel",
+      "configuration": "MinSizeRel",
+      "configurePreset": "stm32h757-cm4"
+    },
+    {
+      "name": "stm32h745-cm7-RelWithDebInfo",
+      "configuration": "RelWithDebInfo",
+      "configurePreset": "stm32h745-cm7"
+    },
+    {
+      "name": "stm32h745-cm7-MinSizeRel",
+      "configuration": "MinSizeRel",
+      "configurePreset": "stm32h745-cm7"
+    },
+    {
+      "name": "stm32h745-cm4-RelWithDebInfo",
+      "configuration": "RelWithDebInfo",
+      "configurePreset": "stm32h745-cm4"
+    },
+    {
+      "name": "stm32h745-cm4-MinSizeRel",
+      "configuration": "MinSizeRel",
+      "configurePreset": "stm32h745-cm4"
     }
   ],
   "testPresets": [

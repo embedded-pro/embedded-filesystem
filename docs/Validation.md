@@ -68,7 +68,7 @@ The board presets follow those of hal-st:
 | `stm32h745-cm4`  | Cortex-M4 | `toolchain-arm-gcc-m4-fpv4-sp-d16.cmake` | `stm32h745`  | `validation.park`     |
 
 Each sets `TARGET_MCU_VENDOR` to `st`, `TARGET_MCU_FAMILY` to `stm32h7xx` and `EMFS_BUILD_VALIDATION`, and has the build presets `<preset>-RelWithDebInfo` and `<preset>-MinSizeRel`.
-The images are written with their `.bin` and `.hex` next to the `.elf` in `build/<preset>/validation/firmware/<configuration>/`.
+The images are written with their `.bin` and `.hex` next to the `.elf` in `build/<preset>/validation/firmware/boards/<configuration>/`.
 CI builds the four presets next to the Cortex-M presets, with `xsltproc` installed for the pin tables that hal-st generates, and `tools/verify.sh` builds them before a push.
 
 ## Boards
@@ -151,6 +151,7 @@ A command that runs for minutes is a `services::HilPendingOperation` whose timeo
 
 | Command                                                                             | Does                                                                                           | Answers                                      |
 |-------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|----------------------------------------------|
+| `firmware.info`                                                                     | Names the commit the firmware was built from, and whether the Cortex-M4 stopped                | `OK commit=<commit> cm4=<stopped\|running>`  |
 | `dev.list`                                                                          | Lists the devices of the board                                                                 | `OK devices=qspi,fmc,sd,ramflash,ramblock`   |
 | `dev.info <device>`                                                                 | Identifies a device and prints its geometry                                                    | `EVT device`, `OK`                           |
 | `bench.program <device> size=<bytes> n=<count>`                                     | Programs `size` bytes at `n` erased, page-aligned addresses                                    | `EVT bench`, `OK`                            |
@@ -273,7 +274,7 @@ The layouts of every card and the result of the check on the PC are recorded in 
 
 `validation/host` is the Python package `emfs_validation`, built like the host package of the validation of hal-st:
 
-* the scenarios are pytest-bdd feature files in `tests/hil/features`, bound to steps in `tests/hil`, and run only with a port, `--port`;
+* the scenarios are pytest-bdd feature files in `tests/hil/features`, bound to steps in `tests/hil`, and run with the port of a board, `--port`, or on the fake firmware of the package, `--fake`;
 * the board file, `--board boards/<board>.yaml`, holds the devices of the board, the scale divisor and the timeouts;
 * the terminal is the `FirmwareTerminal` of `ad3-waveforms-bench`, pinned to a commit as hal-st pins it, with `--no-ad3`, since validation needs no Analog Discovery;
 * a run writes the transcript of the terminal, every line sent and received, the JUnit report of pytest and `run.json`, into `--results <directory>`;
@@ -281,7 +282,7 @@ The layouts of every card and the result of the check on the PC are recorded in 
 
 | Feature          | Scenarios                                                                                      |
 |------------------|------------------------------------------------------------------------------------------------|
-| `boot.feature`   | The board boots, answers `ping` and `info`, and lists its devices                              |
+| `boot.feature`   | The board boots, answers `ping`, `info` and `firmware.info`, and has parked the Cortex-M4      |
 | `nor.feature`    | The benchmarks and the workloads on every NOR device of the board                              |
 | `block.feature`  | The benchmarks and the workloads on the block device of the board                              |
 | `cycles.feature` | F-2 for the four subjects                                                                      |
@@ -348,9 +349,9 @@ The metrics job adds these fragments to the merge, so F-1 is reported next to th
 
 ```bash
 cmake --preset stm32h757-cm7
-cmake --build --preset stm32h757-cm7-RelWithDebInfo --target validation.firmware
+cmake --build --preset stm32h757-cm7-RelWithDebInfo
 cmake --preset stm32h757-cm4
-cmake --build --preset stm32h757-cm4-RelWithDebInfo --target validation.park
+cmake --build --preset stm32h757-cm4-RelWithDebInfo
 
 cd validation/host
 pip install ".[dev]"

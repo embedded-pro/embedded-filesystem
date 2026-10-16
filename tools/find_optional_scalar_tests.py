@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """List the added lines that test a std::optional of a scalar as a bool, where Sonar asks for has_value().
 
-The names of optional scalars are collected from fs/ and metrics/: variables, members and parameters
+The names of optional scalars are collected from fs/, metrics/ and validation/firmware/: variables, members and parameters
 declared as one, and auto variables initialised from a function that returns one. They are then
 matched in the lines added since base. A name that is declared with another type elsewhere matches
 too, so each hit needs a look.
@@ -28,7 +28,7 @@ def git(*arguments):
 
 def optional_scalar_names():
     names = set()
-    for path in git("ls-files", "fs", "metrics").split():
+    for path in git("ls-files", "fs", "metrics", "validation/firmware").split():
         if not path.endswith((".hpp", ".cpp")):
             continue
         source = Path(path).read_text(encoding="utf-8")
@@ -46,7 +46,7 @@ def tests_as_bool(line, name):
 def added_lines(base):
     path = None
     number = 0
-    for line in git("diff", "-U0", base, "--", "fs", "metrics").splitlines():
+    for line in git("diff", "-U0", base, "--", "fs", "metrics", "validation/firmware").splitlines():
         if line.startswith("+++ "):
             path = line[6:]
         elif line.startswith("@@"):
