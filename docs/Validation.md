@@ -16,8 +16,12 @@ validation/
     README.md               the bench guide: build, flash, run, and send the results
     PROTOCOL.md             the commands of the firmware and its result lines
     firmware/               C++ for the boards
+        baselines/          the glue of FatFs and littlefs
         boards/stm32h757/BoardProfile.hpp
         boards/stm32h745/BoardProfile.hpp
+        devices/            the null, RAM and counting devices
+        hil/                the command groups
+        results/            the result lines
     footprint/              the reference images of F-1
     host/                   the Python package emfs_validation
         boards/stm32h757i_eval.yaml
@@ -30,7 +34,7 @@ validation/
 
 The C++ of `validation/firmware` is split in two:
 
-* Libraries that need no board: the counting devices, the benchmarks, the workload runner, the RAM devices, the parser of FAT layouts, the result lines and the command groups.
+* Libraries that need no board: the null, RAM and counting devices, the glue of FatFs and littlefs, the benchmarks, the workload runner, the parser of FAT layouts, the result lines and the command groups.
   They are written against `hal::Flash`, `hal::BlockDevice` and the terminal of EmIL, built and tested on the host, and covered 100 % like `fs/`.
 * Board files: the board profiles, the `main` of both cores and the glue to the drivers of hal-st.
   They build only for the boards, and are excluded from the coverage and from SonarCloud.
@@ -55,8 +59,12 @@ hal-st is pinned to a full commit SHA, `GIT_TAG <sha> # Unreleased`, and `.githu
 As a subproject, hal-st uses the EmIL of embedded-filesystem, not its own pin; both follow the `main` branch of EmIL, and a bump that no longer builds shows up as a failing pull request of the bump.
 The startup code of hal-st is assembly, so the top-level `CMakeLists.txt` enables the ASM language when validation is built for an ST board; nothing else outside `validation/` refers to hal-st.
 
-FatFs and littlefs, which F-1 and F-2 build for Cortex-M, are pinned in `cmake/emfs_third_party.cmake`, which `metrics/` and `validation/` both include, so that both use the same versions.
-The file declares the sources and builds their C code, the FatFs variants with their generated `ffconf.h`; the glue stays with each user: the host shims in `metrics/baselines`, and in `validation/` glue that waits for the completions of the device with `infra::EventDispatcher::ExecuteUntil`, the blocking adapter an EmIL application would need for them.
+FatFs and littlefs, which F-1 and F-2 build for Cortex-M, are pinned in `cmake/emfs_third_party.cmake`, which the top level includes when `metrics/` or `validation/` is built, so that both use the same versions.
+The file fetches the sources and builds their C code as `third_party.fatfs_default` and `third_party.fatfs_tuned`, with their generated `ffconf.h`, and `third_party.littlefs`.
+The glue stays with each user: the host shims in `metrics/baselines`, and in `validation/firmware/baselines` the blocking adapters an EmIL application would need, which wait for the completions of the device with `infra::EventDispatcher::ExecuteUntil`:
+
+* `validation::FatFsDisk`, the `disk_*` functions of FatFs over a `hal::BlockDevice`, one library per variant;
+* `validation::LittleFsFlash`, the callbacks of littlefs over a `hal::Flash`.
 
 The board presets follow those of hal-st:
 
@@ -325,25 +333,43 @@ Both are reported until the first runs show their spread, and a later step sets 
 
 ## F-1 reference images
 
-`validation/footprint` builds one reference image per subject for the Cortex-M4, Cortex-M7 and Cortex-M33 presets: `embedded-filesystem/fat`, `embedded-filesystem/nor`, `fatfs/default`, `fatfs/tuned`, `littlefs/default` and `littlefs/ram-matched`, in the configurations of the host metrics.
-Each image calls every operation of the API of its subject, and the formatter, on a device that does nothing, so that the linker keeps every function a product could call.
-An empty image holds the same startup code, event dispatcher and device, and each subject is measured against it with `--baseline-elf` of `cortex-memory-budget`, so that F-1 is what the subject adds to an EmIL application.
-The images need no board: they are linked with a generic linker script with one `MEMORY` block, a minimal vector table and the system call stubs of `hal.cortex_m.runtime`, in `MinSizeRel`.
+`validation/footprint` builds one reference image per subject for the Cortex-M4, Cortex-M7 and Cortex-M33 presets, the target `validation.footprint`:
 
-The metrics workflow builds them in a job of its own, runs `cortex-memory-budget` on every image, and turns its `memory_metrics.json` into F-1 fragments, with the flash and the RAM of a subject as two results, each with the RAM in `ramBytes`, and the toolchain and the configuration as the parameters of the core; with illustrative values:
+| Image                                          | Subject                   | Configuration                                                                                                        |
+|------------------------------------------------|---------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `validation.footprint.empty`                   |                           | The platform alone                                                                                                   |
+| `validation.footprint.fat`                     | `embedded-filesystem/fat` | `fs::FatFileSystem::WithStorage<1, 8>`, the allocation unit of `sd-card-256m`, and `fs::FatFormatter`                |
+| `validation.footprint.nor`                     | `embedded-filesystem/nor` | `fs::NorFileSystem::WithStorage` with the configuration of `nor-qspi-16m` and one file                               |
+| `validation.footprint.fatfs_default`, `_tuned` | `fatfs/default`, `/tuned` | One `FIL`, through `validation::FatFsDisk`; the tuned variant with the allocation unit and a link map of 64 entries  |
+| `validation.footprint.littlefs_default`        | `littlefs/default`        | Caches of 16 bytes and one file, through `validation::LittleFsFlash`                                                 |
+| `validation.footprint.littlefs_ram_matched`    | `littlefs/ram-matched`    | Caches of one sector, the lookahead of `nor-qspi-16m`, one file and `lfs_fs_gc`, through `validation::LittleFsFlash` |
+
+The configurations are those of the host metrics, with one open file, as their `RamBytes()` counts; `Configurations.hpp` holds them, and `metrics.baselines_test` checks that they equal the device models and the configurations of the host.
+Each image calls every operation of the API of its subject, and the formatter, on a device that does nothing, so that the linker keeps every function a product could call; `validation::footprint::Exercise` makes the calls of `fs::FileSystem` for both subjects of embedded-filesystem.
+The volumes and their buffers are static, so that their RAM is counted, in `infra::StaticStorage`, so that the destructors a product never runs are not linked; the formatter of `fs/fat`, the work area of `f_mkfs` and the directory and entry structures of FatFs and littlefs are on the stack of `main`, as `RamBytes()` leaves them out on the host, and the buffer of the reads and writes is in the platform.
+F-1 counts the code of EmIL that a subject uses and the empty image does not, such as `infra::SharedPtr`, `infra::ClaimableResource` and the timers of the idle work of NOR, since a product that has none of the subjects does not link it either.
+
+Every image holds the same platform, `validation::footprint::Platform`: the interrupt table, an `infra::EventDispatcherWithWeakPtr`, the SysTick timer service of `hal.cortex_m`, `validation::NullFlash` and `validation::NullBlockDevice` with the geometries of `nor-qspi-16m` and `sd-card-256m`, which complete every request through the event dispatcher, and a buffer of 64 bytes for the reads and writes.
+The empty image holds the platform alone, and F-1 is the difference between the report of the image of a subject and that of the empty image, so that it is what the subject adds to an EmIL application, its glue included; `--baseline-elf` adds `memory_diff.md` to each report, the symbols that differ.
+The images need no board: they are linked with `Footprint.ld`, a generic linker script with one `MEMORY` block for the flash and one for the RAM, `Startup.cpp`, a minimal vector table and reset handler, and the system call stubs of `hal.cortex_m.runtime`, in `MinSizeRel`.
+
+`validation/footprint/measure.sh <directory>` runs `cortex-memory-budget`, pinned by hash in `requirements.txt`, on every image of the three presets, with `memory_budget.json`, into `<directory>/reports`, and `python3 -m emfs_validation.footprint` turns the reports into the F-1 fragment, `<directory>/fragments/footprint.json`.
+Each subject has two results per core, the flash and the RAM it adds, each with the RAM in `ramBytes`, and each core is a device with the compiler, as the `.comment` of the images names it, and the configuration as its parameters:
 
 ```json
 {
   "devices": {
-    "cortex-m4": { "toolchain": "arm-none-eabi-gcc 15.2.Rel1", "configuration": "MinSizeRel" }
+    "cortex-m4": { "toolchain": "arm-none-eabi-gcc (Arm GNU Toolchain 15.2.Rel1) 15.2.1", "configuration": "MinSizeRel" }
   },
   "results": [
-    { "metric": "F-1", "workload": "flash", "subject": "embedded-filesystem/fat", "device": "cortex-m4", "unit": "B", "value": 30000, "ramBytes": 6000, "better": "lower" }
+    { "metric": "F-1", "workload": "flash", "subject": "embedded-filesystem/fat", "device": "cortex-m4", "unit": "B", "value": 70968, "ramBytes": 7748, "better": "lower" },
+    { "metric": "F-1", "workload": "ram", "subject": "embedded-filesystem/fat", "device": "cortex-m4", "unit": "B", "value": 7748, "ramBytes": 7748, "better": "lower" }
   ]
 }
 ```
 
-The metrics job adds these fragments to the merge, so F-1 is reported next to the baselines and held to the 5 % rule like any reported metric.
+The `Footprint` job of the metrics workflow builds the images, measures them and uploads the directory as the artifact `footprint`; the `Metrics` job downloads it and passes `-DEMFS_METRICS_EXTRA_FRAGMENTS=<directory>/fragments`, so F-1 is reported next to the baselines and held to the 5 % rule like any reported metric.
+When the `Footprint` job fails, the `Metrics` job still runs, and the report lacks F-1.
 
 ## Running on a board
 

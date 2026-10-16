@@ -12,6 +12,7 @@ embedded-filesystem provides asynchronous, heap-less C++20 filesystems for micro
 - `fs/nor/` — log-structured NOR filesystem, garbage collection, wear leveling (target `fs.nor`); design in `docs/NorFilesystem.md`
 - `metrics/` — host-only device models, metered and power-cut devices, workloads, FatFs/littlefs baselines (targets `metrics.*`); definitions in `docs/Metrics.md`
 - `validation/` — firmware for ST boards on hal-st, F-1 reference images, the Python host package `validation/host` and the committed runs `validation/results` (targets `validation.*`); design in `docs/Validation.md`
+- `cmake/emfs_third_party.cmake` — the pins of FatFs and littlefs, built as `third_party.*` for `metrics/` and `validation/`
 - Namespace `fs` for the libraries, `metrics` for the harness, `validation` for the validation. Storage drivers are not in this repository
 
 ## Memory — no heap
@@ -31,6 +32,8 @@ Exception: `metrics/` is host-only benchmark code and may use the standard libra
 - Lifecycles (volume, background work, media presence) are `services::TableStateMachine` instances from EMIL; device completions go through `Completion<Ev>()`
 - Multi-step operations are explicit state machines: small classes whose steps are named member functions chained through device callbacks. Do **not** use `infra::Sequencer`
 - Buffers passed to `Read`/`Write` stay valid until the completion is called
+
+Exception: `validation/firmware/baselines` adapts the synchronous FatFs and littlefs to EmIL's devices, so it waits for each completion with `infra::EventDispatcher::ExecuteUntil`, the blocking adapter an EmIL application would need for them; it is never linked into `fs.*` targets.
 
 ## Storage rules
 
@@ -80,6 +83,7 @@ Validation (`docs/Validation.md`, `validation/README.md`):
 - Board presets `stm32h757-cm7`, `stm32h757-cm4`, `stm32h745-cm7`, `stm32h745-cm4`, built with `cmake --build --preset <preset>-RelWithDebInfo` (Arm GNU toolchain and `xsltproc`)
 - Host package: `cd validation/host && pip install ".[dev]" && ruff check . && python -m pytest tests/unit`
 - Scenarios on the fake firmware: `python -m pytest tests/hil --fake --no-ad3 --board <board>`
+- F-1 reference images: `cmake --build --preset cortex-<core>-MinSizeRel --target validation.footprint` for m4, m7 and m33, then `validation/footprint/measure.sh <directory>` with `cortex-memory-budget` on `PATH`
 
 Before pushing, run `tools/verify.sh`: the checks of CI that can run locally, and scans for what CI reported on earlier pull requests (`tools/README.md`).
 

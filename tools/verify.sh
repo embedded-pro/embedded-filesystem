@@ -53,6 +53,17 @@ for preset in stm32h757-cm7 stm32h757-cm4 stm32h745-cm7 stm32h745-cm4; do
     echo "$preset: $(cmake --build --preset "$preset-RelWithDebInfo" -j "$jobs" 2>&1 | grep -cE 'error:|FAILED:') errors"
 done
 
+heading "footprint"
+for core in m4 m7 m33; do
+    echo "cortex-$core MinSizeRel images: $(cmake --build --preset "cortex-$core-MinSizeRel" --target validation.footprint -j "$jobs" 2>&1 | grep -cE 'error:|FAILED:') errors"
+done
+budget=build/footprint-venv
+stamp=$(sha256sum validation/footprint/requirements.txt | cut -d' ' -f1)
+if [ "$(cat "$budget/installed" 2>/dev/null)" != "$stamp" ]; then
+    { [ -x "$budget/bin/python" ] || python3 -m venv "$budget"; } && "$budget/bin/pip" install --quiet --require-hashes -r validation/footprint/requirements.txt > /dev/null && echo "$stamp" > "$budget/installed"
+fi
+PATH="$PWD/$budget/bin:$PATH" validation/footprint/measure.sh build/footprint
+
 heading "validation host package"
 venv=build/validation-host
 stamp=$(sha256sum validation/host/pyproject.toml | cut -d' ' -f1)

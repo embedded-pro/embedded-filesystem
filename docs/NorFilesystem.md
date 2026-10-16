@@ -519,7 +519,7 @@ The power-cut sweep in [Testing.md](Testing.md) interrupts every operation and b
 | Each open file | Position, size, 8 uncommitted entries and a buffer of one page, or of the inline area if larger |
 
 For a 16 MiB device with 4 KiB blocks, that is 4096 blocks, so 1 KiB for the block states, 4 KiB for the erase counts and 0.5 KiB for the node blocks, plus 8 KiB for the default cache of 16 nodes of 512 bytes, and about 0.6 KiB per open file: about 14 KiB with one open file.
-The state of the volume, its handles and its operations comes on top: the metrics report 19,632 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M.
+The state of the volume, its handles and its operations comes on top: the metrics report 19,632 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M, and the volume takes 17,728 bytes on a Cortex-M4.
 Using larger blocks reduces the tables proportionally: with 64 KiB blocks, the same device needs 352 bytes for block states, erase counts and node blocks, and about 9 KiB in all.
 This is more RAM than littlefs needs for the same device; it is the price of allocation without traversal and of wear leveling based on actual erase counts.
 

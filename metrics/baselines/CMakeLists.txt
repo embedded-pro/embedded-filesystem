@@ -1,5 +1,3 @@
-include(FetchContent)
-
 add_library(metrics.baselines STATIC)
 
 target_link_libraries(metrics.baselines PUBLIC

@@ -310,8 +310,8 @@ The template arguments of `fs::FatFileSystem::WithStorage<Files, CacheSectors, L
 ## RAM
 
 The sector cache takes most of the RAM of a volume: every cache sector costs its 512 bytes and an entry of a few bytes.
-`fs::FatFileSystem::WithStorage<2, 8>` needs about 5.8 KiB on a 32-bit target, 4.1 KiB of which is the cache; every further open file costs about 200 bytes.
-FatFs needs less, about 1.7 KiB with one open file, because it works with one sector buffer per volume and one per file; the metrics report the RAM of every subject next to its results.
+`fs::FatFileSystem::WithStorage<1, 8>` takes 7712 bytes on a Cortex-M4, 4 KiB of which is the cache, and `WithStorage<2, 8>` 7992 bytes: every further open file costs 280 bytes.
+FatFs needs less, 1652 bytes with one open file as F-1 measures, because it works with one sector buffer per volume and one per file; the metrics report the RAM of every subject next to its results.
 
 ## Testing
 

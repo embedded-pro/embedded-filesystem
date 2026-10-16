@@ -15,9 +15,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  footprint:
+    name: Footprint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure Git
+        run: |
+          git config --global url."https://${{ secrets.PRIVATE_REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install GNU Arm Embedded Toolchain
+        uses: carlosperate/arm-none-eabi-gcc-action@98c40e51546516419841748d3210c290df0d2c6c # v1.13.0
+        with:
+          release: 15.2.Rel1
+      - uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67 # v6
+      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        with:
+          key: ${{ github.job }}-ubuntu-latest
+          max-size: 2G
+          save: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build the reference images
+        run: |
+          for core in m4 m7 m33; do
+            cmake --preset "cortex-$core" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            cmake --build --preset "cortex-$core-MinSizeRel" --target validation.footprint
+          done
+      - name: Install cortex-memory-budget
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --require-hashes -r validation/footprint/requirements.txt
+      - name: Measure the reference images
+        run: PATH="$RUNNER_TEMP/venv/bin:$PATH" validation/footprint/measure.sh "$RUNNER_TEMP/footprint"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: footprint
+          path: ${{ runner.temp }}/footprint
+          if-no-files-found: error
   metrics:
     name: Metrics
     runs-on: ubuntu-latest
+    needs: [footprint]
+    if: ${{ !cancelled() }}
     permissions:
       actions: read
       contents: read
@@ -52,11 +91,16 @@ jobs:
           if [ -n "$run_id" ]; then
             gh run download "$run_id" --repo "$REPOSITORY" --name metrics-report --dir "$GITHUB_WORKSPACE/baseline"
           fi
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        continue-on-error: true
+        with:
+          name: footprint
+          path: ${{ github.workspace }}/footprint
       - uses: lukka/run-cmake@5d55ea7949e25f69f0ecb516d8d572297e03a956 # v10.9
         with:
           configurePreset: "metrics"
           buildPreset: "metrics"
-          configurePresetAdditionalArgs: "['-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache', '-DEMFS_METRICS_BASELINE=${{ github.workspace }}/baseline/metrics.json']"
+          configurePresetAdditionalArgs: "['-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache', '-DEMFS_METRICS_BASELINE=${{ github.workspace }}/baseline/metrics.json', '-DEMFS_METRICS_EXTRA_FRAGMENTS=${{ github.workspace }}/footprint/fragments']"
       - name: Run the metrics
         run: ctest --preset metrics --parallel "$(nproc)"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -12,6 +12,10 @@ endif()
 
 add_subdirectory(firmware)
 
+if (NOT EMIL_HOST_BUILD AND NOT TARGET_MCU_VENDOR)
+    add_subdirectory(footprint)
+endif()
+
 if (EMFS_BUILD_METRICS)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     set(fragments "${CMAKE_CURRENT_BINARY_DIR}/fragments")
