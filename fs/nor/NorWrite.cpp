@@ -95,7 +95,7 @@ namespace fs
                         onDone(result);
                 });
         else
-            volume.Allocator().Allocate(NorBlockType::data, NorBlockOwner{ file.inode, index }, NorReserve::kept, [this, index](std::optional<uint32_t> block)
+            volume.DataAllocator().Allocate(NorBlockOwner{ file.inode, index }, NorReserve::kept, [this, index](std::optional<uint32_t> block)
                 {
                     TailAllocated(block, index);
                 });

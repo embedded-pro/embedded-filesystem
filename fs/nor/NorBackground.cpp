@@ -69,7 +69,7 @@ namespace fs
     bool NorBackground::CheckpointDue() const
     {
         const auto& cache = volume.Cache();
-        auto due = volume.Journal().IsMoreThanHalfFull() || 2 * cache.ModifiedNodes() > cache.Capacity();
+        auto due = volume.Journal().IsMoreThanHalfFull() || 2 * cache.ModifiedNodes() > cache.Capacity() || volume.Collector().DueForSpace();
         auto nodeBlocks = (volume.Collector().Due() ? 2 : 1) * volume.Geometry().NodeBlocksPerCheckpoint();
         return due && volume.State().blocks.Count(NorBlockState::freeErased) > nodeBlocks;
     }

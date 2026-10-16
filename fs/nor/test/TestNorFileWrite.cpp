@@ -363,8 +363,16 @@ TEST_F(NorFileWriteTest, a_write_that_must_copy_a_block_written_before_the_mount
     Builder().AddFile(root, "a", infra::MakeRange(contents));
     Builder().Commit();
     Mount();
+    std::optional<fs::Result> written;
+    Volume().Checkpoints().Write([&written](fs::Result result)
+        {
+            written = result;
+        });
+    ExecuteAllActions();
+    ASSERT_EQ(fs::Result::success, written);
     auto file = Open("/a", fs::OpenMode::append);
     LeaveFreeBlocks(Volume().Geometry().ReserveBlocks());
+    ASSERT_FALSE(Volume().Collector().DueForSpace());
     auto more = Pattern<300>();
 
     EXPECT_EQ(fs::Result::noSpace, Write(*file, infra::MakeRange(more)));
@@ -387,6 +395,115 @@ TEST_F(NorFileWriteTest, sync_may_copy_a_block_written_before_the_mount_into_the
     std::array<uint8_t, 5001> expected{};
     std::ranges::copy(contents, expected.begin());
     expected[5000] = 'x';
+    ExpectContents("/a", expected);
+}
+
+TEST_F(NorFileWriteTest, a_write_that_needs_a_data_block_from_the_reserve_first_collects_node_blocks_with_a_block_of_unused_slots)
+{
+    Unmount();
+    AddDirectoriesWithUnusedNodeSlots();
+    Builder().Commit();
+    Mount();
+    auto file = Open("/a", fs::OpenMode::write);
+    LeaveFreeBlocks(Volume().Geometry().ReserveBlocks());
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+    auto checkpoints = Volume().Counters().checkpoints;
+    auto contents = Pattern<100>();
+
+    EXPECT_EQ(fs::Result::success, Write(*file, infra::MakeRange(contents)));
+
+    EXPECT_EQ(checkpoints + 1, Volume().Counters().checkpoints);
+    EXPECT_EQ(fs::Result::success, Close(*file));
+    file = nullptr;
+    ExpectContents("/a", contents);
+}
+
+TEST_F(NorFileWriteTest, a_write_whose_collection_frees_too_little_has_no_space_after_one_checkpoint)
+{
+    Unmount();
+    AddDirectoriesWithUnusedNodeSlots();
+    Builder().Commit();
+    Mount();
+    auto file = Open("/a", fs::OpenMode::write);
+    LeaveFreeBlocks(2);
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+    auto checkpoints = Volume().Counters().checkpoints;
+    auto contents = Pattern<100>();
+
+    EXPECT_EQ(fs::Result::noSpace, Write(*file, infra::MakeRange(contents)));
+
+    EXPECT_EQ(checkpoints + 1, Volume().Counters().checkpoints);
+    EXPECT_TRUE(Volume().Collector().DueForSpace());
+    EXPECT_EQ(config.inlineBytes, file->Size());
+}
+
+TEST_F(NorFileWriteTest, a_write_whose_checkpoint_for_a_collection_finds_no_free_block_has_no_space)
+{
+    Unmount();
+    AddDirectoriesWithUnusedNodeSlots();
+    Builder().Commit();
+    Mount();
+    auto file = Open("/a", fs::OpenMode::write);
+    LeaveFreeBlocks(0);
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+    auto contents = Pattern<100>();
+
+    EXPECT_EQ(fs::Result::noSpace, Write(*file, infra::MakeRange(contents)));
+
+    EXPECT_EQ(config.inlineBytes, file->Size());
+}
+
+TEST_F(NorFileWriteTest, a_sync_whose_copy_finds_no_free_block_writes_no_checkpoint_for_a_collection)
+{
+    Unmount();
+    auto contents = Pattern<5000>();
+    Builder().AddFile(root, "a", infra::MakeRange(contents));
+    Builder().Commit();
+    Mount();
+    for (auto path : { "/m", "/n", "/o", "/p", "/q", "/r", "/s", "/t" })
+    {
+        ASSERT_EQ(fs::Result::success, MakeDirectory(path));
+        std::optional<fs::Result> written;
+        Volume().Checkpoints().Write([&written](fs::Result result)
+            {
+                written = result;
+            });
+        ExecuteAllActions();
+        ASSERT_EQ(fs::Result::success, written) << path;
+    }
+    ASSERT_EQ(fs::Result::success, MakeDirectory("/u"));
+    auto file = Open("/a", fs::OpenMode::append);
+    ASSERT_EQ(fs::Result::success, Write(*file, Bytes("x")));
+    LeaveFreeBlocks(0);
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+    ASSERT_NE(0, Volume().Cache().ModifiedNodes());
+    device.recording = true;
+
+    EXPECT_EQ(fs::Result::noSpace, Sync(*file));
+
+    EXPECT_TRUE(device.requests.empty());
+}
+
+TEST_F(NorFileWriteTest, a_write_that_must_copy_a_block_written_before_the_mount_into_the_reserve_first_collects_node_blocks)
+{
+    Unmount();
+    auto contents = Pattern<5000>();
+    Builder().AddFile(root, "a", infra::MakeRange(contents));
+    AddDirectoriesWithUnusedNodeSlots();
+    Builder().Commit();
+    Mount();
+    auto file = Open("/a", fs::OpenMode::append);
+    LeaveFreeBlocks(Volume().Geometry().ReserveBlocks());
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+    auto more = Pattern<300>();
+
+    EXPECT_EQ(fs::Result::success, Write(*file, infra::MakeRange(more)));
+
+    EXPECT_EQ(fs::Result::success, Close(*file));
+    file = nullptr;
+    std::array<uint8_t, 5300> expected{};
+    std::ranges::copy(contents, expected.begin());
+    std::ranges::copy(more, expected.begin() + 5000);
     ExpectContents("/a", expected);
 }
 

@@ -24,10 +24,34 @@ namespace fs
 
     bool NorNodeCollector::Due() const
     {
-        const auto& cache = volume.Cache();
-        auto live = uint64_t{ volume.State().liveNodes } + cache.ModifiedNodes() - cache.ReleasedNodes();
+        return DueByRatio() || DueForSpace();
+    }
+
+    bool NorNodeCollector::DueForSpace() const
+    {
+        const auto& geometry = volume.Geometry();
+        const auto& blocks = volume.State().blocks;
+        auto free = blocks.Count(NorBlockState::freeErased) + blocks.Count(NorBlockState::freeNotErased);
+        return free <= geometry.ReserveBlocks() + geometry.WatermarkBlocks() && UnusedSlots() >= unusedAtFruitlessLap.value_or(0) + geometry.NodesPerBlock();
+    }
+
+    bool NorNodeCollector::DueByRatio() const
+    {
         auto collectable = CollectableBlocks();
-        return collectable >= 2 && uint64_t{ collectable } * volume.Geometry().NodesPerBlock() > 2 * live;
+        return collectable >= 2 && uint64_t{ collectable } * volume.Geometry().NodesPerBlock() > 2 * LiveNodes();
+    }
+
+    uint64_t NorNodeCollector::UnusedSlots() const
+    {
+        auto slots = uint64_t{ CollectableBlocks() } * volume.Geometry().NodesPerBlock();
+        auto live = LiveNodes();
+        return slots > live ? slots - live : 0;
+    }
+
+    uint64_t NorNodeCollector::LiveNodes() const
+    {
+        const auto& cache = volume.Cache();
+        return uint64_t{ volume.State().liveNodes } + cache.ModifiedNodes() - cache.ReleasedNodes();
     }
 
     uint32_t NorNodeCollector::CollectableBlocks() const
@@ -54,6 +78,9 @@ namespace fs
         moving = std::nullopt;
         movePassed = false;
         awaitingCommit = 0;
+        surveying = false;
+        leftInLap = 0;
+        unusedAtFruitlessLap = std::nullopt;
     }
 
     void NorNodeCollector::Move(uint32_t moved)
@@ -61,14 +88,20 @@ namespace fs
         moving = moved;
         block = moved;
         slot = 0;
+        surveying = false;
     }
 
     void NorNodeCollector::Collect(bool collectionDue, const infra::Function<void()>& onCollected)
     {
         collecting = collectionDue;
+        sparseOnly = !DueByRatio();
         onDone = onCollected;
         leftByStep = 0;
         freeSlots = FreeSlots();
+        if (!sparseOnly)
+            leftInLap = 0;
+        else if (collecting && !HasRoom())
+            unusedAtFruitlessLap = UnusedSlots();
         volume.Cache().UnpinAll();
         Examine();
     }
@@ -102,6 +135,13 @@ namespace fs
         {
             block = NextBlock();
             slot = 0;
+            surveying = sparseOnly;
+            liveInBlock = 0;
+            if (sparseOnly && leftInLap == 0)
+            {
+                lapBlocks = CollectableBlocks();
+                unusedAtLapStart = UnusedSlots();
+            }
         }
 
         if (!block.has_value())
@@ -176,6 +216,11 @@ namespace fs
     {
         if (address != SlotAddress())
             Next();
+        else if (surveying)
+        {
+            ++liveInBlock;
+            Next();
+        }
         else
             volume.Fetch().Fetch(Map(), root, header.lowestKey, header.level, [this](NorFetchResult result)
                 {
@@ -196,7 +241,7 @@ namespace fs
         }
     }
 
-    void NorNodeCollector::Relocate()
+    void NorNodeCollector::Relocate() const
     {
         auto& cache = volume.Cache();
         std::array<std::size_t, norMaxLevels> path{};
@@ -237,15 +282,44 @@ namespace fs
     void NorNodeCollector::Next()
     {
         volume.Cache().UnpinAll();
-        if (++slot == volume.Geometry().NodesPerBlock())
+        if (++slot != volume.Geometry().NodesPerBlock())
+            Examine();
+        else if (surveying)
+            EndSurvey();
+        else
+        {
             Pass();
+            Examine();
+        }
+    }
+
+    void NorNodeCollector::EndSurvey()
+    {
+        surveying = false;
+        if (liveInBlock == 0)
+            Pass();
+        else if (2 * liveInBlock < volume.Geometry().NodesPerBlock())
+            slot = 0;
+        else
+            Leave();
 
         Examine();
+    }
+
+    void NorNodeCollector::EndLap()
+    {
+        leftInLap = 0;
+        auto unused = UnusedSlots();
+        if (unused + volume.Geometry().NodesPerBlock() > unusedAtLapStart)
+            unusedAtFruitlessLap = unused;
+        else
+            unusedAtFruitlessLap = std::nullopt;
     }
 
     void NorNodeCollector::Skip()
     {
         volume.Cache().UnpinAll();
+        surveying = false;
         slot = volume.Geometry().NodesPerBlock();
         Leave();
         Examine();
@@ -266,6 +340,8 @@ namespace fs
 
         ++left;
         ++leftByStep;
+        if (sparseOnly && ++leftInLap >= lapBlocks)
+            EndLap();
     }
 
     bool NorNodeCollector::HasRoom() const

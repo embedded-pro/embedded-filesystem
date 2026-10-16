@@ -23,6 +23,7 @@ namespace fs
         ~NorNodeCollector();
 
         bool Due() const;
+        bool DueForSpace() const;
         uint32_t CollectableBlocks() const;
         uint32_t LeftBlocks() const;
         bool Moving() const;
@@ -39,13 +40,18 @@ namespace fs
         void ParentFetched(NorFetchResult result);
         void Compare(uint32_t address);
         void NodeFetched(NorFetchResult result);
-        void Relocate();
+        void Relocate() const;
         void Next();
         void Skip();
         void Pass();
         void Leave();
+        void EndSurvey();
+        void EndLap();
         bool HasRoom() const;
         uint32_t FreeSlots() const;
+        uint64_t LiveNodes() const;
+        uint64_t UnusedSlots() const;
+        bool DueByRatio() const;
         uint32_t AddressAt(uint8_t level) const;
         uint32_t ChildOf(std::size_t node) const;
         bool IsCollectable(uint32_t candidate) const;
@@ -65,6 +71,13 @@ namespace fs
         uint32_t leftByStep{ 0 };
         uint32_t freeSlots{ 0 };
         uint32_t awaitingCommit{ 0 };
+        bool sparseOnly{ false };
+        bool surveying{ false };
+        uint32_t liveInBlock{ 0 };
+        uint32_t leftInLap{ 0 };
+        uint32_t lapBlocks{ 0 };
+        uint64_t unusedAtLapStart{ 0 };
+        std::optional<uint64_t> unusedAtFruitlessLap;
         std::array<uint8_t, norNodeHeaderBytes> headerBytes{};
         NorNodeHeader header;
         NorMapRoot root;

@@ -235,6 +235,15 @@ namespace
                     --erased;
         }
 
+        void KeepErasedWithTheOtherFreeBlocksNotErased(uint32_t erased)
+        {
+            for (uint32_t block = 2; block != 32; ++block)
+                if (State().blocks.State(block) == fs::NorBlockState::freeErased && erased != 0)
+                    --erased;
+                else if (State().blocks.State(block) == fs::NorBlockState::freeErased)
+                    State().blocks.Set(block, fs::NorBlockState::freeNotErased);
+        }
+
         void Idle()
         {
             fs::OperationQueue::Claimer claimer{ Volume().Queue() };
@@ -283,8 +292,8 @@ TEST_F(NorBackgroundCheckpointTest, writes_no_checkpoint_until_the_pool_holds_ev
 TEST_F(NorBackgroundCheckpointTest, erases_a_free_block_so_that_a_checkpoint_that_waits_for_the_pool_follows)
 {
     FillJournalOverHalf();
-    KeepErased(Volume().Geometry().NodeBlocksPerCheckpoint());
-    State().blocks.Set(30, fs::NorBlockState::freeNotErased);
+    KeepErasedWithTheOtherFreeBlocksNotErased(Volume().Geometry().NodeBlocksPerCheckpoint());
+    ASSERT_FALSE(Volume().Collector().Due());
     auto checkpointBlock = State().checkpointBlock;
 
     Idle();
@@ -337,6 +346,44 @@ TEST_F(NorBackgroundCollectionTest, writes_no_checkpoint_for_a_collection_alone)
 
     EXPECT_EQ(checkpointBlock, State().checkpointBlock);
     EXPECT_TRUE(Volume().Collector().Due());
+}
+
+TEST_F(NorBackgroundCollectionTest, writes_a_checkpoint_for_a_collection_that_low_space_makes_due)
+{
+    for (auto name : { "a", "b", "c", "d", "e" })
+        Builder().AddDirectory(root, name);
+    Builder().AddDirectory(2, "x");
+    Builder().AddDirectory(3, "x");
+    Builder().Commit();
+    Mount();
+    KeepErased(Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks());
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+    auto nodeBlocks = State().nodeBlocks.Count();
+    auto checkpointBlock = State().checkpointBlock;
+
+    Idle();
+
+    EXPECT_NE(checkpointBlock, State().checkpointBlock);
+    EXPECT_GT(nodeBlocks, State().nodeBlocks.Count());
+    EXPECT_FALSE(Volume().Collector().DueForSpace());
+}
+
+TEST_F(NorBackgroundCollectionTest, a_checkpoint_of_the_journal_waits_for_twice_the_pool_when_a_collection_is_due_for_space)
+{
+    for (auto name : { "a", "b", "c", "d", "e" })
+        Builder().AddDirectory(root, name);
+    Builder().AddDirectory(2, "x");
+    Builder().AddDirectory(3, "x");
+    Builder().Commit();
+    Mount();
+    FillJournalOverHalf();
+    KeepErased(Volume().Geometry().NodeBlocksPerCheckpoint() + 1);
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+    auto checkpointBlock = State().checkpointBlock;
+
+    Idle();
+
+    EXPECT_EQ(checkpointBlock, State().checkpointBlock);
 }
 
 TEST_F(NorBackgroundCollectionTest, a_due_checkpoint_collects)

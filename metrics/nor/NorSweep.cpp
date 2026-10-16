@@ -151,6 +151,11 @@ namespace metrics
         return state.checkpoint.recordsBlock != state.checkpointBlock;
     }
 
+    bool NorSweepVolume::FileSystem::CollectionDueForSpace()
+    {
+        return Volume().Collector().DueForSpace();
+    }
+
     infra::SharedPtr<fs::NorDirectory> NorSweepVolume::FileSystem::AllocateDirectory()
     {
         return directories.Allocate();
@@ -232,6 +237,11 @@ namespace metrics
     bool NorSweepVolume::RecordsStartOutsideTheCheckpointBlock()
     {
         return fileSystem.RecordsStartOutsideTheCheckpointBlock();
+    }
+
+    bool NorSweepVolume::CollectionDueForSpace()
+    {
+        return fileSystem.CollectionDueForSpace();
     }
 
     fs::NorCounters NorSweepVolume::Counters() const

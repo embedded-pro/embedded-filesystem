@@ -22,7 +22,7 @@ namespace fs
         if (file->ownsTailBlock)
             Program();
         else
-            volume.Allocator().Allocate(NorBlockType::data, NorBlockOwner{ file->inode, Index() }, reserve, [this](std::optional<uint32_t> block)
+            volume.DataAllocator().Allocate(NorBlockOwner{ file->inode, Index() }, reserve, [this](std::optional<uint32_t> block)
                 {
                     Copied(block);
                 });

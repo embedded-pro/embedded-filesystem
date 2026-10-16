@@ -121,6 +121,13 @@ namespace fs
             return this->BlockInVolume(InodeOf(path), index);
         }
 
+        void AddDirectoriesWithUnusedNodeSlots()
+        {
+            for (auto name : { "u", "v", "w", "x", "y" })
+                this->Builder().AddDirectory(NorImageBuilder::rootInode, name);
+            this->Builder().AddDirectory(this->Builder().AddDirectory(NorImageBuilder::rootInode, "z"), "x");
+        }
+
         void LeaveFreeBlocks(uint32_t free)
         {
             for (uint32_t block = 2; block != this->State().blocks.Blocks(); ++block)
