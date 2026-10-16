@@ -4,8 +4,8 @@
 
 namespace fs
 {
-    FatTableReader::FatTableReader(SectorCache& cache, const FatGeometry& geometry)
-        : cache(cache)
+    FatTableReader::FatTableReader(SectorSource& sectors, const FatGeometry& geometry)
+        : sectors(sectors)
         , geometry(geometry)
     {}
 
@@ -13,33 +13,28 @@ namespace fs
 
     void FatTableReader::Read(uint32_t cluster, const infra::Function<void(Result result, uint32_t value)>& onDone)
     {
-        really_assert(geometry.IsCluster(cluster));
-
-        this->cluster = cluster;
         onRead = onDone;
-        auto location = LocateEntry(geometry.type, cluster, cache.SectorSize());
-        sector = geometry.ActiveFatSector() + location.sector;
-        offset = location.offset;
-
-        cache.Read(sector, [this](Result result, infra::ConstByteRange contents)
-            {
-                OnSector(result, contents);
-            });
+        Locate(cluster);
     }
 
     void FatTableReader::Next(uint32_t cluster, const infra::Function<void(Result result, std::optional<uint32_t> next)>& onDone)
     {
         onNext = onDone;
-        Read(cluster, [this](Result result, uint32_t value)
+        Locate(cluster);
+    }
+
+    void FatTableReader::Locate(uint32_t cluster)
+    {
+        really_assert(geometry.IsCluster(cluster));
+
+        this->cluster = cluster;
+        auto location = LocateEntry(geometry.type, cluster, sectors.SectorSize());
+        sector = geometry.ActiveFatSector() + location.sector;
+        offset = location.offset;
+
+        sectors.Read(sector, [this](Result result, infra::ConstByteRange contents)
             {
-                if (result != Result::success)
-                    onNext(result, std::nullopt);
-                else if (IsEndOfChain(geometry.type, value))
-                    onNext(Result::success, std::nullopt);
-                else if (!geometry.IsCluster(value))
-                    onNext(Result::corrupted, std::nullopt);
-                else
-                    onNext(Result::success, value);
+                OnSector(result, contents);
             });
     }
 
@@ -52,7 +47,7 @@ namespace fs
         else
         {
             lowByte = contents[offset];
-            cache.Read(sector + 1, [this](Result result, infra::ConstByteRange contents)
+            sectors.Read(sector + 1, [this](Result result, infra::ConstByteRange contents)
                 {
                     OnNextSector(result, contents);
                 });
@@ -69,6 +64,15 @@ namespace fs
 
     void FatTableReader::Complete(Result result, uint32_t value)
     {
-        onRead(result, value);
+        if (onRead)
+            onRead(result, value);
+        else if (result != Result::success)
+            onNext(result, std::nullopt);
+        else if (IsEndOfChain(geometry.type, value))
+            onNext(Result::success, std::nullopt);
+        else if (!geometry.IsCluster(value))
+            onNext(Result::corrupted, std::nullopt);
+        else
+            onNext(Result::success, value);
     }
 }

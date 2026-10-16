@@ -1,7 +1,7 @@
 #ifndef FS_FAT_FAT_TABLE_READER_HPP
 #define FS_FAT_FAT_TABLE_READER_HPP
 
-#include "fs/common/SectorCache.hpp"
+#include "fs/common/SectorSource.hpp"
 #include "fs/fat/FatGeometry.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -15,7 +15,7 @@ namespace fs
     class FatTableReader
     {
     public:
-        FatTableReader(SectorCache& cache, const FatGeometry& geometry);
+        FatTableReader(SectorSource& sectors, const FatGeometry& geometry);
         FatTableReader(const FatTableReader& other) = delete;
         FatTableReader& operator=(const FatTableReader& other) = delete;
         ~FatTableReader();
@@ -24,12 +24,13 @@ namespace fs
         void Next(uint32_t cluster, const infra::Function<void(Result result, std::optional<uint32_t> next)>& onDone);
 
     private:
+        void Locate(uint32_t cluster);
         void OnSector(Result result, infra::ConstByteRange contents);
         void OnNextSector(Result result, infra::ConstByteRange contents);
         void Complete(Result result, uint32_t value);
 
     private:
-        SectorCache& cache;
+        SectorSource& sectors;
         const FatGeometry& geometry;
         uint32_t cluster{ 0 };
         uint32_t sector{ 0 };
