@@ -21,6 +21,8 @@ IMAGES = {
     "fat_reads": "embedded-filesystem/fat-reads",
     "nor_reads": "embedded-filesystem/nor-reads",
     "fat_read_only": "embedded-filesystem/fat-read-only",
+    "fat_minimal": "embedded-filesystem/fat-minimal",
+    "nor_minimal": "embedded-filesystem/nor-minimal",
     "fatfs_default": "fatfs/default",
     "fatfs_tuned": "fatfs/tuned",
     "fatfs_minimal": "fatfs/minimal",

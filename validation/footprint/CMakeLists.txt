@@ -52,6 +52,8 @@ emfs_add_footprint_image(nor SOURCES NorMain.cpp LIBRARIES fs.nor validation.foo
 emfs_add_footprint_image(fat_reads SOURCES FatReadsMain.cpp LIBRARIES fs.fat validation.footprint_exercise)
 emfs_add_footprint_image(nor_reads SOURCES NorReadsMain.cpp LIBRARIES fs.nor validation.footprint_exercise)
 emfs_add_footprint_image(fat_read_only SOURCES FatReadOnlyMain.cpp LIBRARIES fs.fat_reader validation.footprint_exercise)
+emfs_add_footprint_image(fat_minimal SOURCES FatMinimalMain.cpp LIBRARIES fs.fat validation.footprint_exercise)
+emfs_add_footprint_image(nor_minimal SOURCES NorMinimalMain.cpp LIBRARIES fs.nor validation.footprint_exercise)
 
 foreach(variant default tuned minimal)
     emfs_add_footprint_image(fatfs_${variant} SOURCES FatFsMain.cpp LIBRARIES validation.fatfs_disk_${variant})

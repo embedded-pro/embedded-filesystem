@@ -116,7 +116,7 @@ def test_the_command_writes_the_fragment(tmp_path, capsys):
     assert main(arguments) == 0
 
     assert len(json.loads(output.read_text(encoding="utf-8"))["results"]) == 2 * len(IMAGES) * len(CORES)
-    assert "2 cores, 48 results" in capsys.readouterr().out
+    assert "2 cores, 56 results" in capsys.readouterr().out
 
 
 def test_the_command_reports_an_error(tmp_path, capsys):

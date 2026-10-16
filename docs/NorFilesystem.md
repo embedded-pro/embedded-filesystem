@@ -570,7 +570,7 @@ Every feature is in by default.
 | `truncate`        | `Truncate`                                 |
 | `format`          | `Format`, so the flash is formatted before |
 
-A volume mounts whatever a volume with every feature wrote, so leaving a feature out never changes the format on flash.
+A volume mounts whatever a volume with every feature wrote, so leaving a feature out never changes the format on flash; F-1 measures the volume with every feature left out as `embedded-filesystem/nor-minimal`.
 
 On the boards of [Validation.md](Validation.md), a volume runs on a region of 16 MiB of a QSPI NOR flash, with the `fs::NorConfig` above, which the NOR subject uses on `nor-qspi-16m`, and on a parallel NOR of 16 MiB with blocks of one 128 KiB sector, a program unit of 2 bytes and the write buffer of the chip as the page.
 

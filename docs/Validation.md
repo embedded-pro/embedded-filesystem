@@ -346,6 +346,8 @@ Both are reported until the first runs show their spread, and a later step sets 
 | `validation.footprint.fat_reads`               | `embedded-filesystem/fat-reads`     | As `fat`, without the formatter, with only the calls that read                                                       |
 | `validation.footprint.nor_reads`               | `embedded-filesystem/nor-reads`     | As `nor`, without `Format`, with only the calls that read                                                            |
 | `validation.footprint.fat_read_only`           | `embedded-filesystem/fat-read-only` | `fs::FatReader::WithStorage<1>`, with only the calls that read                                                       |
+| `validation.footprint.fat_minimal`             | `embedded-filesystem/fat-minimal`   | As `fat`, without the formatter, with every `fs::FatFeatures` left out                                               |
+| `validation.footprint.nor_minimal`             | `embedded-filesystem/nor-minimal`   | As `nor`, with every `fs::NorFeatures` left out, `Format` among them                                                 |
 | `validation.footprint.fatfs_minimal`           | `fatfs/minimal`                     | As `fatfs/default`, without long names and without `f_mkfs`                                                          |
 | `validation.footprint.fatfs_read_only`         | `fatfs/read-only`                   | `FF_FS_READONLY` with long names, with only the calls that read                                                      |
 | `validation.footprint.littlefs_read_only`      | `littlefs/read-only`                | `LFS_READONLY` with the caches of `littlefs/default`, with only the calls that read                                  |

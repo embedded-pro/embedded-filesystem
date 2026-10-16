@@ -102,5 +102,6 @@ embedded-filesystem keeps only files of up to 64 bytes in the record of their in
 FatFs and littlefs need much less code.
 F-1 measures what each subject adds to an EmIL application on a Cortex-M4 in `MinSizeRel`, with its glue: 70,968 bytes of flash for `embedded-filesystem/fat` against 11,940 for `fatfs/default`, and 85,752 bytes for `embedded-filesystem/nor` against 15,244 for `littlefs/default`.
 The asynchronous state machines, the index trees, the caches and the background work take that code; a product that needs the smallest image keeps using FatFs or littlefs.
+A product that makes fewer calls can leave the others out with `fs::FatFeatures` and `fs::NorFeatures`: with every feature left out, F-1 measures 59,708 bytes for FAT, against 71,472 with every feature and the formatter, and 76,056 bytes for NOR, against 85,816, with Arm GCC 13.2.1.
 A product that only reads FAT volumes can use `fs::FatReader`, which leaves out every change, the caches and the background work: 22,152 bytes of flash and 2,020 of RAM, 3.8 times the flash and 1.2 times the RAM of `fatfs/read-only`, which needs 5,888 and 1,636, as F-1 measures with Arm GCC 13.2.1.
 A product that links with link-time optimization saves about 15 % of the flash of embedded-filesystem, as F-1 shows on `cortex-m4-lto`, but FatFs gains 11 % too, so the ratio barely changes on FAT.

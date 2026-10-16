@@ -331,6 +331,8 @@ Every feature is in by default.
 | `expectSize`      | `ExpectSize`    |
 | `usage`           | `Usage`         |
 
+F-1 measures the volume with every feature left out as `embedded-filesystem/fat-minimal`.
+
 `fs::FatConfig` holds the settings that need no storage:
 
 | `fs::FatConfig`           | Default                       | Meaning                                                                  |
