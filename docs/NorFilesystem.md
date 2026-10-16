@@ -343,6 +343,7 @@ When the pool is empty and a call needs a block, the call erases one itself.
 
 A reserve of free blocks is kept for the checkpoints and the garbage collection: the node blocks of one checkpoint with its collection step, which writes at most twice the node cache, plus one checkpoint block and one journal block, 8 blocks on SPI NOR with the defaults.
 A write that would allocate a data block into the reserve completes with `noSpace`, also for the copy of a last block or a commit that the write makes on its way; `Sync`, `Close`, `Truncate` and `Remove` may use the reserve, because they write only records and checkpoints, and the last two free space.
+Before it completes with `noSpace`, a write or an overwrite whose data block would come from the reserve writes one checkpoint when a [collection is due for space](#garbage-collection), and takes the block if that checkpoint freed one; only that call is slower.
 Records and checkpoints may always use it, and so do the commit of `Open` in `write` mode of an existing file and the commits of `Unmount`.
 `Usage` reports as total the payload of every block except the superblocks and the reserve, and as used the total minus the payload of the free blocks beyond the reserve.
 
@@ -357,13 +358,18 @@ One bit per block in RAM marks the node blocks: the mount sets it for every bloc
 The node block that the checkpoints of the current mount are filling is never collected, because it holds the nodes they just wrote.
 When there are at least two other node blocks and they could hold more than twice the live nodes, the modified nodes counted as live, a collection is due, and the checkpoint runs a collection step after it has written the modified nodes.
 A single other node block is not collected: moving its live nodes into a new block would free nothing.
+A collection is also due for space when the free blocks beyond the reserve are no more than the watermark and the other node blocks hold at least a block of slots that no live node uses.
+Such a collection compacts only the blocks where fewer than half the slots hold live nodes: at half or more, the nodes it moves and the paths it rewrites with them take about as many slots as the block frees.
+A collection due by the ratio above, or the move of a node block, compacts every block it visits.
 
 1. A cursor goes over the node blocks in the order of their numbers, and over the slots of each; it stays in RAM between checkpoints, and starts again at the lowest block after a mount.
 2. For each node, the header tells the map, the owner, the level and the lowest key; the node is live when a walk of that map from its root in RAM towards the lowest key reaches this address at this level.
    The root of a directory or data map comes from the record of the owner in the inode table; a node whose owner has no record, or a record of another type, is not live.
 3. A live node is read into the cache and modified with its path to the root of its map and, for a directory or data map, with the record of the owner, so that this checkpoint writes it elsewhere; a node that is not live is skipped.
+   In a collection due only for space, the cursor first counts the live nodes of a block, and goes over the block again to move them only when fewer than half its slots hold them; otherwise it leaves the block in use and moves on.
+   When it has left every other node block in a row, no collection is due for space until another block of slots holds no live node, so that the background does not write checkpoints that free nothing.
 4. A walk that finds a node with an invalid CRC leaves the block in use: the cursor moves on to the next node block without freeing it, so that no node block is freed whose nodes could not be checked.
-5. The step stops when fewer than 6 nodes of the cache are unmodified, the room for one more path in its map and one in the inode table, when the free blocks next to the checkpoint block could not hold 6 more modified nodes, when it has left twice the node blocks of a checkpoint, freed or in use, or when no other node block is left; the cursor stays where it stopped.
+5. The step stops when fewer than 6 nodes of the cache are unmodified, the room for one more path in its map and one in the inode table, when the free blocks next to the checkpoint block could not hold 6 more modified nodes, when it has left twice the node blocks of a checkpoint, freed, in use or counted and left, or when no other node block is left; the cursor stays where it stopped.
 
 Writing the modified nodes first leaves the whole cache to the step, so a checkpoint that a cache full of modified nodes forced still collects, and the checkpoint writes at most twice the node cache.
 Counting the free blocks before the step keeps the nodes it moves within them, so a collection never makes a checkpoint fail for want of space.
@@ -453,12 +459,13 @@ Its lifecycle is a `services::TableStateMachine` with the states `Stopped`, `Wai
 While it holds the queue, it does one unit of work at a time, in this order of priority:
 
 1. The move of the fallback of static wear leveling, when it is armed and still due.
-2. A checkpoint, when the journal is more than half full or when more than half the cache holds modified nodes, and only when the pool holds every block it may need: more erased blocks than the node blocks of a checkpoint of the whole cache, or than twice as many when a collection is due.
+2. A checkpoint, when the journal is more than half full, when more than half the cache holds modified nodes or when a collection is due for space, and only when the pool holds every block it may need: more erased blocks than the node blocks of a checkpoint of the whole cache, or than twice as many when a collection is due.
 3. One sector erase of the free block that is not erased and has the lowest erase count, followed by its part A once its last sector is erased.
 4. A static wear leveling move, when one is due and the pool holds more erased blocks than twice the node blocks of a checkpoint.
 
 A checkpoint and a move are units that are not interrupted, and a move includes the erase of its destination; an erase is one device request.
-A collection that is due does not start a checkpoint by itself: it runs as the collection step of the next checkpoint, so the checkpoints, and the collection with them, follow the records and modified nodes of the calls.
+A collection due by the ratio does not start a checkpoint by itself: it runs as the collection step of the next checkpoint, so the checkpoints, and the collection with them, follow the records and modified nodes of the calls.
+A collection due for space does, because the free blocks it can recover are what the next writes need.
 After each unit, the background releases the queue when a foreground operation waits, and continues after the next idle delay; it also releases it when no work is left, and the next idle delay looks again.
 The fallback claims the queue as soon as a call releases it, as described under [Static wear leveling](#static-wear-leveling), and does not wait for the idle delay.
 The machine starts when the volume is mounted and stops when it is unmounted; a claim that still waits then is withdrawn.
@@ -486,16 +493,16 @@ The power-cut sweep in [Testing.md](Testing.md) interrupts every operation and b
 
 ## Cost of operations
 
-| Operation                       | Flash work                                                                               | Independent of           |
-|---------------------------------|------------------------------------------------------------------------------------------|--------------------------|
-| Small append followed by `Sync` | Programming the bytes in place and one record                                            | File size and fill level |
-| Append that completes a block   | Programming the bytes, part B of the next block and one record                           | File size and fill level |
-| Overwrite within one block      | One block read and programmed, one record, at most 3 node reads when not cached          | File size and fill level |
-| Seek and read                   | At most 3 node reads when not cached, then the data                                      | File size and fill level |
-| Allocation                      | None, unless the pre-erased pool is below its watermark; then one sector erase           | File size and fill level |
-| Checkpoint                      | The modified nodes, one collection step with the nodes it moves, the checkpoint          | File size                |
-| Static wear leveling move       | The erase of the destination when needed, one data block and a record, or one checkpoint | File size and fill level |
-| Mount                           | One header read per block, the checkpoint and the journal                                | File size                |
+| Operation                       | Flash work                                                                                                                                                                                   | Independent of           |
+|---------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------|
+| Small append followed by `Sync` | Programming the bytes in place and one record                                                                                                                                                | File size and fill level |
+| Append that completes a block   | Programming the bytes, part B of the next block and one record                                                                                                                               | File size and fill level |
+| Overwrite within one block      | One block read and programmed, one record, at most 3 node reads when not cached                                                                                                              | File size and fill level |
+| Seek and read                   | At most 3 node reads when not cached, then the data                                                                                                                                          | File size and fill level |
+| Allocation                      | None, unless the pre-erased pool is below its watermark; then one sector erase; a data block that would come from the reserve while a collection is due for space also writes one checkpoint | File size and fill level |
+| Checkpoint                      | The modified nodes, one collection step with the nodes it moves, the checkpoint                                                                                                              | File size                |
+| Static wear leveling move       | The erase of the destination when needed, one data block and a record, or one checkpoint                                                                                                     | File size and fill level |
+| Mount                           | One header read per block, the checkpoint and the journal                                                                                                                                    | File size                |
 
 ## RAM use
 
@@ -509,7 +516,7 @@ The power-cut sweep in [Testing.md](Testing.md) interrupts every operation and b
 | Each open file | Position, size, 8 uncommitted entries and a buffer of one page, or of the inline area if larger |
 
 For a 16 MiB device with 4 KiB blocks, that is 4096 blocks, so 1 KiB for the block states, 4 KiB for the erase counts and 0.5 KiB for the node blocks, plus 8 KiB for the default cache of 16 nodes of 512 bytes, and about 0.6 KiB per open file: about 14 KiB with one open file.
-The state of the volume, its handles and its operations comes on top: the metrics report 19,544 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M.
+The state of the volume, its handles and its operations comes on top: the metrics report 19,624 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M.
 Using larger blocks reduces the tables proportionally: with 64 KiB blocks, the same device needs 352 bytes for block states, erase counts and node blocks, and about 9 KiB in all.
 This is more RAM than littlefs needs for the same device; it is the price of allocation without traversal and of wear leveling based on actual erase counts.
 

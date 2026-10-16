@@ -92,6 +92,7 @@ As for FAT, the formatter and an independent checker come early, and every step 
     Also the factor and the ratio in `merge_report.py`, `littlefs/ram-matched` with the most RAM littlefs can use, checkpoints that only the calls start, and the results of the NOR subject compared with `main` again.
 16. The exhaustive sweep of every operation and background step, and P-1, with the checkpoint that a mount with a smaller cache writes during replay, an unmount that commits a file left open, and the results of the NOR subject and of the sweep in Metrics.md.
 17. A collection that is also due when the free blocks beyond the reserve run low, so that a write does not complete with `noSpace` while node blocks hold unused nodes: L2 on `internal-flash` at 90 % full showed 12 such blocks when its second log ran out of space.
+    The background writes checkpoints for it, a write whose data block would come from the reserve first writes one, and it compacts only node blocks where fewer than half the slots are live; the second log of L2 holds as much as the first again.
 
 ## Phase 8: on target
 

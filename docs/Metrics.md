@@ -163,7 +163,7 @@ On `nor-qspi-16m`:
 | R-2    | Device reads for a random 512 B read in a 4 MiB file  | 1.19                      | 39.6               | 7.86                   |
 | R-4    | Mount of a 90 % full volume (ms)                      | 3.17                      | 0.3                | 0.33                   |
 | WL-1   | Erase spread with 70 % static data, short run         | 2.75                      | 13.8               | 13.8                   |
-|        | RAM (B)                                               | 19544                     | 328                | 13064                  |
+|        | RAM (B)                                               | 19624                     | 328                | 13064                  |
 
 On `internal-flash`, with the file sizes divided by 64:
 
@@ -174,12 +174,12 @@ On `internal-flash`, with the file sizes divided by 64:
 | W-3    | Append and sync on a 90 % against a 10 % full volume  | 0.907                     | 1                  | 1                      |
 | W-4    | Write amplification of the data logger, 50 % full     | 1.76                      | 17.5               | 18.9                   |
 | W-5    | Overwrite in a 64 KiB against a 1 KiB file, 50 % full | 1.18                      | 18.5               | 18.5                   |
-| W-6    | Longest append and sync at maximum timings (ms)       | 14                        | 41.1               | 42                     |
+| W-6    | Longest append and sync at maximum timings (ms)       | 14                        | 42.3               | 42                     |
 | R-1    | Sequential read (MB/s)                                | 100                       | 97.2               | 79.2                   |
 | R-2    | Device reads for a random 512 B read in a 64 KiB file | 1.11                      | 35.8               | 4.03                   |
 | R-4    | Mount of a 90 % full volume (ms)                      | 0.0783                    | 0.127              | 0.146                  |
 | WL-1   | Erase spread with 70 % static data, short run         | 2.75                      | 3                  | 3                      |
-|        | RAM (B)                                               | 14080                     | 328                | 6440                   |
+|        | RAM (B)                                               | 14160                     | 328                | 6440                   |
 
 On the lifetime run of L5 on `nor-qspi-1m`, until a block reaches 1000 erases:
 
@@ -203,15 +203,15 @@ What the NOR results show:
 
 All workloads use a fixed random seed.
 
-| Workload | Description                                                                                                                                                                                             |
-|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| L1       | Write one file of 1 MiB and one of 4 MiB sequentially, in chunks of 64 B, 512 B and 4 KiB, after announcing the size with `ExpectSize`                                                                  |
-| L2       | Data logger: append 64 B and call `Sync`, until the file reaches 4 MiB, with a 100 ms idle period after each append; then the same into a second file until it holds the window of W-2, at most 128 KiB |
-| L3       | Overwrite 512 B at random offsets in a file of 64 KiB, 1 MiB and 4 MiB                                                                                                                                  |
-| L4       | Create, write, close and remove many small files of 100 B to 8 KiB                                                                                                                                      |
-| L5       | Fill 70 % of the volume with files that are never changed, then rewrite a 4 KiB configuration file repeatedly                                                                                           |
-| L6       | Read sequentially, read at random offsets, seek to the end, list a directory, and open files by path in directories of 10, 100 and 1000 entries                                                         |
-| L7       | Mount the volume when it is 10 %, 50 % and 90 % full                                                                                                                                                    |
+| Workload | Description                                                                                                                                                                                   |
+|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| L1       | Write one file of 1 MiB and one of 4 MiB sequentially, in chunks of 64 B, 512 B and 4 KiB, after announcing the size with `ExpectSize`                                                        |
+| L2       | Data logger: append 64 B and call `Sync`, until the file reaches 4 MiB, with a 100 ms idle period after each append; then the same into a second file until it holds as much, at most 128 KiB |
+| L3       | Overwrite 512 B at random offsets in a file of 64 KiB, 1 MiB and 4 MiB                                                                                                                        |
+| L4       | Create, write, close and remove many small files of 100 B to 8 KiB                                                                                                                            |
+| L5       | Fill 70 % of the volume with files that are never changed, then rewrite a 4 KiB configuration file repeatedly                                                                                 |
+| L6       | Read sequentially, read at random offsets, seek to the end, list a directory, and open files by path in directories of 10, 100 and 1000 entries                                               |
+| L7       | Mount the volume when it is 10 %, 50 % and 90 % full                                                                                                                                          |
 
 Workloads L2, L3 and L4 are run on volumes that are 10 %, 50 % and 90 % full, to measure the effect of the fill level.
 The fill level is the share of the space that the workload does not need for its own files: static files take that share of the capacity left after the largest size the workload's files reach, so that the workload still fits on a volume that is 90 % full.
@@ -241,7 +241,7 @@ The 0.97 of W-1 on NOR allows for the header of every block, which leaves 4060 o
 W-4 on the first phase of L1 is reported for NOR on `internal-flash`: its file of 16 KiB pays the first checkpoint after the mount, about 1.7 KB, as the FAT subject pays the clean-shutdown bit on M-2 of that phase.
 W-1 on the three phases of L1 with the file of 16 KiB is reported for NOR on `internal-flash` too, and asserted on the phases with the file of 64 KiB: what a file pays once, its creation and the commit of its close, and in the first phase the first checkpoint after the mount, weighs more on a file divided by 64, which reaches 0.90 times littlefs, and 0.57 in the first phase.
 W-2 measures its 4 KiB window on a second file, which L2 starts once the first holds 4 MiB, so that both windows see a volume of the same age: at 4 KiB into the first file, a fresh volume has not yet reached the steady state of its garbage collection and checkpoints.
-The second file stops once it holds its window: 64 appends from 4 KiB, or for a subject that counts its checkpoints, two checkpoints more than the periods of the window after 4 KiB, so that it takes little space on a full volume.
+The second file holds as much as the first, at most 128 KiB, also on a volume 90 % full, where a subject that runs out of space fails the run.
 W-2 on NOR is asserted on `nor-qspi-16m` and reported on `internal-flash`: there the first file of 64 KiB holds about 8 checkpoint periods, while the collection of node blocks runs in bursts further apart than a window at 50 % fill, so a window of 4 periods measures whether it holds a burst.
 W-2 on NOR averages windows that start after a checkpoint and span 4 whole checkpoint periods, counted by the volume, instead of 64 appends: a checkpoint costs more than 64 appends of 64 bytes, so a window of 64 appends would measure whether it holds a checkpoint rather than the size of the file.
 A window that the run cannot fill makes W-2 infinite, which fails its target.
@@ -296,7 +296,7 @@ WL-3 is reported, and `merge_report.py` adds its ratio to the best littlefs subj
 The sweep is described in [Testing.md](Testing.md).
 
 On NOR, every case of the sweep holds at 100 % on the three sweep models, with the interrupted program or erase not started, partial and completed.
-The cut points of a case are the programs and sector erases of its swept phase, and each is cut in the three modes, 18,150 cuts in all:
+The cut points of a case are the programs and sector erases of its swept phase, and each is cut in the three modes, 18,987 cuts in all:
 
 | Case                                           | `nor-128k` | `internal-96k` | `nor-128k-two-sector-blocks` |
 |------------------------------------------------|------------|----------------|------------------------------|
@@ -321,7 +321,9 @@ The cut points of a case are the programs and sector erases of its swept phase, 
 | leveling-fallback-nodes                        | 57         | 271            | 63                           |
 | unmount with an open file                      | 37         | 283            | 40                           |
 | replay with a smaller cache                    | 33         | 37             | 38                           |
-| Total                                          | 1242       | 3379           | 1429                         |
+| write when space runs low                      | 29         | 143            | 28                           |
+| collection when space runs low                 | 17         | 41             | 21                           |
+| Total                                          | 1288       | 3563           | 1478                         |
 
 M-2 counts blocks rather than requests, and every block of a request after its first follows the block before it, so writing the same blocks in fewer, larger requests leaves the share unchanged; only a block that neither starts an allocation unit nor follows the previous one counts against it.
 Counted by requests, a filesystem that coalesces small writes would lower its share by sending fewer data requests next to the same number of metadata requests.
