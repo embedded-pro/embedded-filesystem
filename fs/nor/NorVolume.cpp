@@ -112,6 +112,11 @@ namespace fs
         return allocator;
     }
 
+    NorDataAllocator& NorVolume::DataAllocator()
+    {
+        return dataAllocator;
+    }
+
     NorRecordApply& NorVolume::RecordApply()
     {
         return recordApply;

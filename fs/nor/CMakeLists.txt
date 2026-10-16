@@ -33,6 +33,8 @@ target_sources(fs.nor PRIVATE
     NorCounters.hpp
     NorCreate.cpp
     NorCreate.hpp
+    NorDataAllocator.cpp
+    NorDataAllocator.hpp
     NorDirectoryKey.cpp
     NorDirectoryKey.hpp
     NorDirectory.cpp

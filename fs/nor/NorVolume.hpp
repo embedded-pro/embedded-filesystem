@@ -12,6 +12,7 @@
 #include "fs/nor/NorCheckpointWriter.hpp"
 #include "fs/nor/NorConfig.hpp"
 #include "fs/nor/NorCounters.hpp"
+#include "fs/nor/NorDataAllocator.hpp"
 #include "fs/nor/NorDirectoryRead.hpp"
 #include "fs/nor/NorEntrySeek.hpp"
 #include "fs/nor/NorFileCommit.hpp"
@@ -92,6 +93,7 @@ namespace fs
         NorNameLookup& NameLookup();
         NorBlockEraser& Eraser();
         NorBlockAllocator& Allocator();
+        NorDataAllocator& DataAllocator();
         NorRecordApply& RecordApply();
         NorNodeCollector& Collector();
         NorWearLeveler& Leveler();
@@ -132,6 +134,7 @@ namespace fs
         NorDirectoryRead directoryRead{ inodeRead, entrySeek };
         NorBlockEraser eraser{ *this };
         NorBlockAllocator allocator{ *this };
+        NorDataAllocator dataAllocator{ *this };
         NorRecordApply recordApply{ *this };
         NorNodeCollector collector{ *this };
         NorWearLeveler leveler{ *this };

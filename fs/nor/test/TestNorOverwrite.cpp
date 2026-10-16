@@ -234,6 +234,24 @@ TEST_F(NorOverwriteTest, an_overwrite_without_a_free_block_has_no_space_and_keep
     EXPECT_EQ(5000, file->Size());
 }
 
+TEST_F(NorOverwriteTest, an_overwrite_that_needs_a_block_from_the_reserve_first_collects_node_blocks_with_a_block_of_unused_slots)
+{
+    static auto contents = Pattern<5000>();
+    AddDirectoriesWithUnusedNodeSlots();
+    BuildFile(contents);
+    auto file = OpenAt(10);
+    LeaveFreeBlocks(Volume().Geometry().ReserveBlocks());
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+
+    EXPECT_EQ(fs::Result::success, Write(*file, Bytes("abc")));
+
+    EXPECT_EQ(fs::Result::success, Close(*file));
+    file = nullptr;
+    static auto expected = contents;
+    std::ranges::copy(Bytes("abc"), expected.begin() + 10);
+    ExpectContents("/a", expected);
+}
+
 TEST_F(NorOverwriteTest, an_overwrite_whose_block_cannot_be_found_is_corrupted)
 {
     static auto contents = Pattern<5000>();

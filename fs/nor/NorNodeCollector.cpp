@@ -24,10 +24,22 @@ namespace fs
 
     bool NorNodeCollector::Due() const
     {
-        const auto& cache = volume.Cache();
-        auto live = uint64_t{ volume.State().liveNodes } + cache.ModifiedNodes() - cache.ReleasedNodes();
         auto collectable = CollectableBlocks();
-        return collectable >= 2 && uint64_t{ collectable } * volume.Geometry().NodesPerBlock() > 2 * live;
+        return (collectable >= 2 && uint64_t{ collectable } * volume.Geometry().NodesPerBlock() > 2 * LiveNodes()) || DueForSpace();
+    }
+
+    bool NorNodeCollector::DueForSpace() const
+    {
+        const auto& geometry = volume.Geometry();
+        const auto& blocks = volume.State().blocks;
+        auto free = blocks.Count(NorBlockState::freeErased) + blocks.Count(NorBlockState::freeNotErased);
+        return free <= geometry.ReserveBlocks() + geometry.WatermarkBlocks() && uint64_t{ CollectableBlocks() } * geometry.NodesPerBlock() >= LiveNodes() + geometry.NodesPerBlock();
+    }
+
+    uint64_t NorNodeCollector::LiveNodes() const
+    {
+        const auto& cache = volume.Cache();
+        return uint64_t{ volume.State().liveNodes } + cache.ModifiedNodes() - cache.ReleasedNodes();
     }
 
     uint32_t NorNodeCollector::CollectableBlocks() const

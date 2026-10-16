@@ -139,6 +139,53 @@ TEST_F(NorNodeCollectorTest, no_collection_is_due_while_the_node_blocks_could_ho
     EXPECT_FALSE(Volume().Collector().Due());
 }
 
+TEST_F(NorNodeCollectorTest, a_collection_is_due_when_the_free_blocks_beyond_the_reserve_are_down_to_the_watermark_and_the_node_blocks_hold_a_block_of_unused_slots)
+{
+    for (auto name : { "a", "b", "c", "d", "e" })
+        Builder().AddDirectory(root, name);
+    Builder().AddDirectory(2, "x");
+    Builder().AddDirectory(3, "x");
+    Builder().Commit();
+    Mount();
+    ASSERT_EQ(7, State().liveNodes);
+    ASSERT_EQ(2, Volume().Collector().CollectableBlocks());
+    LeaveFreeBlocksInState(Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks());
+
+    EXPECT_TRUE(Volume().Collector().DueForSpace());
+    EXPECT_TRUE(Volume().Collector().Due());
+}
+
+TEST_F(NorNodeCollectorTest, no_collection_is_due_for_space_while_more_free_blocks_than_the_watermark_remain_beyond_the_reserve)
+{
+    for (auto name : { "a", "b", "c", "d", "e" })
+        Builder().AddDirectory(root, name);
+    Builder().AddDirectory(2, "x");
+    Builder().AddDirectory(3, "x");
+    Builder().Commit();
+    Mount();
+    LeaveFreeBlocksInState(Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks() + 1);
+
+    EXPECT_FALSE(Volume().Collector().DueForSpace());
+    EXPECT_FALSE(Volume().Collector().Due());
+}
+
+TEST_F(NorNodeCollectorTest, no_collection_is_due_for_space_while_the_node_blocks_hold_less_than_a_block_of_unused_slots)
+{
+    for (auto name : { "a", "b", "c", "d", "e", "f" })
+        Builder().AddDirectory(Builder().AddDirectory(root, name), "x");
+    for (auto name : { "g", "h", "i" })
+        Builder().AddDirectory(root, name);
+    Builder().Commit();
+    Mount();
+    ASSERT_EQ(14, State().liveNodes);
+    ASSERT_EQ(3, Volume().Collector().CollectableBlocks());
+    ASSERT_EQ(fs::Result::success, MakeDirectory("/g/y"));
+    LeaveFreeBlocksInState(Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks());
+
+    EXPECT_FALSE(Volume().Collector().DueForSpace());
+    EXPECT_FALSE(Volume().Collector().Due());
+}
+
 TEST_F(NorNodeCollectorTest, a_checkpoint_frees_the_node_blocks_whose_nodes_are_no_longer_used)
 {
     Builder().AddDirectory(root, "a");

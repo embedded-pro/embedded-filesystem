@@ -23,6 +23,7 @@ namespace fs
         ~NorNodeCollector();
 
         bool Due() const;
+        bool DueForSpace() const;
         uint32_t CollectableBlocks() const;
         uint32_t LeftBlocks() const;
         bool Moving() const;
@@ -46,6 +47,7 @@ namespace fs
         void Leave();
         bool HasRoom() const;
         uint32_t FreeSlots() const;
+        uint64_t LiveNodes() const;
         uint32_t AddressAt(uint8_t level) const;
         uint32_t ChildOf(std::size_t node) const;
         bool IsCollectable(uint32_t candidate) const;
