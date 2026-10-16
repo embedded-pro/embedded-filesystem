@@ -21,6 +21,7 @@ Metric identifiers such as W-2 refer to [Metrics.md](Metrics.md).
 | Erase latency              | Not applicable                                         | Erases inline, inside the write that needs the block          | Pre-erased pool, refilled in the background                                       |
 | Writes to SD cards         | Direct multi-sector transfers for aligned writes       | Not applicable                                                | Write-back cache that coalesces small writes, aligned allocation, contiguous runs |
 | Integration with EmIL      | Needs a blocking adapter or a thread                   | Needs a blocking adapter or a thread                          | Uses `hal::BlockDevice`, `hal::Flash`, EmIL containers and test doubles directly  |
+| Code size on a Cortex-M4   | About 12 KB of flash                                   | About 15 KB of flash                                          | About 71 KB for FAT and 86 KB for NOR (F-1)                                       |
 
 ## Asynchronous execution
 
@@ -88,14 +89,16 @@ littlefs mounts quickly, because it reads only its superblock and root directory
 embedded-filesystem reads the header of every block at mount to build its free-block bitmap and erase counts, which takes longer on large devices; this cost is paid once per mount instead of during writes, and is measured by R-4.
 
 littlefs needs less RAM.
-A littlefs configuration with caches of a few hundred bytes is common, while embedded-filesystem keeps two bits and one byte per block plus a node cache of 8 KiB by default, about 14 KiB for a 16 MiB device with 4 KiB blocks, or about 9 KiB with 64 KiB blocks; see [NorFilesystem.md](NorFilesystem.md#ram-use).
-littlefs cannot use as much: its caches hold at most one block and its lookahead one bit per block, about 13 KiB on the same device.
+A littlefs configuration with caches of a few hundred bytes is common, while embedded-filesystem keeps two bits and one byte per block plus a node cache of 8 KiB by default: the volume takes 17,728 bytes for a 16 MiB device with 4 KiB blocks on a Cortex-M4, as F-1 measures, and about 9 KiB with 64 KiB blocks; see [NorFilesystem.md](NorFilesystem.md#ram-use).
+littlefs cannot use as much: its caches hold at most one block and its lookahead one bit per block, 13,120 bytes on the same device with one open file.
 This is the price of allocation without traversal and of wear leveling based on actual erase counts.
 
-On SD cards, FatFs needs less RAM as well: about 1.7 KiB with one open file, against about 5.8 KiB for `fs::FatFileSystem::WithStorage<2, 8>` on a 32-bit target.
+On SD cards, FatFs needs less RAM as well: 1652 bytes with one open file, against 7712 bytes for `fs::FatFileSystem::WithStorage<1, 8>` on a Cortex-M4.
 Most of that is the sector cache that collects small writes into multi-block requests; a smaller cache needs less RAM and coalesces fewer writes.
 
 littlefs stores small files inline in their metadata, which uses flash space efficiently for many tiny files.
 embedded-filesystem keeps only files of up to 64 bytes in the record of their inode, and allocates larger files in whole blocks in its first version, so many small files use more space.
 
-The code size of the two libraries is well known and small; the code size of embedded-filesystem is measured by F-1 and compared with both.
+FatFs and littlefs need much less code.
+F-1 measures what each subject adds to an EmIL application on a Cortex-M4 in `MinSizeRel`, with its glue: 70,968 bytes of flash for `embedded-filesystem/fat` against 11,940 for `fatfs/default`, and 85,752 bytes for `embedded-filesystem/nor` against 15,244 for `littlefs/default`.
+The asynchronous state machines, the index trees, the caches and the background work take that code; a product that needs the smallest image keeps using FatFs or littlefs.

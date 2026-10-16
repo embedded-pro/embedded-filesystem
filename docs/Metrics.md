@@ -344,6 +344,7 @@ That costs M-1 on L4, 1.918 against 1.920 for FatFs, and M-2 on the first phase 
 | C-2 | Latency bound    | Longest measured latency of a call of L2 on a board, divided by the W-6 bound of the model and the configuration of the device                                                                                          | Reported                                                   |
 
 F-1 needs no board: its reference images are built for Cortex-M in CI, and the metrics workflow measures them in a job of its own and adds their fragments to the merge.
+On the first measurement, in `MinSizeRel` with Arm GCC 15.2.1 on the Cortex-M4, `embedded-filesystem/fat` adds 70968 B of flash and 7748 B of RAM, and `embedded-filesystem/nor` 85752 B and 17764 B, against 11940 B and 1652 B for `fatfs/default` and 15244 B and 384 B for `littlefs/default`; the Cortex-M7 and the Cortex-M33 are within 0.3 % of these.
 F-2, C-1 and C-2 are measured on the boards, and so are the metrics of the workloads on the real devices, W-1 to W-6, R-1 to R-5 and M-1 to M-3, with the file sizes scaled down, on the devices named `<board>/<device>`, as reported results.
 C-1 and C-2 are reported until the first runs show their spread; a later step sets their targets from the data.
 The reference images, the boards, the procedures and how a run becomes fragments are described in [Validation.md](Validation.md).

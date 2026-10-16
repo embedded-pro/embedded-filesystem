@@ -11,12 +11,13 @@ They find the repository from their own location, so they run from any directory
 - clang-format and cppcheck on the C++ sources changed since `base`;
 - the line coverage of `fs/` and of the libraries of `validation/firmware`, listing every file that is not fully covered;
 - the cortex-m4, cortex-m7 and cortex-m33 builds, and the four board presets of the validation;
+- the reference images of F-1 in `MinSizeRel`, measured with `validation/footprint/measure.sh` into `build/footprint`, with `cortex-memory-budget` in a virtual environment in `build/footprint-venv` that it creates the first time;
 - ruff, the unit tests and the scenarios on the fake firmware of the host package of the validation, in a virtual environment in `build/validation-host` that it creates the first time;
 - the unit tests of the metrics harness, without the metrics themselves;
 - clang-tidy's `bugprone-branch-clone` and the scans below, on the changed sources.
 
 It configures each preset the first time and prints only problems and summaries, so a clean run is short.
-The metrics take several minutes more: when a change can move them, run `ctest --preset metrics`, then `metrics/report/merge_report.py --check` with `--baseline` set to the `metrics.json` of `main`.
+The metrics take several minutes more: when a change can move them, run `ctest --preset metrics`, then `metrics/report/merge_report.py --check` with `--baseline` set to the `metrics.json` of `main`, and with `--fragment-directory build/footprint/fragments` for F-1.
 
 It needs CMake, Ninja, GCC, the Arm GNU toolchain, xsltproc, clang-format, clang-tidy, cppcheck, gcovr and Python 3 with `venv`, and dosfstools and mtools for the interoperability tests.
 
