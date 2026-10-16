@@ -19,6 +19,7 @@ validation/
         baselines/          the glue of FatFs and littlefs
         boards/stm32h757/BoardProfile.hpp
         boards/stm32h745/BoardProfile.hpp
+        cycles/             F-2: the cycle counting, its run and command, and the subjects
         devices/            the null, RAM and counting devices
         hil/                the command groups
         results/            the result lines
@@ -34,7 +35,7 @@ validation/
 
 The C++ of `validation/firmware` is split in two:
 
-* Libraries that need no board: the null, RAM and counting devices, the glue of FatFs and littlefs, the benchmarks, the workload runner, the parser of FAT layouts, the result lines and the command groups.
+* Libraries that need no board: the null, RAM and counting devices, the glue of FatFs and littlefs, the cycle counting of F-2 and its subjects, the benchmarks, the workload runner, the parser of FAT layouts, the result lines and the command groups.
   They are written against `hal::Flash`, `hal::BlockDevice` and the terminal of EmIL, built and tested on the host, and covered 100 % like `fs/`.
 * Board files: the board profiles, the `main` of both cores and the glue to the drivers of hal-st.
   They build only for the boards, and are excluded from the coverage and from SonarCloud.
@@ -121,7 +122,7 @@ At 400 MHz the counter wraps after 10.7 s, so a duration is the difference of tw
 | `fmc`              | EVAL  | `hal::NorFlashStm`                                                                                    | The whole 16 MiB                                     | 128 blocks of one 128 KiB sector, program unit 2, and the write buffer of the chip as the page                               |
 | `sd`               | EVAL  | `hal::SdCardStm`                                                                                      | `validation::BlockDeviceRegion` of the first 256 MiB | The FAT subject of `sd-card-256m`: `fs::FatFileSystem::WithStorage<2, 8>`, with the allocation unit of the card              |
 | `emmc`             | DISCO | The eMMC driver of hal-st                                                                             | `validation::BlockDeviceRegion` of the first 256 MiB | As `sd`, with the high-capacity erase group of the eMMC as the allocation unit                                               |
-| `ramflash`         | Both  | `validation::RamFlash`, NOR semantics in SDRAM                                                        | 2 MiB                                                | For F-2: as `qspi`, with 512 blocks                                                                                          |
+| `ramflash`         | Both  | `validation::RamFlash`, NOR semantics in SDRAM                                                        | 4 MiB                                                | For F-2: as `qspi`, with 1024 blocks                                                                                         |
 | `ramblock`         | Both  | `validation::RamBlockDevice` in SDRAM                                                                 | 2 MiB                                                | For F-2: as `sd`, which `fs::FatFormatter` formats as FAT12 at this size, without an allocation unit                         |
 
 The QSPI flash is set up as the demos of hal-st do it: `services::FlashGeometryQuadSfdp` reads the geometry and the read command from the SFDP tables, the firmware aligns the dummy cycles of the volatile configuration register, and `services::FlashQuadSpiGeneric` runs with `Protocol::extendedSpi`.
@@ -244,9 +245,10 @@ Only the subjects of embedded-filesystem run the workloads on the boards; the ba
 ### Processor cycles
 
 `cycles.run <subject>` measures F-2 on a RAM device in the SDRAM, where a request takes no device time, so that every cycle of a call is spent in the filesystem, the event dispatcher and the copies of the RAM device.
-`validation::RamFlash` and `validation::RamBlockDevice` keep the semantics of NOR flash and of a block device in the first 4 MiB of the SDRAM, and complete through the event dispatcher.
+`validation::RamFlash` and `validation::RamBlockDevice` keep the semantics of NOR flash and of a block device in the first 6 MiB of the SDRAM, and complete through the event dispatcher.
 FatFs and littlefs block, so they run on views of the same memory that complete within the call: the event dispatcher of EmIL runs an action again when it is asked to dispatch from within it, which the glue of FatFs and littlefs would do while it waits, and so the glue never waits.
 The subjects are `embedded-filesystem/fat` on `ramblock`, `embedded-filesystem/nor` on `ramflash`, and the baselines closest in RAM, `fatfs/tuned` on `ramblock` and `littlefs/ram-matched` on `ramflash`, through the glue of [Build](#build); FatFs symbols are global, so one image holds one FatFs configuration.
+`littlefs/ram-matched` takes one bit of lookahead per block of `ramflash`, 128 B, as [Metrics.md](Metrics.md#baselines) defines it, and `ramflash` holds 4 MiB because littlefs copies a file from an overwritten offset to its end: an overwrite near the start of `/big` needs another 1 MiB free.
 The operations are those of a product:
 
 | Operation   | Call                                                                        |
@@ -265,15 +267,15 @@ The operations are those of a product:
 | `unmount`   | Unmounting                                                                  |
 
 Before the operations, the volume is formatted and gets a directory `/d` of 100 files of 64 bytes and a file `/big` of 1 MiB, and is unmounted, which the time of `format` does not include.
-`read` and `overwrite` take whole sectors of 512 bytes at random offsets of `/big`, the same for every subject; `write` writes `/w` from its start again every 32 runs, so that it stays within the RAM device; `create`, `rename` and `remove` work on `/c<run>` and `/r<run>`.
+`read` and `overwrite` take whole sectors of 512 bytes at random offsets of `/big`, the same for every subject; `write` reopens `/w` for writing every 32 runs, which empties it before the run is measured, so that every write appends and the file stays within the RAM device; `create`, `rename` and `remove` work on `/c<run>` and `/r<run>`.
 
 Each operation runs `n` times, 100 by default, and reports the minimum, median and maximum of the cycles from the call to its completion.
 It also reports the cycles the processor is busy from the call until the volume is idle again, so that the background work an operation leaves, such as the erases of NOR and the scan of the FAT, counts too:
 
-* the volume is idle once `fs::FileSystem::Idle()` is true, as [Architecture.md](Architecture.md#public-api) describes; FatFs and littlefs leave no background work and are idle on completion;
+* the volume is idle once `fs::FileSystem::Idle()` is true, as [Architecture.md](Architecture.md#public-api) describes; FatFs leaves no background work and is idle on completion, and littlefs runs `lfs_fs_gc` once after a call, as `littlefs/ram-matched` does when the volume is idle in [Metrics.md](Metrics.md#baselines), and is idle once it has;
 * the firmware checks `Idle()` on every tick of 1 ms, so the processor sleeps in between, and a measured call starts only on an idle volume;
 * the event dispatcher is a `infra::LowPowerEventDispatcher` whose strategy, `validation::IdleCycleCounter`, adds up the cycles spent asleep, which do not count;
-* every tick of the wait brings the timer interrupt and a check of `Idle()`, which a calibration of 100 ms before the operations measures per tick, and which do not count either; so the result holds whether or not the cycle counter runs while the processor sleeps, which depends on the debugger.
+* every tick of the wait brings the timer interrupt and a check of `Idle()`, which do not count either: a calibration of 100 ms, once the subject is reset and idle, takes the median of the busy cycles of its ticks, so that the ticks the output of the terminal delays are left out; so the result holds whether or not the cycle counter runs while the processor sleeps, which depends on the debugger.
 F-2 records the medians of both, as `<operation>` and `<operation> settled`.
 
 ### Formatter comparison
@@ -312,7 +314,7 @@ The layouts of every card and the result of the check on the PC are recorded in 
 * a `device` record becomes a device of the fragment, named `<board>/<device>`, such as `stm32h757i-eval/qspi`, with the geometry, the chip, the clock, the run and the parameters of the model the run is converted with as its parameters;
 * `bench` records become the measured parameters of the device, and the parameters a model would take from them;
 * `phase` and `window` records become the metrics of the phases, computed as the host computes them, and C-1 and C-2, from the device models;
-* `cycles` records become F-2, with the operation as the workload, and the cycles until the volume is idle again as `<operation> settled`;
+* `cycles` records become F-2, with the operation as the workload, and the cycles until the volume is idle again as `<operation> settled`; the last run of a subject in a transcript replaces its earlier runs, and a run that ends with `cycles.failed` leaves no F-2 for its subject;
 * every result carries `ramBytes`, as the merge needs: the size of the state of the subject on the board.
 
 The device models come from `metrics.device_models`, a host program of the metrics harness that prints the parameters of every model of `metrics/device/DeviceModels.cpp`, and the W-6 bound that `metrics::NorTargets` and `metrics::FatTargets` give for the configuration of every device of the boards.

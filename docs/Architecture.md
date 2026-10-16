@@ -237,6 +237,7 @@ namespace fs
 ```
 
 `Idle()` is true while no call is queued or running and no background work is scheduled, so the volume does nothing until it is called again: the queue holds no claim, granted or waiting, and its idle delay is not running.
+Completions that wait in `fs::DeferredCompletions`, such as those with `busy`, hold no claim, so they can still be pending while `Idle()` is true.
 A product can use it before it powers the device down or sleeps deeply, and F-2 in [Validation.md](Validation.md#processor-cycles) uses it to count the cycles of the background work that an operation leaves.
 
 Formatting a volume is not part of `FileSystem`: FAT volumes are formatted by `fs::FatFormatter`, and NOR volumes by `fs::NorFileSystem::Format`.
