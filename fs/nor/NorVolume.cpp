@@ -8,6 +8,7 @@ namespace fs
     NorVolume::NorVolume(const NorVolumeParts& parts, const NorConfig& config, infra::Duration idleDelay)
         : flash(parts.flash)
         , deferred(parts.deferred)
+        , operations(parts.operations)
         , config(config)
         , state(parts.blockStates, parts.eraseCounts, parts.nodeBlocks)
         , journalBuffer(parts.journalBuffer)
@@ -185,6 +186,11 @@ namespace fs
     NorOperation& NorVolume::Operation()
     {
         return operation;
+    }
+
+    const NorOperations& NorVolume::Operations() const
+    {
+        return operations;
     }
 
     uint32_t NorVolume::Generation() const

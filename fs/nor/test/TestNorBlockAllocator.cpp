@@ -1,5 +1,6 @@
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/nor/NorBlockAllocator.hpp"
+#include "fs/nor/NorFileSystem.hpp"
 #include "fs/nor/test/NorVolumeFixture.hpp"
 #include "hal/interfaces/test_doubles/FlashMock.hpp"
 #include "infra/timer/test_helper/ClockFixture.hpp"
@@ -306,7 +307,8 @@ namespace
         std::array<uint8_t, 256> journal{};
         std::array<uint8_t, 15 * 512> nodes{};
         std::array<fs::NorNodeCache::Slot, 15> slots{};
-        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots) }, twoSectorWideUnit, std::chrono::milliseconds(10) };
+        static constexpr fs::NorOperations operations = fs::NorOperationsFor<fs::NorFeatures{}>();
+        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots), operations }, twoSectorWideUnit, std::chrono::milliseconds(10) };
         testing::StrictMock<infra::MockCallback<void(std::optional<uint32_t>)>> done;
     };
 }

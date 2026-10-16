@@ -19,7 +19,7 @@ namespace fs
         FatMount(hal::BlockDevice& device, SectorCache& cache, FatVolumeState& volume, const infra::Function<void(Result result)>& onDone);
         FatMount(const FatMount& other) = delete;
         FatMount& operator=(const FatMount& other) = delete;
-        ~FatMount() = default;
+        ~FatMount();
 
         void Start();
 

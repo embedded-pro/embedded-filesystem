@@ -22,6 +22,7 @@
 #include "services/fsm/TableStateMachine.hpp"
 #include <array>
 #include <cstddef>
+#include <utility>
 #include <variant>
 
 namespace fs
@@ -30,7 +31,7 @@ namespace fs
         : public FileSystem
     {
     public:
-        template<std::size_t Files, std::size_t CacheSectors, FatLimits Limits = FatLimits{}>
+        template<std::size_t Files, std::size_t CacheSectors, FatLimits Limits = FatLimits{}, FatFeatures Features = FatFeatures{}>
         class WithStorage;
 
         using Machine = services::TableStateMachine<FatLifecycleState, FatLifecycleEvent, FatFileSystem>;
@@ -73,8 +74,8 @@ namespace fs
         void Entered(Result result);
         void DeferCompletion(infra::Function<void(Result result)>& onDone, Result result);
 
-        Result Refusal(infra::BoundedConstString path) const;
-        Result Refusal(Result validation) const;
+        Result Refusal(infra::BoundedConstString path, bool supported = true) const;
+        Result Refusal(Result validation, bool supported = true) const;
         void Start(FatPathCall&& call);
         FatPathSlot* FreePathSlot() const;
         void RunPathCall(FatPathSlot& slot);
@@ -108,9 +109,36 @@ namespace fs
             std::array<FatClosedFile, ClosedFiles> closedStorage{};
             std::array<FatReservation, FreeRunSlots> freeRunStorage{};
         };
+
+        template<class Operation, class Call>
+        void StartFatOperation(FatVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished)
+        {
+            volume.Operation().template emplace<Operation>(volume, std::move(call), onFinished).Start();
+        }
+
+        void StartFatExpectSize(FatVolume& volume, FatOpenFile& file, FatExtentCache& extents, uint32_t size, const infra::Function<void(Result result)>& onDone);
     }
 
-    template<std::size_t Files, std::size_t CacheSectors, FatLimits Limits>
+    template<FatFeatures Features>
+    constexpr FatOperations FatOperationsFor()
+    {
+        FatOperations operations;
+
+        if constexpr (Features.makeDirectory)
+            operations.makeDirectory = &detail::StartFatOperation<FatMakeDirectory, FatMakeDirectoryCall>;
+        if constexpr (Features.remove)
+            operations.remove = &detail::StartFatOperation<FatRemove, FatRemoveCall>;
+        if constexpr (Features.rename)
+            operations.rename = &detail::StartFatOperation<FatRename, FatRenameCall>;
+        if constexpr (Features.expectSize)
+            operations.expectSize = &detail::StartFatExpectSize;
+        if constexpr (Features.usage)
+            operations.usage = &detail::StartFatOperation<FatUsage, FatUsageCall>;
+
+        return operations;
+    }
+
+    template<std::size_t Files, std::size_t CacheSectors, FatLimits Limits, FatFeatures Features>
     class FatFileSystem::WithStorage
         : private detail::FatVolumeStorage<CacheSectors, Files + Limits.directories + Limits.pathOperations + 2, Limits.maxNameBytes, Limits.closedFiles, Limits.freeRuns>
         , public FatFileSystem
@@ -122,7 +150,7 @@ namespace fs
     public:
         explicit WithStorage(hal::BlockDevice& device, const FatConfig& config = {})
             : Storage(device)
-            , FatFileSystem(FatVolumeParts{ device, this->barrierStorage, this->cacheStorage, this->deferredStorage, infra::MakeRange(this->nameStorage), infra::MakeRange(this->closedStorage), infra::MakeRange(this->freeRunStorage), CacheSectors }, config)
+            , FatFileSystem(FatVolumeParts{ device, this->barrierStorage, this->cacheStorage, this->deferredStorage, infra::MakeRange(this->nameStorage), infra::MakeRange(this->closedStorage), infra::MakeRange(this->freeRunStorage), CacheSectors, operations }, config)
         {
             for (std::size_t index = 0; index != Limits.pathOperations; ++index)
                 pathSlots.emplace_back(Volume().Queue());
@@ -131,6 +159,8 @@ namespace fs
         }
 
     private:
+        static constexpr FatOperations operations = FatOperationsFor<Features>();
+
         infra::SharedPtr<FatDirectory> AllocateDirectory() override
         {
             return directories.Allocate();

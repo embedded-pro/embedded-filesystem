@@ -25,6 +25,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <utility>
 
 namespace fs
 {
@@ -32,7 +33,7 @@ namespace fs
         : public FileSystem
     {
     public:
-        template<NorConfig Config, std::size_t Files>
+        template<NorConfig Config, std::size_t Files, NorFeatures Features = NorFeatures{}>
         class WithStorage;
 
         using Machine = services::TableStateMachine<NorLifecycleState, NorLifecycleEvent, NorFileSystem>;
@@ -70,8 +71,8 @@ namespace fs
         virtual infra::SharedPtr<NorFile> AllocateFile() = 0;
 
         bool IsMounted() const;
-        Result Refusal(infra::BoundedConstString path) const;
-        Result Refusal(Result validation) const;
+        Result Refusal(infra::BoundedConstString path, bool supported = true) const;
+        Result Refusal(Result validation, bool supported = true) const;
         void Start(NorPathCall&& call);
         NorPathSlot* FreePathSlot() const;
         void RunPathCall(NorPathSlot& slot);
@@ -114,9 +115,37 @@ namespace fs
             std::array<NorNodeCache::Slot, Config.cachedNodes> nodeSlotStorage{};
             DeferredCompletions::WithMaxSize<Completions> deferredStorage;
         };
+
+        template<class Operation, class Call>
+        void StartNorOperation(NorVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished)
+        {
+            volume.Operation().template emplace<Operation>(volume, std::move(call), onFinished).Start();
+        }
+
+        void StartNorTruncate(NorVolume& volume, NorOpenFile& file, uint32_t size, const infra::Function<void(Result result)>& onDone);
+        void StartNorFormat(NorVolume& volume, const infra::Function<void(Result result)>& onDone);
     }
 
-    template<NorConfig Config, std::size_t Files>
+    template<NorFeatures Features>
+    constexpr NorOperations NorOperationsFor()
+    {
+        NorOperations operations;
+
+        if constexpr (Features.makeDirectory)
+            operations.makeDirectory = &detail::StartNorOperation<NorMakeDirectory, NorMakeDirectoryCall>;
+        if constexpr (Features.remove)
+            operations.remove = &detail::StartNorOperation<NorRemove, NorRemoveCall>;
+        if constexpr (Features.rename)
+            operations.rename = &detail::StartNorOperation<NorRename, NorRenameCall>;
+        if constexpr (Features.truncate)
+            operations.truncate = &detail::StartNorTruncate;
+        if constexpr (Features.format)
+            operations.format = &detail::StartNorFormat;
+
+        return operations;
+    }
+
+    template<NorConfig Config, std::size_t Files, NorFeatures Features>
     class NorFileSystem::WithStorage
         : private detail::NorVolumeStorage<Config, Files + Config.directories + Config.pathOperations + 3>
         , public NorFileSystem
@@ -129,7 +158,7 @@ namespace fs
 
     public:
         explicit WithStorage(hal::Flash& flash, infra::Duration idleDelay = defaultIdleDelay)
-            : NorFileSystem(NorVolumeParts{ flash, this->deferredStorage, infra::MakeRange(this->blockStateStorage), infra::MakeRange(this->eraseCountStorage), infra::MakeRange(this->nodeBlockStorage), infra::MakeRange(this->journalStorage), infra::MakeRange(this->nodeStorage), infra::MakeRange(this->nodeSlotStorage) }, Config, idleDelay)
+            : NorFileSystem(NorVolumeParts{ flash, this->deferredStorage, infra::MakeRange(this->blockStateStorage), infra::MakeRange(this->eraseCountStorage), infra::MakeRange(this->nodeBlockStorage), infra::MakeRange(this->journalStorage), infra::MakeRange(this->nodeStorage), infra::MakeRange(this->nodeSlotStorage), operations }, Config, idleDelay)
         {
             for (std::size_t index = 0; index != Config.pathOperations; ++index)
                 pathSlots.emplace_back(Volume().Queue());
@@ -138,6 +167,8 @@ namespace fs
         }
 
     private:
+        static constexpr NorOperations operations = NorOperationsFor<Features>();
+
         infra::SharedPtr<NorDirectory> AllocateDirectory() override
         {
             return directories.Allocate();

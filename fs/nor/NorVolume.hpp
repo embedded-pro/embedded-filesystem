@@ -30,6 +30,7 @@
 #include "fs/nor/NorNodeCollector.hpp"
 #include "fs/nor/NorOpen.hpp"
 #include "fs/nor/NorOpenDirectory.hpp"
+#include "fs/nor/NorOperations.hpp"
 #include "fs/nor/NorPathWalk.hpp"
 #include "fs/nor/NorRead.hpp"
 #include "fs/nor/NorRecordApply.hpp"
@@ -64,6 +65,7 @@ namespace fs
         infra::ByteRange journalBuffer;
         infra::ByteRange nodeStorage;
         infra::MemoryRange<NorNodeCache::Slot> nodeSlots;
+        const NorOperations& operations;
     };
 
     using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorReplay, NorUnmount, NorStat, NorOpenDirectory, NorOpen, NorRead, NorWrite, NorMakeDirectory, NorRemove, NorRename>;
@@ -108,6 +110,7 @@ namespace fs
         infra::IntrusiveList<NorDirectory>& OpenDirectories();
         OperationQueue& Queue();
         NorOperation& Operation();
+        const NorOperations& Operations() const;
 
         uint32_t Generation() const;
         bool Available(uint32_t handleGeneration) const;
@@ -120,6 +123,7 @@ namespace fs
     private:
         hal::Flash& flash;
         DeferredCompletions& deferred;
+        const NorOperations& operations;
         NorConfig config;
         NorVolumeState state;
         NorCounters counters;

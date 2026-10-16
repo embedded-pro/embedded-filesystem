@@ -1,5 +1,6 @@
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/OperationQueue.hpp"
+#include "fs/nor/NorFileSystem.hpp"
 #include "fs/nor/NorVolume.hpp"
 #include "fs/nor/test/NorFilesFixture.hpp"
 #include "fs/nor/test/NorRecordsFixture.hpp"
@@ -75,7 +76,8 @@ namespace
         std::array<uint8_t, 256> journal{};
         std::array<uint8_t, 15 * 512> nodes{};
         std::array<fs::NorNodeCache::Slot, 15> slots{};
-        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots) }, twoSectors, 10ms };
+        static constexpr fs::NorOperations operations = fs::NorOperationsFor<fs::NorFeatures{}>();
+        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots), operations }, twoSectors, 10ms };
         fs::OperationQueue::Claimer foreground{ volume.Queue() };
     };
 }

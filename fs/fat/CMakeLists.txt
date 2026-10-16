@@ -81,6 +81,7 @@ target_sources(fs.fat PRIVATE
     FatOpenDirectory.hpp
     FatOpenFile.cpp
     FatOpenFile.hpp
+    FatOperations.hpp
     FatParentDirectory.cpp
     FatParentDirectory.hpp
     FatPartitionTable.cpp

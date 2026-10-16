@@ -309,7 +309,7 @@ hal::BlockDevice& sdCard = ...;
 fs::FatFileSystem::WithStorage<4, 8> fatVolume{ sdCard, fs::FatConfig{ .blocksPerAllocationUnit = 8192, .timerServiceId = infra::localTimeTimerServiceId } };
 ```
 
-The template arguments of `fs::FatFileSystem::WithStorage<Files, CacheSectors, Limits>` are the number of open files, the number of sectors in the cache, and an optional `fs::FatLimits` with the other sizes:
+The template arguments of `fs::FatFileSystem::WithStorage<Files, CacheSectors, Limits, Features>` are the number of open files, the number of sectors in the cache, an optional `fs::FatLimits` with the other sizes and an optional `fs::FatFeatures`:
 
 | `fs::FatLimits`  | Default | Sizes                                                         |
 |------------------|---------|---------------------------------------------------------------|
@@ -319,6 +319,17 @@ The template arguments of `fs::FatFileSystem::WithStorage<Files, CacheSectors, L
 | `closedFiles`    | 2       | The closed files whose last run is remembered                 |
 | `freeRuns`       | 8       | The cache of free runs                                        |
 | `maxNameBytes`   | 255     | The longest name in UTF-8 bytes, and the buffer that holds it |
+
+`fs::FatFeatures` leaves out calls that a product never makes, so that their code is not linked; a call that is left out completes with `unsupported` on a mounted volume, and with `notMounted` otherwise, before its path is validated.
+Every feature is in by default.
+
+| `fs::FatFeatures` | Leaves out      |
+|-------------------|-----------------|
+| `makeDirectory`   | `MakeDirectory` |
+| `remove`          | `Remove`        |
+| `rename`          | `Rename`        |
+| `expectSize`      | `ExpectSize`    |
+| `usage`           | `Usage`         |
 
 `fs::FatConfig` holds the settings that need no storage:
 

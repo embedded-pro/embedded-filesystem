@@ -100,6 +100,12 @@ namespace fs
             return;
         }
 
+        if (volume.Operations().truncate == nullptr)
+        {
+            volume.Defer(onDone, volume.Available(generation) ? Result::unsupported : Result::notMounted);
+            return;
+        }
+
         this->onDone = onDone;
         Claim(Call::truncate);
     }
@@ -204,7 +210,7 @@ namespace fs
                                   })
                 .Start();
         else if (call == Call::truncate)
-            volume.FileTruncate().Truncate(state, state.position, [this](Result result)
+            volume.Operations().truncate(volume, state, state.position, [this](Result result)
                 {
                     Done(result);
                 });

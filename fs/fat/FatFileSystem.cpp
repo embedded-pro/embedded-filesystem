@@ -76,7 +76,7 @@ namespace fs
 
     void FatFileSystem::Remove(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        if (auto refusal = Refusal(path); refusal != Result::success)
+        if (auto refusal = Refusal(path, volume.Operations().remove != nullptr); refusal != Result::success)
             volume.Defer(onDone, refusal);
         else
             Start(FatRemoveCall{ path, onDone });
@@ -86,7 +86,7 @@ namespace fs
     {
         auto validation = ValidatePath(to, volume.Limits());
 
-        if (auto refusal = Refusal(validation != Result::success ? validation : ValidatePath(from, volume.Limits())); refusal != Result::success)
+        if (auto refusal = Refusal(validation != Result::success ? validation : ValidatePath(from, volume.Limits()), volume.Operations().rename != nullptr); refusal != Result::success)
             volume.Defer(onDone, refusal);
         else
             Start(FatRenameCall{ from, to, onDone });
@@ -94,7 +94,7 @@ namespace fs
 
     void FatFileSystem::MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        if (auto refusal = Refusal(path); refusal != Result::success)
+        if (auto refusal = Refusal(path, volume.Operations().makeDirectory != nullptr); refusal != Result::success)
             volume.Defer(onDone, refusal);
         else
             Start(FatMakeDirectoryCall{ path, onDone });
@@ -102,7 +102,7 @@ namespace fs
 
     void FatFileSystem::Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone)
     {
-        if (auto refusal = Refusal(Result::success); refusal != Result::success)
+        if (auto refusal = Refusal(Result::success, volume.Operations().usage != nullptr); refusal != Result::success)
             volume.Defer(onDone, refusal);
         else
             Start(FatUsageCall{ onDone });
@@ -192,15 +192,17 @@ namespace fs
             volume.Defer(std::exchange(onDone, nullptr), result);
     }
 
-    Result FatFileSystem::Refusal(infra::BoundedConstString path) const
+    Result FatFileSystem::Refusal(infra::BoundedConstString path, bool supported) const
     {
-        return Refusal(ValidatePath(path, volume.Limits()));
+        return Refusal(ValidatePath(path, volume.Limits()), supported);
     }
 
-    Result FatFileSystem::Refusal(Result validation) const
+    Result FatFileSystem::Refusal(Result validation, bool supported) const
     {
         if (!IsMounted())
             return Unavailable();
+        if (!supported)
+            return Result::unsupported;
         if (validation != Result::success)
             return validation;
         if (FreePathSlot() == nullptr)
@@ -271,12 +273,20 @@ namespace fs
         else if (auto* open = std::get_if<FatOpenCall>(&call))
             volume.Operation().emplace<FatOpen>(volume, std::move(*open), allocateFile, finished).Start();
         else if (auto* makeDirectory = std::get_if<FatMakeDirectoryCall>(&call))
-            volume.Operation().emplace<FatMakeDirectory>(volume, std::move(*makeDirectory), finished).Start();
+            volume.Operations().makeDirectory(volume, std::move(*makeDirectory), finished);
         else if (auto* remove = std::get_if<FatRemoveCall>(&call))
-            volume.Operation().emplace<FatRemove>(volume, std::move(*remove), finished).Start();
+            volume.Operations().remove(volume, std::move(*remove), finished);
         else if (auto* rename = std::get_if<FatRenameCall>(&call))
-            volume.Operation().emplace<FatRename>(volume, std::move(*rename), finished).Start();
+            volume.Operations().rename(volume, std::move(*rename), finished);
         else
-            volume.Operation().emplace<FatUsage>(volume, std::move(std::get<FatUsageCall>(call)), finished).Start();
+            volume.Operations().usage(volume, std::move(std::get<FatUsageCall>(call)), finished);
+    }
+
+    namespace detail
+    {
+        void StartFatExpectSize(FatVolume& volume, FatOpenFile& file, FatExtentCache& extents, uint32_t size, const infra::Function<void(Result result)>& onDone)
+        {
+            volume.Operation().emplace<FatExpectSize>(volume, file, extents, size, onDone).Start();
+        }
     }
 }

@@ -537,7 +537,7 @@ hal::Flash& norFlash = ...;
 fs::NorFileSystem::WithStorage<norConfig, 4> norVolume{ norFlash };
 ```
 
-The template arguments of `fs::NorFileSystem::WithStorage<Config, Files>` are the configuration and the number of open files; the constructor takes the device and an optional idle delay, 10 ms by default.
+The template arguments of `fs::NorFileSystem::WithStorage<Config, Files, Features>` are the configuration, the number of open files and an optional `fs::NorFeatures`; the constructor takes the device and an optional idle delay, 10 ms by default.
 The fields marked as format parameters are stored in the superblock, and a volume mounts only with the format parameters it was formatted with.
 
 | `fs::NorConfig`               | Default | Meaning                                                                                                                               |
@@ -558,6 +558,19 @@ The fields marked as format parameters are stored in the superblock, and a volum
 | `staticWearLevelingInterval`  | 32      | Minimum number of erases between two moves                                                                                            |
 
 The reserve and the watermark of the pool are computed from the configuration and the geometry of the device.
+
+`fs::NorFeatures` leaves out calls that a product never makes, so that their code is not linked; a call that is left out completes with `unsupported` on a mounted volume, and with `notMounted` otherwise, before its path is validated.
+Every feature is in by default.
+
+| `fs::NorFeatures` | Leaves out                                 |
+|-------------------|--------------------------------------------|
+| `makeDirectory`   | `MakeDirectory`                            |
+| `remove`          | `Remove`                                   |
+| `rename`          | `Rename`                                   |
+| `truncate`        | `Truncate`                                 |
+| `format`          | `Format`, so the flash is formatted before |
+
+A volume mounts whatever a volume with every feature wrote, so leaving a feature out never changes the format on flash.
 
 On the boards of [Validation.md](Validation.md), a volume runs on a region of 16 MiB of a QSPI NOR flash, with the `fs::NorConfig` above, which the NOR subject uses on `nor-qspi-16m`, and on a parallel NOR of 16 MiB with blocks of one 128 KiB sector, a program unit of 2 bytes and the write buffer of the chip as the page.
 

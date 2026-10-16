@@ -24,6 +24,7 @@
 #include "fs/fat/FatMount.hpp"
 #include "fs/fat/FatOpen.hpp"
 #include "fs/fat/FatOpenDirectory.hpp"
+#include "fs/fat/FatOperations.hpp"
 #include "fs/fat/FatPathWalk.hpp"
 #include "fs/fat/FatRead.hpp"
 #include "fs/fat/FatRemove.hpp"
@@ -66,6 +67,7 @@ namespace fs
         infra::MemoryRange<FatClosedFile> closedFiles;
         infra::MemoryRange<FatReservation> freeRuns;
         uint32_t cacheSectors;
+        const FatOperations& operations;
     };
 
     class FatVolume
@@ -98,6 +100,7 @@ namespace fs
         infra::IntrusiveList<FatDirectory>& OpenDirectories();
         OperationQueue& Queue();
         FatOperation& Operation();
+        const FatOperations& Operations() const;
         const FatReservations& Reservations() const;
         FatDateTime Timestamp() const;
         Result Changeable(const FatScannedEntry& entry) const;
@@ -125,6 +128,7 @@ namespace fs
         uint32_t timerServiceId;
         uint32_t blocksPerAllocationUnit;
         PathLimits limits;
+        const FatOperations& operations;
         infra::Function<void()> onMediaRemoved;
         DirectTransfers transfers;
         FatVolumeState state;

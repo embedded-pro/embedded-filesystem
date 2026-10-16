@@ -26,6 +26,15 @@ namespace fs
         uint32_t staticWearLevelingInterval{ 32 };
     };
 
+    struct NorFeatures
+    {
+        bool makeDirectory{ true };
+        bool remove{ true };
+        bool rename{ true };
+        bool truncate{ true };
+        bool format{ true };
+    };
+
     constexpr std::size_t norMinimumCachedNodes = 15;
 
     constexpr uint32_t NorInodeRecordBytes(const NorConfig& config)

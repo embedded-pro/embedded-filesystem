@@ -12,6 +12,7 @@ namespace metrics
         constexpr NorTiming qspiTypical{ 400us, 45ms, 50'000'000 };
         constexpr NorTiming qspiMaximum{ 3ms, 400ms, 50'000'000 };
         constexpr NorTiming internalTiming{ 8us, 20ms, 100'000'000 };
+        constexpr fs::NorOperations operations = fs::NorOperationsFor<fs::NorFeatures{}>();
 
         void Wait(SweepContext<hal::Flash>& context, const bool& done)
         {
@@ -127,7 +128,7 @@ namespace metrics
 
     NorSweepVolume::FileSystem::FileSystem(hal::Flash& flash, const fs::NorConfig& config)
         : NorSweepVolumeStorage(config)
-        , fs::NorFileSystem(fs::NorVolumeParts{ flash, deferred, infra::MakeRange(blockStates), infra::MakeRange(eraseCounts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(nodeSlots) }, config, defaultIdleDelay)
+        , fs::NorFileSystem(fs::NorVolumeParts{ flash, deferred, infra::MakeRange(blockStates), infra::MakeRange(eraseCounts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(nodeSlots), operations }, config, defaultIdleDelay)
     {
         for (std::size_t index = 0; index != config.pathOperations; ++index)
             pathSlots.emplace_back(Volume().Queue());

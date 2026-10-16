@@ -99,6 +99,7 @@ target_sources(fs.nor PRIVATE
     NorOpen.hpp
     NorOpenDirectory.cpp
     NorOpenDirectory.hpp
+    NorOperations.hpp
     NorOpenFile.cpp
     NorOpenFile.hpp
     NorPathSlot.cpp

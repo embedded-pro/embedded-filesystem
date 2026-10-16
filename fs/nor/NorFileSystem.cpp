@@ -38,7 +38,9 @@ namespace fs
 
     void NorFileSystem::Format(const infra::Function<void(Result result)>& onDone)
     {
-        if (lifecycle.Dispatch(NorFormatRequested{}) == services::DispatchResult::transitioned)
+        if (volume.Operations().format == nullptr)
+            volume.Defer(onDone, Result::unsupported);
+        else if (lifecycle.Dispatch(NorFormatRequested{}) == services::DispatchResult::transitioned)
             onFormatDone = onDone;
         else
             volume.Defer(onDone, Result::busy);
@@ -93,7 +95,7 @@ namespace fs
 
     void NorFileSystem::Remove(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        if (auto refusal = Refusal(path); refusal != Result::success)
+        if (auto refusal = Refusal(path, volume.Operations().remove != nullptr); refusal != Result::success)
             volume.Defer(onDone, refusal);
         else
             Start(NorRemoveCall{ path, onDone });
@@ -103,7 +105,7 @@ namespace fs
     {
         auto validation = ValidatePath(from, volume.Limits());
 
-        if (auto refusal = Refusal(validation != Result::success ? validation : ValidatePath(to, volume.Limits())); refusal != Result::success)
+        if (auto refusal = Refusal(validation != Result::success ? validation : ValidatePath(to, volume.Limits()), volume.Operations().rename != nullptr); refusal != Result::success)
             volume.Defer(onDone, refusal);
         else
             Start(NorRenameCall{ from, to, onDone });
@@ -111,7 +113,7 @@ namespace fs
 
     void NorFileSystem::MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        if (auto refusal = Refusal(path); refusal != Result::success)
+        if (auto refusal = Refusal(path, volume.Operations().makeDirectory != nullptr); refusal != Result::success)
             volume.Defer(onDone, refusal);
         else
             Start(NorMakeDirectoryCall{ path, onDone });
@@ -140,15 +142,17 @@ namespace fs
         return std::holds_alternative<NorMounted>(lifecycle.CurrentState());
     }
 
-    Result NorFileSystem::Refusal(infra::BoundedConstString path) const
+    Result NorFileSystem::Refusal(infra::BoundedConstString path, bool supported) const
     {
-        return Refusal(ValidatePath(path, volume.Limits()));
+        return Refusal(ValidatePath(path, volume.Limits()), supported);
     }
 
-    Result NorFileSystem::Refusal(Result validation) const
+    Result NorFileSystem::Refusal(Result validation, bool supported) const
     {
         if (!IsMounted())
             return Result::notMounted;
+        if (!supported)
+            return Result::unsupported;
         if (validation != Result::success)
             return validation;
         if (FreePathSlot() == nullptr)
@@ -207,11 +211,11 @@ namespace fs
                                   finished)
                 .Start();
         else if (auto* makeDirectory = std::get_if<NorMakeDirectoryCall>(&call))
-            volume.Operation().emplace<NorMakeDirectory>(volume, std::move(*makeDirectory), finished).Start();
+            volume.Operations().makeDirectory(volume, std::move(*makeDirectory), finished);
         else if (auto* remove = std::get_if<NorRemoveCall>(&call))
-            volume.Operation().emplace<NorRemove>(volume, std::move(*remove), finished).Start();
+            volume.Operations().remove(volume, std::move(*remove), finished);
         else if (auto* rename = std::get_if<NorRenameCall>(&call))
-            volume.Operation().emplace<NorRename>(volume, std::move(*rename), finished).Start();
+            volume.Operations().rename(volume, std::move(*rename), finished);
         else
             ReportUsage(slot, std::get<NorUsageCall>(call));
     }
@@ -243,7 +247,7 @@ namespace fs
             {
                 return NorFormatDone{ result };
             });
-        volume.Operation().emplace<NorFormatter>(volume.Flash(), volume.Config(), volume.NodeStorage()).Format([this](Result result)
+        volume.Operations().format(volume, [this](Result result)
             {
                 LifecycleOperationDone(result);
             });
@@ -327,5 +331,18 @@ namespace fs
     {
         if (onDone)
             volume.Defer(std::exchange(onDone, nullptr), result);
+    }
+
+    namespace detail
+    {
+        void StartNorTruncate(NorVolume& volume, NorOpenFile& file, uint32_t size, const infra::Function<void(Result result)>& onDone)
+        {
+            volume.FileTruncate().Truncate(file, size, onDone);
+        }
+
+        void StartNorFormat(NorVolume& volume, const infra::Function<void(Result result)>& onDone)
+        {
+            volume.Operation().emplace<NorFormatter>(volume.Flash(), volume.Config(), volume.NodeStorage()).Format(onDone);
+        }
     }
 }

@@ -12,6 +12,8 @@ namespace fs
         , onDone(onDone)
     {}
 
+    FatMount::~FatMount() = default;
+
     void FatMount::Start()
     {
         volume = FatVolumeState{};

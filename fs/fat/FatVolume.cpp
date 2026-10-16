@@ -13,6 +13,7 @@ namespace fs
         , timerServiceId(config.timerServiceId)
         , blocksPerAllocationUnit(config.blocksPerAllocationUnit)
         , limits{ parts.nameBuffer.size(), config.maxPathBytes }
+        , operations(parts.operations)
         , onMediaRemoved(onMediaRemoved)
         , transfers(parts.barrier, parts.cache)
         , assembler(parts.nameBuffer)
@@ -142,6 +143,11 @@ namespace fs
     FatOperation& FatVolume::Operation()
     {
         return operation;
+    }
+
+    const FatOperations& FatVolume::Operations() const
+    {
+        return operations;
     }
 
     const FatReservations& FatVolume::Reservations() const
