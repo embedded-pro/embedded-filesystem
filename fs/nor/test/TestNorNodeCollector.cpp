@@ -75,6 +75,30 @@ namespace
             return fs::NorBTree::ChildFor(infra::MakeRange(bytes), key);
         }
 
+        uint32_t LiveNodesIn(uint32_t block)
+        {
+            const auto& geometry = Volume().Geometry();
+            uint32_t live = 0;
+            for (uint32_t slot = 0; slot != geometry.NodesPerBlock(); ++slot)
+            {
+                auto address = geometry.AddressOfBlock(block) + geometry.NodeSlotsOffset() + slot * geometry.nodeSize;
+                std::array<uint8_t, 512> bytes{};
+                Builder().Read(address, infra::MakeRange(bytes));
+                auto header = fs::ReadNorNodeHeader(infra::MakeRange(bytes));
+                if (!fs::IsNorNodeHeader(header))
+                    continue;
+
+                auto map = header.map == fs::NorMap::inodeTable ? Builder().InodeTable() : Builder().MapOf(header.owner);
+                auto node = map.address;
+                for (uint32_t level = map.height; level > header.level + 1u && node != 0; --level)
+                    node = ChildOf(node, header.lowestKey);
+                if (header.level < map.height && node == address)
+                    ++live;
+            }
+
+            return live;
+        }
+
         void AddDirectoriesWithAnEntry(uint32_t count)
         {
             for (uint32_t index = 0; index != count; ++index)
@@ -449,4 +473,74 @@ TEST_F(NorNodeCollectorTest, a_corrupted_node_that_is_still_used_leaves_its_bloc
     EXPECT_TRUE(State().nodeBlocks.Contains(before[1]));
     EXPECT_EQ(6, Volume().Collector().LeftBlocks());
     EXPECT_EQ(fs::EntryType::directory, Stat("/e/y").second.type);
+}
+
+TEST_F(NorNodeCollectorTest, a_collection_for_space_compacts_the_blocks_where_fewer_than_half_the_slots_hold_used_nodes_and_leaves_the_others)
+{
+    for (auto name : { "a", "b", "c", "d", "e", "f" })
+        Builder().AddDirectory(Builder().AddDirectory(root, name), "x");
+    for (auto name : { "g", "h", "i" })
+        Builder().AddDirectory(root, name);
+    Builder().Commit();
+    Builder().AddDirectory(2, "y");
+    Builder().AddDirectory(4, "z");
+    Builder().Commit();
+    Mount();
+    ASSERT_EQ(0, LiveNodesIn(2));
+    ASSERT_EQ(5, LiveNodesIn(4));
+    ASSERT_EQ(3, LiveNodesIn(5));
+    ASSERT_EQ(6, LiveNodesIn(7));
+    LeaveFreeBlocksInState(Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks());
+    ASSERT_GE(2 * State().liveNodes, Volume().Collector().CollectableBlocks() * Volume().Geometry().NodesPerBlock());
+
+    ASSERT_EQ(fs::Result::success, WriteCheckpoint());
+
+    ExpectFreed({ 2, 5 });
+    EXPECT_TRUE(State().nodeBlocks.Contains(4));
+    EXPECT_TRUE(State().nodeBlocks.Contains(7));
+}
+
+TEST_F(NorNodeCollectorTest, a_collection_for_space_leaves_a_block_where_half_the_slots_or_more_hold_used_nodes)
+{
+    for (auto name : { "a", "b", "c", "d", "e", "f" })
+        Builder().AddDirectory(Builder().AddDirectory(root, name), "x");
+    for (auto name : { "g", "h", "i" })
+        Builder().AddDirectory(root, name);
+    Builder().Commit();
+    Builder().AddDirectory(2, "y");
+    Builder().Commit();
+    Mount();
+    ASSERT_EQ(6, LiveNodesIn(4));
+    ASSERT_EQ(4, LiveNodesIn(5));
+    ASSERT_EQ(4, LiveNodesIn(7));
+    LeaveFreeBlocksInState(Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks());
+
+    ASSERT_EQ(fs::Result::success, WriteCheckpoint());
+
+    ExpectFreed(2);
+    for (auto block : { 4, 5, 7 })
+        EXPECT_TRUE(State().nodeBlocks.Contains(block)) << block;
+}
+
+TEST_F(NorNodeCollectorTest, after_a_lap_that_leaves_every_block_no_collection_is_due_for_space_until_another_block_of_slots_is_unused)
+{
+    for (auto name : { "a", "b", "c", "d", "e", "f" })
+        Builder().AddDirectory(Builder().AddDirectory(root, name), "x");
+    for (auto name : { "g", "h", "i" })
+        Builder().AddDirectory(root, name);
+    Builder().Commit();
+    Builder().AddDirectory(2, "y");
+    Builder().Commit();
+    Mount();
+    LeaveFreeBlocksInState(Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks());
+    ASSERT_EQ(fs::Result::success, WriteCheckpoint());
+    LeaveFreeBlocksInState(Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks());
+
+    EXPECT_FALSE(Volume().Collector().DueForSpace());
+
+    State().liveNodes -= Volume().Geometry().NodesPerBlock() - 1;
+    EXPECT_FALSE(Volume().Collector().DueForSpace());
+
+    --State().liveNodes;
+    EXPECT_TRUE(Volume().Collector().DueForSpace());
 }
