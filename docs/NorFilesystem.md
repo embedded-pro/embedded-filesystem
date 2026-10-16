@@ -343,7 +343,8 @@ When the pool is empty and a call needs a block, the call erases one itself.
 
 A reserve of free blocks is kept for the checkpoints and the garbage collection: the node blocks of one checkpoint with its collection step, which writes at most twice the node cache, plus one checkpoint block and one journal block, 8 blocks on SPI NOR with the defaults.
 A write that would allocate a data block into the reserve completes with `noSpace`, also for the copy of a last block or a commit that the write makes on its way; `Sync`, `Close`, `Truncate` and `Remove` may use the reserve, because they write only records and checkpoints, and the last two free space.
-Before it completes with `noSpace`, a write or an overwrite whose data block would come from the reserve writes one checkpoint when a [collection is due for space](#garbage-collection), and takes the block if that checkpoint freed one; only that call is slower.
+Before it completes with `noSpace`, a write or an overwrite whose data block would come from the reserve, also for the copy of a last block, writes one checkpoint when a [collection is due for space](#garbage-collection), and takes the block if that checkpoint freed one; only that call is slower.
+A copy that may use the reserve, for `Sync` or `Close`, fails only when no free block is left, which no checkpoint could change, so it writes none.
 Records and checkpoints may always use it, and so do the commit of `Open` in `write` mode of an existing file and the commits of `Unmount`.
 `Usage` reports as total the payload of every block except the superblocks and the reserve, and as used the total minus the payload of the free blocks beyond the reserve.
 
@@ -367,7 +368,9 @@ A collection due by the ratio above, or the move of a node block, compacts every
    The root of a directory or data map comes from the record of the owner in the inode table; a node whose owner has no record, or a record of another type, is not live.
 3. A live node is read into the cache and modified with its path to the root of its map and, for a directory or data map, with the record of the owner, so that this checkpoint writes it elsewhere; a node that is not live is skipped.
    In a collection due only for space, the cursor first counts the live nodes of a block, and goes over the block again to move them only when fewer than half its slots hold them; otherwise it leaves the block in use and moves on.
-   When it has left every other node block in a row, no collection is due for space until another block of slots holds no live node, so that the background does not write checkpoints that free nothing.
+   The cursor counts laps: a lap leaves as many blocks as were collectable when it started, compacted, left after their count or left for a corrupted path.
+   When a lap ends with no block of slots fewer unused than at its start, no collection is due for space until another block of slots holds no live node, so that the background does not write checkpoints that free nothing, also on a volume whose paths are corrupted.
+   A step for space that finds no room for a path in the free blocks ends the collection for space in the same way.
 4. A walk that finds a node with an invalid CRC leaves the block in use: the cursor moves on to the next node block without freeing it, so that no node block is freed whose nodes could not be checked.
 5. The step stops when fewer than 6 nodes of the cache are unmodified, the room for one more path in its map and one in the inode table, when the free blocks next to the checkpoint block could not hold 6 more modified nodes, when it has left twice the node blocks of a checkpoint, freed, in use or counted and left, or when no other node block is left; the cursor stays where it stopped.
 
@@ -516,7 +519,7 @@ The power-cut sweep in [Testing.md](Testing.md) interrupts every operation and b
 | Each open file | Position, size, 8 uncommitted entries and a buffer of one page, or of the inline area if larger |
 
 For a 16 MiB device with 4 KiB blocks, that is 4096 blocks, so 1 KiB for the block states, 4 KiB for the erase counts and 0.5 KiB for the node blocks, plus 8 KiB for the default cache of 16 nodes of 512 bytes, and about 0.6 KiB per open file: about 14 KiB with one open file.
-The state of the volume, its handles and its operations comes on top: the metrics report 19,624 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M.
+The state of the volume, its handles and its operations comes on top: the metrics report 19,632 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M.
 Using larger blocks reduces the tables proportionally: with 64 KiB blocks, the same device needs 352 bytes for block states, erase counts and node blocks, and about 9 KiB in all.
 This is more RAM than littlefs needs for the same device; it is the price of allocation without traversal and of wear leveling based on actual erase counts.
 

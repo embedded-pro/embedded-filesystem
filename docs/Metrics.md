@@ -163,7 +163,7 @@ On `nor-qspi-16m`:
 | R-2    | Device reads for a random 512 B read in a 4 MiB file  | 1.19                      | 39.6               | 7.86                   |
 | R-4    | Mount of a 90 % full volume (ms)                      | 3.17                      | 0.3                | 0.33                   |
 | WL-1   | Erase spread with 70 % static data, short run         | 2.75                      | 13.8               | 13.8                   |
-|        | RAM (B)                                               | 19624                     | 328                | 13064                  |
+|        | RAM (B)                                               | 19632                     | 328                | 13064                  |
 
 On `internal-flash`, with the file sizes divided by 64:
 
@@ -179,7 +179,7 @@ On `internal-flash`, with the file sizes divided by 64:
 | R-2    | Device reads for a random 512 B read in a 64 KiB file | 1.11                      | 35.8               | 4.03                   |
 | R-4    | Mount of a 90 % full volume (ms)                      | 0.0783                    | 0.127              | 0.146                  |
 | WL-1   | Erase spread with 70 % static data, short run         | 2.75                      | 3                  | 3                      |
-|        | RAM (B)                                               | 14160                     | 328                | 6440                   |
+|        | RAM (B)                                               | 14168                     | 328                | 6440                   |
 
 On the lifetime run of L5 on `nor-qspi-1m`, until a block reaches 1000 erases:
 
@@ -296,7 +296,7 @@ WL-3 is reported, and `merge_report.py` adds its ratio to the best littlefs subj
 The sweep is described in [Testing.md](Testing.md).
 
 On NOR, every case of the sweep holds at 100 % on the three sweep models, with the interrupted program or erase not started, partial and completed.
-The cut points of a case are the programs and sector erases of its swept phase, and each is cut in the three modes, 18,987 cuts in all:
+The cut points of a case are the programs and sector erases of its swept phase, and each is cut in the three modes, 19,407 cuts in all:
 
 | Case                                           | `nor-128k` | `internal-96k` | `nor-128k-two-sector-blocks` |
 |------------------------------------------------|------------|----------------|------------------------------|
@@ -321,9 +321,10 @@ The cut points of a case are the programs and sector erases of its swept phase, 
 | leveling-fallback-nodes                        | 57         | 271            | 63                           |
 | unmount with an open file                      | 37         | 283            | 40                           |
 | replay with a smaller cache                    | 33         | 37             | 38                           |
-| write when space runs low                      | 29         | 143            | 28                           |
+| write when space runs low                      | 49         | 152            | 48                           |
+| overwrite when space runs low                  | 31         | 30             | 30                           |
 | collection when space runs low                 | 17         | 41             | 21                           |
-| Total                                          | 1288       | 3563           | 1478                         |
+| Total                                          | 1339       | 3602           | 1528                         |
 
 M-2 counts blocks rather than requests, and every block of a request after its first follows the block before it, so writing the same blocks in fewer, larger requests leaves the share unchanged; only a block that neither starts an allocation unit nor follows the previous one counts against it.
 Counted by requests, a filesystem that coalesces small writes would lower its share by sending fewer data requests next to the same number of metadata requests.
