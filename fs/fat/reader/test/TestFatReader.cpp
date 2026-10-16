@@ -209,6 +209,23 @@ TEST_F(FatReaderTest, removed_card_is_reported_until_the_next_mount)
     ExpectMount();
 }
 
+TEST_F(FatReaderTest, handles_from_before_a_removal_do_not_fault_the_next_mount)
+{
+    auto contents = Pattern<100>();
+    builder->AddFile(0, "", "LOG     TXT", infra::MakeRange(contents));
+    ExpectMount();
+    auto file = ExpectOpen("/log.txt");
+    auto directory = ExpectOpenDirectory("/");
+
+    device.FailNextOperationWith(hal::BlockDevice::Result::notPresent);
+    ExpectRead(*file, infra::MakeRange(buffer), fs::Result::mediaRemoved, 0);
+    ExpectMount();
+
+    ExpectRead(*file, infra::MakeRange(buffer), fs::Result::mediaRemoved, 0);
+    ExpectNext(*directory, fs::Result::mediaRemoved);
+    ExpectStat("/", fs::Result::success, fs::EntryInfo{ "", fs::EntryType::directory, 0 });
+}
+
 TEST_F(FatReaderTest, failure_reading_the_boot_sector_of_a_partition_is_reported)
 {
     device.FailNextOperationWith(hal::BlockDevice::Result::timeout, 1);

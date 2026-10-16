@@ -46,7 +46,7 @@ namespace fs
     {
         if (!volume.Available(generation))
         {
-            Done(volume.Unavailable());
+            Finish(volume.Unavailable());
             return;
         }
 
@@ -60,6 +60,11 @@ namespace fs
     void FatReaderDirectory::Done(Result result)
     {
         volume.Report(result);
+        Finish(result);
+    }
+
+    void FatReaderDirectory::Finish(Result result)
+    {
         claimer.Release();
         onDone(result, result == Result::success ? entry : std::nullopt);
         self = nullptr;

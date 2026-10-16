@@ -86,7 +86,7 @@ namespace fs
         if (volume.Available(generation))
             Step();
         else
-            Done(volume.Unavailable());
+            Finish(volume.Unavailable());
     }
 
     void FatReaderFile::Step()
@@ -177,6 +177,11 @@ namespace fs
     void FatReaderFile::Done(Result result)
     {
         volume.Report(result);
+        Finish(result);
+    }
+
+    void FatReaderFile::Finish(Result result)
+    {
         claimer.Release();
         onRead(result, bytesRead);
         self = nullptr;

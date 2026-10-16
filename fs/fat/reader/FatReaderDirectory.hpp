@@ -37,6 +37,7 @@ namespace fs
         void FreeSlot(FatEntryPosition position, bool end) override;
         void Read();
         void Done(Result result);
+        void Finish(Result result);
 
     private:
         FatReaderVolume& volume;

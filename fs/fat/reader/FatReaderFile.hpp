@@ -49,6 +49,7 @@ namespace fs
         void TransferSectors(uint32_t sector, uint32_t sectors);
         void Transferred(Result result, std::size_t bytes);
         void Done(Result result);
+        void Finish(Result result);
         std::size_t Remaining() const;
         uint32_t ClusterBytes() const;
         Result Writable() const;
