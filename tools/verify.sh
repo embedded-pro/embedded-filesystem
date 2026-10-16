@@ -54,8 +54,9 @@ for preset in stm32h757-cm7 stm32h757-cm4 stm32h745-cm7 stm32h745-cm4; do
 done
 
 heading "footprint"
-for core in m4 m7 m33; do
-    echo "cortex-$core MinSizeRel images: $(cmake --build --preset "cortex-$core-MinSizeRel" --target validation.footprint -j "$jobs" 2>&1 | grep -cE 'error:|FAILED:') errors"
+for preset in cortex-m4 cortex-m7 cortex-m33 cortex-m4-lto; do
+    configure "$preset"
+    echo "$preset MinSizeRel images: $(cmake --build --preset "$preset-MinSizeRel" --target validation.footprint -j "$jobs" 2>&1 | grep -cE 'error:|FAILED:') errors"
 done
 budget=build/footprint-venv
 stamp=$(sha256sum validation/footprint/requirements.txt | cut -d' ' -f1)

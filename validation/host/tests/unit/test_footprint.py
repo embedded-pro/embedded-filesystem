@@ -62,6 +62,16 @@ def test_every_core_is_a_device_with_the_toolchain_and_the_configuration(tmp_pat
     }
 
 
+def test_a_core_built_with_link_time_optimization_says_so(tmp_path):
+    write_reports(tmp_path, ("cortex-m4", "cortex-m4-lto"))
+
+    report = fragment(tmp_path, "arm-none-eabi-gcc 15.2.1", "MinSizeRel")
+
+    expected = {"toolchain": "arm-none-eabi-gcc 15.2.1", "configuration": "MinSizeRel", "linkTimeOptimization": True}
+    assert report["devices"]["cortex-m4-lto"] == expected
+    assert "linkTimeOptimization" not in report["devices"]["cortex-m4"]
+
+
 def test_a_core_without_the_empty_image_is_an_error(tmp_path):
     write_report(tmp_path, "cortex-m4", "fat", 7000, 2600)
 

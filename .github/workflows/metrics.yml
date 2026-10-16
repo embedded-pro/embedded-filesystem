@@ -37,9 +37,9 @@ jobs:
           save: ${{ github.ref == 'refs/heads/main' }}
       - name: Build the reference images
         run: |
-          for core in m4 m7 m33; do
-            cmake --preset "cortex-$core" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-            cmake --build --preset "cortex-$core-MinSizeRel" --target validation.footprint
+          for preset in cortex-m4 cortex-m7 cortex-m33 cortex-m4-lto; do
+            cmake --preset "$preset" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            cmake --build --preset "$preset-MinSizeRel" --target validation.footprint
           done
       - name: Install cortex-memory-budget
         run: |

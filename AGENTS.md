@@ -83,7 +83,7 @@ Validation (`docs/Validation.md`, `validation/README.md`):
 - Board presets `stm32h757-cm7`, `stm32h757-cm4`, `stm32h745-cm7`, `stm32h745-cm4`, built with `cmake --build --preset <preset>-RelWithDebInfo` (Arm GNU toolchain and `xsltproc`)
 - Host package: `cd validation/host && pip install ".[dev]" && ruff check . && python -m pytest tests/unit`
 - Scenarios on the fake firmware: `python -m pytest tests/hil --fake --no-ad3 --board <board>`
-- F-1 reference images: `cmake --build --preset cortex-<core>-MinSizeRel --target validation.footprint` for m4, m7 and m33, then `validation/footprint/measure.sh <directory>` with `cortex-memory-budget` on `PATH`
+- F-1 reference images: `cmake --build --preset <preset>-MinSizeRel --target validation.footprint` for `cortex-m4`, `cortex-m7`, `cortex-m33` and `cortex-m4-lto`, then `validation/footprint/measure.sh <directory>` with `cortex-memory-budget` on `PATH`
 
 Before pushing, run `tools/verify.sh`: the checks of CI that can run locally, and scans for what CI reported on earlier pull requests (`tools/README.md`).
 

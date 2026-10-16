@@ -50,7 +50,7 @@ These presets turn it on, and what it builds depends on the configuration:
 | Configuration            | Presets                                                                                 | Built                                                                                                                                                                  |
 |--------------------------|-----------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Host                     | `host`, `host-single-Debug`, `host-single-MinSizeRel`, `coverage`, `Windows`, `metrics` | The libraries of `validation/firmware`, and their tests with `EMFS_BUILD_TESTS`; with `EMFS_BUILD_METRICS`, the conversion of the committed runs into report fragments |
-| Cortex-M without a board | `cortex-m4`, `cortex-m7`, `cortex-m33`                                                  | The reference images of F-1                                                                                                                                            |
+| Cortex-M without a board | `cortex-m4`, `cortex-m7`, `cortex-m33`, `cortex-m4-lto`                                 | The reference images of F-1                                                                                                                                            |
 | ST board                 | `stm32h757-cm7`, `stm32h757-cm4`, `stm32h745-cm7`, `stm32h745-cm4`                      | hal-st, and the validation firmware for the Cortex-M7 or the parked image for the Cortex-M4                                                                            |
 
 hal-st is fetched with FetchContent in `validation/CMakeLists.txt` only, and only when `EMFS_STANDALONE` and `EMFS_BUILD_VALIDATION` are on and `TARGET_MCU_VENDOR` is `st`.
@@ -333,7 +333,7 @@ Both are reported until the first runs show their spread, and a later step sets 
 
 ## F-1 reference images
 
-`validation/footprint` builds one reference image per subject for the Cortex-M4, Cortex-M7 and Cortex-M33 presets, the target `validation.footprint`:
+`validation/footprint` builds one reference image per subject for the presets `cortex-m4`, `cortex-m7` and `cortex-m33`, and for `cortex-m4-lto`, the Cortex-M4 with link-time optimization, the target `validation.footprint`:
 
 | Image                                          | Subject                         | Configuration                                                                                                        |
 |------------------------------------------------|---------------------------------|----------------------------------------------------------------------------------------------------------------------|
@@ -360,8 +360,10 @@ Every image holds the same platform, `validation::footprint::Platform`: the inte
 The empty image holds the platform alone, and F-1 is the difference between the report of the image of a subject and that of the empty image, so that it is what the subject adds to an EmIL application, its glue included; `--baseline-elf` adds `memory_diff.md` to each report, the symbols that differ.
 The images need no board: they are linked with `Footprint.ld`, a generic linker script with one `MEMORY` block for the flash and one for the RAM, `Startup.cpp`, a minimal vector table and reset handler, and the system call stubs of `hal.cortex_m.runtime`, in `MinSizeRel`.
 
-`validation/footprint/measure.sh <directory>` runs `cortex-memory-budget`, pinned by hash in `requirements.txt`, on every image of the three presets, with `memory_budget.json`, into `<directory>/reports`, and `python3 -m emfs_validation.footprint` turns the reports into the F-1 fragment, `<directory>/fragments/footprint.json`.
-Each image is also linked with a map, `validation.footprint.<image>.elf.map`, and `measure.sh` runs `python3 -m emfs_validation.attribution` on the maps of every core, into `<directory>/attribution/<core>.md`: what each image adds to the empty image by library, by object and by kind of code, the callbacks of `infra::Function`, the state machines of `services::TableStateMachine`, virtual tables and `std::variant`, so that a change shows which part of a subject it made larger or smaller; the attribution is no metric, and its totals leave out the alignment between output sections.
+`validation/footprint/measure.sh <directory>` runs `cortex-memory-budget`, pinned by hash in `requirements.txt`, on every image of the four presets, with `memory_budget.json`, into `<directory>/reports`, and `python3 -m emfs_validation.footprint` turns the reports into the F-1 fragment, `<directory>/fragments/footprint.json`.
+Each image is also linked with a map, `validation.footprint.<image>.elf.map`, and `measure.sh` runs `python3 -m emfs_validation.attribution` on the maps of every preset, into `<directory>/attribution/<preset>.md`.
+It lists what each image adds to the empty image by library, by object and by kind of code: the callbacks of `infra::Function`, the state machines of `services::TableStateMachine`, virtual tables and `std::variant`.
+A change thereby shows which part of a subject it made larger or smaller; the attribution is no metric, and its totals leave out the alignment between output sections.
 Each subject has two results per core, the flash and the RAM it adds, each with the RAM in `ramBytes`, and each core is a device with the compiler, as the `.comment` of the images names it, and the configuration as its parameters:
 
 ```json
@@ -376,6 +378,8 @@ Each subject has two results per core, the flash and the RAM it adds, each with 
 }
 ```
 
+The images of `cortex-m4-lto` are the device `cortex-m4-lto`, whose parameters add `"linkTimeOptimization": true`.
+Link-time optimization is a choice of the product that links the library, so F-1 reports it next to the plain build instead of in its place; the preset does not treat warnings as errors, since the other presets build the same code with them.
 The `Footprint` job of the metrics workflow builds the images, measures them and uploads the directory as the artifact `footprint`; the `Metrics` job downloads it and passes `-DEMFS_METRICS_EXTRA_FRAGMENTS=<directory>/fragments`, so F-1 is reported next to the baselines and held to the 5 % rule like any reported metric.
 When the `Footprint` job fails, the `Metrics` job still runs, and the report lacks F-1.
 

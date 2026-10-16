@@ -14,6 +14,7 @@ from typing import Any
 
 EMPTY = "empty"
 METRICS = "memory_metrics.json"
+LINK_TIME_OPTIMIZATION = "-lto"
 IMAGES = {
     "fat": "embedded-filesystem/fat",
     "nor": "embedded-filesystem/nor",
@@ -78,11 +79,18 @@ def core_results(directory: Path) -> list[dict[str, Any]]:
     return results
 
 
+def parameters(core: str, toolchain: str, configuration: str) -> dict[str, Any]:
+    device: dict[str, Any] = {"toolchain": toolchain, "configuration": configuration}
+    if core.endswith(LINK_TIME_OPTIMIZATION):
+        device["linkTimeOptimization"] = True
+    return device
+
+
 def fragment(reports: Path, toolchain: str, configuration: str) -> dict[str, Any]:
     cores = sorted(path for path in reports.glob("*") if path.is_dir()) if reports.is_dir() else []
     if not cores:
         raise FootprintError(f"no reports in {reports}")
-    devices = {core.name: {"toolchain": toolchain, "configuration": configuration} for core in cores}
+    devices = {core.name: parameters(core.name, toolchain, configuration) for core in cores}
     results = [entry for core in cores for entry in core_results(core)]
     return {"devices": devices, "results": results}
 

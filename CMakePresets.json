@@ -106,6 +106,16 @@
       }
     },
     {
+      "name": "cortex-m4-lto",
+      "displayName": "cortex-m4-lto",
+      "description": "Compile for Cortex-M4 with FPU and link-time optimization, for the reference images of F-1",
+      "inherits": "cortex-m4",
+      "cacheVariables": {
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "On",
+        "CMAKE_COMPILE_WARNING_AS_ERROR": "Off"
+      }
+    },
+    {
       "name": "cortex-m7",
       "displayName": "cortex-m7",
       "description": "Compile for Cortex-M7 with double precision FPU",
@@ -235,6 +245,11 @@
       "name": "cortex-m4-MinSizeRel",
       "configuration": "MinSizeRel",
       "configurePreset": "cortex-m4"
+    },
+    {
+      "name": "cortex-m4-lto-MinSizeRel",
+      "configuration": "MinSizeRel",
+      "configurePreset": "cortex-m4-lto"
     },
     {
       "name": "cortex-m7-RelWithDebInfo",
