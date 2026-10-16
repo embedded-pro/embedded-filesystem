@@ -367,3 +367,55 @@ def test_runs_that_would_write_the_same_fragment_are_an_error(tmp_path, capsys):
     assert main(["--run", str(first), "--run", str(second), "--output-directory", str(tmp_path / "fragments")]) == 2
 
     assert "both write 2026_10_20.json" in capsys.readouterr().err
+
+
+RAM_FLASH = "EVT device id=1 device=ramflash kind=nor sectors=512 sectorSize=4096 memory=sdram"
+CYCLES = (
+    "EVT cycles id=2 subject=embedded-filesystem/nor device=ramflash op=mount n=100 ramBytes=17764 "
+    "minCycles=900 medianCycles=1000 maxCycles=1500 settledCycles=4000"
+)
+
+
+def f2(workload: str, value: int) -> dict[str, object]:
+    return {
+        "metric": "F-2",
+        "workload": workload,
+        "subject": "embedded-filesystem/nor",
+        "device": f"{BOARD}/ramflash",
+        "unit": "cycles",
+        "value": value,
+        "ramBytes": 17764,
+        "better": "lower",
+    }
+
+
+def test_a_cycles_record_becomes_f2_until_the_completion_and_until_the_volume_is_idle(tmp_path):
+    fragment = convert_run(write_run(tmp_path / "2026_10_20", [RAM_FLASH, CYCLES]), {})
+
+    assert fragment["devices"][f"{BOARD}/ramflash"] == {
+        "kind": "nor",
+        "sectors": "512",
+        "sectorSize": "4096",
+        "memory": "sdram",
+        "run": "2026_10_20",
+    }
+    assert fragment["results"] == [f2("mount", 1000), f2("mount settled", 4000)]
+
+
+def test_a_cycles_record_on_a_device_that_the_run_did_not_report_is_an_error(tmp_path):
+    with pytest.raises(ConversionError, match="unknown device 'ramflash'"):
+        convert_run(write_run(tmp_path / "2026_10_20", [CYCLES]), {})
+
+
+@pytest.mark.parametrize("key", ["subject", "device", "op", "ramBytes", "medianCycles", "settledCycles"])
+def test_a_cycles_record_needs_its_keys(tmp_path, key):
+    line = " ".join(token for token in CYCLES.split() if not token.startswith(f"{key}="))
+
+    with pytest.raises(ConversionError, match=f"has no '{key}'"):
+        convert_run(write_run(tmp_path / "2026_10_20", [RAM_FLASH, line]), {})
+
+
+def test_a_failed_run_of_f2_is_not_converted(tmp_path):
+    lines = [RAM_FLASH, "EVT cycles.failed id=2 subject=embedded-filesystem/nor op=mount run=0 status=-28"]
+
+    assert convert_run(write_run(tmp_path / "2026_10_20", lines), {})["results"] == []

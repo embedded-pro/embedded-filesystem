@@ -131,8 +131,24 @@ def convert_device(fragment: Fragment, record: Record) -> None:
     fragment.device(record.field("device"), parameters)
 
 
+def convert_cycles(fragment: Fragment, record: Record) -> None:
+    """F-2: the median cycles of an operation until its completion, and until the volume is idle again (`<operation> settled`)."""
+    common = {
+        "metric": "F-2",
+        "subject": record.field("subject"),
+        "device": record.field("device"),
+        "unit": "cycles",
+        "ramBytes": record.number("ramBytes"),
+        "better": "lower",
+    }
+    operation = record.field("op")
+    fragment.result({**common, "workload": operation, "value": record.number("medianCycles")})
+    fragment.result({**common, "workload": f"{operation} settled", "value": record.number("settledCycles")})
+
+
 CONVERTERS: dict[str, Callable[[Fragment, Record], None]] = {
     "device": convert_device,
+    "cycles": convert_cycles,
 }
 
 
