@@ -15,8 +15,8 @@ The on-disk designs are described in [Fat.md](Fat.md) and [NorFilesystem.md](Nor
             fs::FileSystem / fs::File / fs::Directory
                      (fs/interfaces)
                  /                          \
-        fs::FatFileSystem               fs::NorFileSystem
-           (fs/fat)                         (fs/nor)
+  fs::FatFileSystem, fs::FatReader      fs::NorFileSystem
+      (fs/fat, fs/fat/reader)               (fs/nor)
                  \                          /
              shared building blocks (fs/common)
          path parsing, sector cache, operation queue,
@@ -32,6 +32,7 @@ The on-disk designs are described in [Fat.md](Fat.md) and [NorFilesystem.md](Nor
 | `fs/interfaces` | `fs.interfaces` | `fs::Result`, `fs::OpenMode`, `fs::File`, `fs::Directory`, `fs::EntryInfo`, `fs::VolumeUsage`, `fs::FileSystem`                |
 | `fs/common`     | `fs.common`     | Path parsing, sector cache, per-volume operation queue, handle pools, CRC-protected records                                    |
 | `fs/fat`        | `fs.fat`        | FAT12, FAT16 and FAT32 with long file names, and the formatter                                                                 |
+| `fs/fat/reader` | `fs.fat_reader` | `fs::FatReader`, a FAT volume that only reads, built from the parts of `fs.fat` that read                                      |
 | `fs/nor`        | `fs.nor`        | The log-structured NOR filesystem, its garbage collection and its wear leveling                                                |
 | `metrics`       | `metrics.*`     | Host-only device models, metered devices, workloads and baselines, see [Metrics.md](Metrics.md)                                |
 | `validation`    | `validation.*`  | Firmware for boards, the reference images of F-1 and the host package that runs the boards, see [Validation.md](Validation.md) |
@@ -308,6 +309,8 @@ Each one is sized at compile time:
 | `fs::DirectTransfers`                               | One per volume, next to its sector cache                                  | One transfer in flight                               |
 | `fs::CrcRecord`                                     | The buffer of the caller                                                  | None: it frames and checks records in place          |
 
+The parts of `fs/fat` that only read sectors, the reader of the FAT and the reader of directories, read them through `fs::SectorSource`, which `fs::SectorCache` implements, so that `fs::FatReader` runs them on its one sector buffer.
+
 ### Paths
 
 A path is validated once, in one pass, when the operation that receives it starts, with `fs::ValidatePath`.
@@ -367,6 +370,7 @@ fs::NorFileSystem::WithStorage<norConfig, 4> norVolume{ norFlash };
 ```
 
 For FAT, the template arguments are the number of open files and the number of sectors in the cache, followed by an optional `fs::FatLimits` with the other sizes; `fs::FatConfig` holds the settings that need no storage, such as the allocation unit of the card and the timer service that gives the time of timestamps, as described in [Fat.md](Fat.md#configuration).
+`fs::FatReader::WithStorage<Files, Directories, Limits>` takes the number of open files and of open directory handles, and an optional `fs::PathLimits`, as described in [Fat.md](Fat.md#read-only-volume).
 For NOR, they are the configuration and the number of open files; the constructor takes the device and an optional idle delay, as described in [NorFilesystem.md](NorFilesystem.md#configuration).
 The block states and the erase-count table are sized by `maxBlocks`, the largest number of blocks the volume may span; mounting a device with more blocks fails with `Result::unsupported`.
 

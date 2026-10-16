@@ -15,7 +15,7 @@ heading host
 configure host
 cmake --build --preset host-Debug -j "$jobs" 2>&1 | grep -E 'error|warning: ' | head
 ctest --preset host 2>&1 | grep -E 'tests passed|Failed'
-for test in build/host/fs/*/test/Debug/fs.*_test build/host/validation/firmware/*/test/Debug/validation.*_test; do
+for test in build/host/fs/*/test/Debug/fs.*_test build/host/fs/*/*/test/Debug/fs.*_test build/host/validation/firmware/*/test/Debug/validation.*_test; do
     echo "$(basename "$test"): $("$test" --gtest_brief=1 2>&1 | tail -1)"
 done
 

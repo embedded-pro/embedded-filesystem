@@ -6,6 +6,7 @@
 Its on-disk format is the standard one, so media written by the device can be used on Windows, Linux and macOS, and media prepared on a PC can be used by the device.
 SD cards and eMMC contain a controller that performs wear leveling, bad-block management and error correction, so the FAT filesystem adds none of these.
 Instead, it is designed to give the card the access pattern its controller handles best: large, aligned, sequential writes, and a discard for clusters that are no longer used.
+`fs::FatReader` reads the same volumes for products that never write, with a fraction of the flash and the RAM, as described under [Read-only volume](#read-only-volume).
 
 ## Scope
 
@@ -278,6 +279,28 @@ The fixed root directory of FAT12 and FAT16 holds 512 entries; on FAT32, FSINFO 
 The boot sector has the volume label `NO NAME` and the volume ID given in `FatFormatConfig`.
 Formatting writes the MBR, the boot sector, FSINFO and their backups, the FAT with zeros except its first two entries, and the root directory with zeros, then discards the rest of the device and flushes it.
 
+## Read-only volume
+
+`fs::FatReader`, in `fs/fat/reader`, is a FAT volume that only reads, for a product that never writes to its card, such as a bootloader that loads an image or a device that plays files.
+It mounts, looks up, lists and reads with the parts of `fs::FatFileSystem` that read, so it validates a volume as described under [Mount](#mount), compares and reports names as described under [Names](#names) and [Directory entries](#directory-entries), and bounds every walk and reports what it finds as described under [Corruption](#corruption); both accept the same volumes and report the same names.
+A removed medium faults it in the same way.
+It leaves out:
+
+* every change: `Write`, `Truncate`, `ExpectSize`, `Remove`, `Rename`, `MakeDirectory` and `Open` in a mode other than `read` complete with `readOnly`, and `Usage` completes with `unsupported`, as FatFs built read-only has no free-space query either;
+* the sector cache: one buffer of one sector holds the sector that the last step read, of the boot sector, the FAT or a directory, so a mount reads the first sector of the device and, in a partition, its boot sector, and nothing else;
+* the extent cache: a read continues the cluster chain from the cluster it reached last, and a `Seek` back follows the chain again from the start of the file;
+* the background scan of the FAT and the closed files.
+
+A read copies a partial sector from the sector buffer and reads whole sectors straight into the buffer of the caller, at most one cluster per request.
+
+```cpp
+hal::BlockDevice& sdCard = ...;
+fs::FatReader::WithStorage<2> reader{ sdCard };
+```
+
+The template arguments of `fs::FatReader::WithStorage<Files, Directories, Limits>` are the number of open files, the number of open directory handles, 1 by default, and an optional `fs::PathLimits`, the longest name and the longest path in UTF-8 bytes, 255 each by default.
+The longest name also sizes the buffer that holds a name while it is reported, as `FatLimits::maxNameBytes` does for `fs::FatFileSystem`.
+
 ## Configuration
 
 ```cpp
@@ -317,5 +340,6 @@ FatFs needs less, 1652 bytes with one open file as F-1 measures, because it work
 
 The FAT filesystem is tested on `hal::BlockDeviceStub` from EmIL and on `fs::SparseBlockDevice`, which holds FAT32 volumes of tens of megabytes in a few kilobytes, with volumes created by `fs::FatFormatter` and arranged with `fs::FatImageBuilder` in memory.
 Interoperability tests create images with `mkfs.fat`, write them with the library, check them with `fsck.fat` and read them back with `mtools`, and the reverse.
+`fs::FatReader` has tests of its own in `fs/fat/reader/test`, on the same devices and volumes, and the interoperability tests read the images of `mkfs.fat` and `mtools` with both volumes.
 The power-cut sweep and the metrics W-2, R-2 and M-1 to M-3 cover the behaviour described above.
 See [Testing.md](Testing.md) and [Metrics.md](Metrics.md).

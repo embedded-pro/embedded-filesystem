@@ -128,7 +128,7 @@ Interoperability tests check that FAT volumes are exchanged correctly with the t
 * files that the library creates are listed by `mtools` under their long names and short aliases;
 * directories that the library makes and entries that it removes leave an image that `fsck.fat -n` accepts and `mtools` lists as expected;
 * entries that the library renames or moves, with the `..` entry of a moved directory, and files that it truncates leave an image that `fsck.fat -n` accepts and `mtools` lists and reads back as expected;
-* files written into an image with `mtools` are read back by the library;
+* files written into an image with `mtools` are listed and read back by the library, by `fs::FatFileSystem` and by `fs::FatReader`, and both mount the images that `mkfs.fat` creates;
 * an image created by `fs::FatFormatter` passes `fsck.fat -n`.
 
 These tests need `dosfstools` and `mtools`, and image files on the host, so they live in `metrics/interop` and are built with the metrics.

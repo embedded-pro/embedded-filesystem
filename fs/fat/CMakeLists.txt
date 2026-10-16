@@ -133,6 +133,7 @@ target_sources(fs.fat PRIVATE
     Utf8.hpp
 )
 
+add_subdirectory(reader)
 add_subdirectory(test_doubles)
 
 if (EMFS_BUILD_TESTS)

@@ -1,4 +1,5 @@
 #include "fs/fat/FatFileSystem.hpp"
+#include "fs/fat/reader/FatReader.hpp"
 #include "infra/timer/test_helper/ClockFixture.hpp"
 #include "metrics/interop/InteropTools.hpp"
 #include "gtest/gtest.h"
@@ -9,6 +10,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <utility>
 
 namespace
 {
@@ -87,6 +89,17 @@ public:
                                       << result.output;
     }
 
+    std::optional<fs::Result> Lifecycle(fs::FileSystem& volume, void (fs::FileSystem::*call)(const infra::Function<void(fs::Result result)>& onDone))
+    {
+        std::optional<fs::Result> completed;
+        (volume.*call)([&completed](fs::Result result)
+            {
+                completed = result;
+            });
+        ExecuteAllActions();
+        return completed;
+    }
+
     Listing List(fs::FileSystem& volume, const std::string& path)
     {
         Listing listing;
@@ -140,16 +153,18 @@ TEST_P(ListingInterop, tree_written_by_mtools_is_listed)
     metrics::ImageBlockDevice device{ metrics::BlocksInImage(image) };
     device.LoadFrom(image);
     fs::FatFileSystem::WithStorage<1, 4> volume{ device };
-    std::optional<fs::Result> mounted;
-    volume.Mount([&mounted](fs::Result result)
-        {
-            mounted = result;
-        });
-    ExecuteAllActions();
-    ASSERT_EQ(fs::Result::success, mounted);
+    fs::FatReader::WithStorage<1> fatReader{ device };
 
-    EXPECT_EQ(expected["/"], List(volume, "/"));
-    EXPECT_EQ(expected["/Documents"], List(volume, "/Documents"));
+    for (auto [engine, fileSystem] : { std::pair<const char*, fs::FileSystem*>{ "FatFileSystem", &volume }, std::pair<const char*, fs::FileSystem*>{ "FatReader", &fatReader } })
+    {
+        SCOPED_TRACE(engine);
+        ASSERT_EQ(fs::Result::success, Lifecycle(*fileSystem, &fs::FileSystem::Mount));
+
+        EXPECT_EQ(expected["/"], List(*fileSystem, "/"));
+        EXPECT_EQ(expected["/Documents"], List(*fileSystem, "/Documents"));
+
+        EXPECT_EQ(fs::Result::success, Lifecycle(*fileSystem, &fs::FileSystem::Unmount));
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(Images, ListingInterop,
