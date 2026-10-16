@@ -96,9 +96,27 @@ As for FAT, the formatter and an independent checker come early, and every step 
 
 ## Phase 8: on target
 
-The filesystems run on real hardware: NOR flash through the QSPI driver of EmIL on an ST board with hal-st, and SD cards once an SD card driver for `hal::BlockDevice` exists.
-The device models are calibrated against measurements, and the footprint and cycle metrics F-1 and F-2 are measured with `cortex-memory-budget` and `cortex-cycle-budget`.
+The filesystems run on two ST boards with the drivers of hal-st, the STM32H757I-EVAL and the STM32H745I-DISCO: NOR flash over QSPI on both and a parallel NOR on the EVAL, through `hal::Flash`, and a microSD card on the EVAL and an eMMC on the DISCO, through `hal::BlockDevice`.
+The device models are calibrated against measurements, and C-1 and C-2 check them; F-1 is measured with `cortex-memory-budget` on reference images in CI, and F-2 with the cycle counter on the boards.
 The parameters that `fs::FatFormatter` chooses are compared with those of cards formatted by the SD Memory Card Formatter of the SD Association.
+The design is settled in [Validation.md](Validation.md) first.
+Every image builds in CI, and the boards are run by hand, with their runs committed in `validation/results`.
+The drivers of hal-st and the cycle counter of EmIL need changes first, made as pull requests in those repositories, as the prerequisites in EmIL were in phase 3.
+
+1. The design of the validation in [Validation.md](Validation.md), and C-1 and C-2 in [Metrics.md](Metrics.md).
+2. The scaffolding: `EMFS_BUILD_VALIDATION` in the presets of [Validation.md](Validation.md#build), hal-st fetched in `validation/` and bumped daily, the four board presets in CI and in `tools/verify.sh`, and `validation/firmware` in the coverage, clang-format and SonarCloud settings.
+   The firmware with its board profiles, clocks, caches, memory protection, terminal and the parked image of the Cortex-M4, the host package with the boot scenario, its unit tests and their job in CI, and `validation/README.md` and `validation/PROTOCOL.md`.
+3. The result lines of the firmware, the conversion of a transcript into fragments with the run and the model among the parameters of the device and `ramBytes` in every result, and the merge of the committed runs and of fragments made elsewhere into the report of the metrics.
+4. F-1: the pins of FatFs and littlefs in `cmake/emfs_third_party.cmake`, the reference images on the Cortex-M presets, and the footprint job of the metrics workflow.
+5. The prerequisites in hal-st and EmIL, one pull request each: `hal::QuadSpiStm` completing from interrupts, `hal::NorFlashStm` programming through the write buffer and completing without busy-waiting, the allocation unit and the CID in `hal::SdCardStm`, an eMMC driver, and the unlock of the cycle counter in `hal::cortex::DataWatchpointAndTrace`.
+6. F-2: the RAM devices, the cycle counter, the cycles until the volume is idle, the glue of FatFs and littlefs on the target, and `cycles.run` for the four subjects.
+7. NOR devices on the boards: the region of the QSPI flash and the parallel NOR with all its address lines, the counting `hal::Flash`, the benchmarks of NOR flash, and `nor-parallel-16m` from its datasheet.
+8. The workload runner with its operations, histograms and windows, L1, L2, L3, L4, L6 and L7 on the NOR devices, and C-1 and C-2 from `metrics.device_models`.
+9. Buffers aligned for drivers that use DMA: the sectors of the cache and the buffer of the formatter aligned to 32 bytes, and `FatConfig::transferAlignment`, as [Fat.md](Fat.md#direct-transfers) describes.
+10. Block devices on the boards: the regions of the microSD card and of the eMMC, the counting `hal::BlockDevice`, the benchmarks of block devices, and the model of the eMMC from its datasheet.
+11. The workloads on the FAT volumes of the microSD card and the eMMC.
+12. The comparison of `fs::FatFormatter` with the SD Memory Card Formatter: `validation::FatLayout`, `layout.read` and `layout.format`.
+13. The runs, one pull request each: the run is committed and summarized in [Metrics.md](Metrics.md), the models are calibrated, the layouts of the cards go to [Fat.md](Fat.md), and once the runs show their spread, C-1 and C-2 get their targets.
 
 ## Later
 

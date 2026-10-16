@@ -10,6 +10,7 @@ Essentials (full detail in AGENTS.md):
 - Storage rules — NOR: never program a unit twice, commit through CRC-protected records; FAT: data, then FAT, then directory entry; no wear leveling on block devices.
 - Style — EMIL coding standard, Allman braces, 4-space, PascalCase types/methods, camelCase members. No comments except non-obvious why.
 - Interfaces — EMIL pattern: protected non-virtual destructor, deleted copies. Errors via `fs::Result`, no exceptions.
+- Validation — `validation/` runs on ST boards with hal-st, fetched only there with `EMFS_BUILD_VALIDATION` on a board preset; nothing in `fs/` or `metrics/` depends on hal-st (`docs/Validation.md`).
 - Testing — test first; `testing::StrictMock` only; every claim backed by a metric test (`docs/Metrics.md`); every write path in the power-cut sweep (`docs/Testing.md`).
 - Be terse — minimal prose; report file paths + build/test pass/fail.
 
@@ -22,4 +23,5 @@ Essentials (full detail in AGENTS.md):
 - `docs/NorFilesystem.md` — NOR on-flash format and algorithms
 - `docs/Metrics.md` — metrics, workloads, device models, targets
 - `docs/Testing.md` — TDD, test doubles, power-cut sweep, interoperability tests
+- `docs/Validation.md` — validation on boards, calibration of the device models, F-1 and F-2
 - `docs/Roadmap.md` — implementation phases

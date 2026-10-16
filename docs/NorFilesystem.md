@@ -559,6 +559,8 @@ The fields marked as format parameters are stored in the superblock, and a volum
 
 The reserve and the watermark of the pool are computed from the configuration and the geometry of the device.
 
+On the boards of [Validation.md](Validation.md), a volume runs on a region of 16 MiB of a QSPI NOR flash, with the `fs::NorConfig` above, which the NOR subject uses on `nor-qspi-16m`, and on a parallel NOR of 16 MiB with blocks of one 128 KiB sector, a program unit of 2 bytes and the write buffer of the chip as the page.
+
 ## Counters
 
 The volume counts, since it was mounted, the blocks it allocated, the sectors it erased, the checkpoints it wrote and the blocks static wear leveling moved, as 32-bit counters that `Counters()` returns without a device access.
@@ -570,7 +572,7 @@ A product can read them for diagnostics, and the metrics use them to charge eras
 Internal flash with error correction, such as on many STM32 devices, requires writes aligned to its program unit and does not allow a second programming of the same unit, which the format respects.
 Reading a program unit whose programming was interrupted can raise an error-correction fault on such devices.
 The completions of `hal::Flash` carry no result, so the `hal::Flash` driver for such a device has to return the data of such a unit, for instance as all ones, instead of faulting; the CRC of the record or header then rejects it.
-This is verified when an internal flash driver is used on target.
+This is to be verified once a board with a driver for its internal flash joins the validation of [Validation.md](Validation.md).
 Because `hal::Flash` reports no errors, a NOR volume never completes with `deviceError`; a node, record or header whose CRC does not match completes the operation that reads it with `corrupted`, and the volume stays mounted.
 
 ## Testing

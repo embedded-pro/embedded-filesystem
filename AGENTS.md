@@ -11,11 +11,12 @@ embedded-filesystem provides asynchronous, heap-less C++20 filesystems for micro
 - `fs/fat/` — FAT12/16/32 with long file names, and the formatter (target `fs.fat`); design in `docs/Fat.md`
 - `fs/nor/` — log-structured NOR filesystem, garbage collection, wear leveling (target `fs.nor`); design in `docs/NorFilesystem.md`
 - `metrics/` — host-only device models, metered and power-cut devices, workloads, FatFs/littlefs baselines (targets `metrics.*`); definitions in `docs/Metrics.md`
-- Namespace `fs` for the libraries, `metrics` for the harness. Storage drivers are not in this repository
+- `validation/` — firmware for ST boards on hal-st, F-1 reference images, the Python host package `validation/host` and the committed runs `validation/results` (targets `validation.*`); design in `docs/Validation.md`
+- Namespace `fs` for the libraries, `metrics` for the harness, `validation` for the validation. Storage drivers are not in this repository
 
 ## Memory — no heap
 
-Forbidden in `fs/`: `new`/`delete`/`malloc`/`free`, `make_unique`/`make_shared`, `std::vector`/`string`/`deque`/`list`/`map`/`set`. No recursion — stack depth must be statically bounded.
+Forbidden in `fs/` and `validation/firmware`: `new`/`delete`/`malloc`/`free`, `make_unique`/`make_shared`, `std::vector`/`string`/`deque`/`list`/`map`/`set`. No recursion — stack depth must be statically bounded.
 
 Use: `infra::BoundedVector<T>`, `infra::BoundedDeque<T>`, `infra::BoundedString`, `infra::WithStorage<Base, StorageType>`, `infra::SharedObjectAllocatorFixedSize`, `std::array<T,N>`, `std::optional<T>`, `std::variant<...>`. Every pool, cache and queue is sized at compile time.
 
@@ -60,6 +61,7 @@ Exception: `metrics/` is host-only benchmark code and may use the standard libra
 - Async tests use `infra::EventDispatcherFixture` / `infra::ClockFixture`, and check that no callback fires before the dispatcher runs
 - Devices: EMIL `hal::FlashStub`, `hal::BlockDeviceStub`, `hal::FlashMock`, `hal::BlockDeviceMock`; metered and power-cut wrappers from `metrics/`
 - Every new write path extends the power-cut sweep (`docs/Testing.md`)
+- The board-independent libraries of `validation/firmware` are host-tested and covered 100 % like `fs/`; board files (profiles, `main`, hal-st glue) build only for the boards
 - Build ranges with `infra::MakeRange`, `infra::Head`, `infra::DiscardHead`, never from `std::array::begin()`/`end()` (MSVC iterators are not pointers)
 - No heap in tests either
 
@@ -71,7 +73,7 @@ cmake --build --preset host-Debug
 ctest --preset host
 ```
 
-Metrics: `cmake --preset metrics && cmake --build --preset metrics && ctest --preset metrics` (Linux host only). Options use the `EMFS_` prefix (`EMFS_BUILD_TESTS`, `EMFS_BUILD_METRICS`).
+Metrics: `cmake --preset metrics && cmake --build --preset metrics && ctest --preset metrics` (Linux host only). Options use the `EMFS_` prefix (`EMFS_BUILD_TESTS`, `EMFS_BUILD_METRICS`, `EMFS_BUILD_VALIDATION`).
 
 Before pushing, run `tools/verify.sh`: the checks of CI that can run locally, and scans for what CI reported on earlier pull requests (`tools/README.md`).
 
@@ -80,6 +82,13 @@ Before pushing, run `tools/verify.sh`: the checks of CI that can run locally, an
 Pulled via `FetchContent` in the top-level `CMakeLists.txt` under the name `emil`, pinned to a full commit SHA (`GIT_TAG <sha> # Unreleased`), auto-bumped by `.github/workflows/update-emil-git-tag.yml`.
 
 Use EMIL's interfaces, containers, state machine, CRC and test doubles — don't reintroduce local copies. Changes needed in EMIL interfaces (such as `hal::BlockDevice::Flush`) are made in EMIL, not worked around here.
+
+## Dependency: hal-st (validation only)
+
+- Fetched via `FetchContent` in `validation/CMakeLists.txt` only, when `EMFS_STANDALONE`, `EMFS_BUILD_VALIDATION` and `TARGET_MCU_VENDOR=st` all hold
+- Pinned to a full commit SHA, bumped by `.github/workflows/update-hal-st-git-tag.yml`
+- Nothing in `fs/` or `metrics/` may include or link hal-st; consuming embedded-filesystem as a library must never fetch it
+- Driver changes are made in hal-st (`docs/Validation.md`, prerequisites), not worked around here
 
 ## Version control
 
