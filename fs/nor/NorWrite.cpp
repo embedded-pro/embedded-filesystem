@@ -25,7 +25,7 @@ namespace fs
 
         auto overwritten = infra::Head(data, file.size - file.position);
         data = infra::DiscardHead(data, overwritten.size());
-        volume.FileOverwrite().Overwrite(file, overwritten, [this](Result result)
+        volume.Operations().overwrite(volume, file, overwritten, [this](Result result)
             {
                 if (result == Result::success)
                     Next();

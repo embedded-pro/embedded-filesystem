@@ -124,6 +124,7 @@ namespace fs
 
         void StartNorTruncate(NorVolume& volume, NorOpenFile& file, uint32_t size, const infra::Function<void(Result result)>& onDone);
         void StartNorFormat(NorVolume& volume, const infra::Function<void(Result result)>& onDone);
+        void StartNorOverwrite(NorVolume& volume, NorOpenFile& file, infra::ConstByteRange data, const infra::Function<void(Result result)>& onDone);
     }
 
     template<NorFeatures Features>
@@ -141,6 +142,8 @@ namespace fs
             operations.truncate = &detail::StartNorTruncate;
         if constexpr (Features.format)
             operations.format = &detail::StartNorFormat;
+        if constexpr (Features.overwrite)
+            operations.overwrite = &detail::StartNorOverwrite;
 
         return operations;
     }

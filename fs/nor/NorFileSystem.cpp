@@ -344,5 +344,10 @@ namespace fs
         {
             volume.Operation().emplace<NorFormatter>(volume.Flash(), volume.Config(), volume.NodeStorage()).Format(onDone);
         }
+
+        void StartNorOverwrite(NorVolume& volume, NorOpenFile& file, infra::ConstByteRange data, const infra::Function<void(Result result)>& onDone)
+        {
+            volume.FileOverwrite().Overwrite(file, data, onDone);
+        }
     }
 }

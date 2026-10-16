@@ -10,7 +10,7 @@
 namespace
 {
     constexpr fs::NorConfig config{ .maxBlocks = 32, .cachedNodes = 15 };
-    constexpr fs::NorFeatures withoutChanges{ .makeDirectory = false, .remove = false, .rename = false, .truncate = false, .format = false };
+    constexpr fs::NorFeatures withoutChanges{ .makeDirectory = false, .remove = false, .rename = false, .truncate = false, .format = false, .overwrite = false };
 
     class NorFeaturesTest
         : public testing::Test
@@ -124,6 +124,43 @@ TEST_F(NorFeaturesTest, truncate_is_unsupported_on_a_writable_file_only)
     volume.Unmount(Done());
     ExpectDone(fs::Result::success);
     file->Truncate(Done());
+    ExpectDone(fs::Result::notMounted);
+}
+
+TEST_F(NorFeaturesTest, writing_before_the_end_of_a_file_is_unsupported)
+{
+    volume.Mount(Done());
+    ExpectDone(fs::Result::success);
+    data.fill(0x5a);
+    auto file = Open("/log.txt", fs::OpenMode::readWrite);
+    file->Write(infra::MakeRange(data), Done());
+    ExpectDone(fs::Result::success);
+
+    file->Seek(10);
+    file->Write(infra::MakeRange(data), Done());
+    ExpectDone(fs::Result::unsupported);
+    EXPECT_EQ(100u, file->Size());
+
+    file->Seek(100);
+    file->Write(infra::MakeRange(data), Done());
+    ExpectDone(fs::Result::success);
+    file->Close(Done());
+    ExpectDone(fs::Result::success);
+    file = nullptr;
+
+    file = Open("/log.txt", fs::OpenMode::append);
+    file->Seek(0);
+    file->Write(infra::MakeRange(data), Done());
+    ExpectDone(fs::Result::success);
+    EXPECT_EQ(300u, file->Size());
+    file->Close(Done());
+    ExpectDone(fs::Result::success);
+    file = nullptr;
+
+    file = Open("/log.txt", fs::OpenMode::readWrite);
+    volume.Unmount(Done());
+    ExpectDone(fs::Result::success);
+    file->Write(infra::MakeRange(data), Done());
     ExpectDone(fs::Result::notMounted);
 }
 

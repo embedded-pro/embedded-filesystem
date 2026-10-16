@@ -87,6 +87,12 @@ namespace fs
             return;
         }
 
+        if (volume.Operations().overwrite == nullptr && state.mode != OpenMode::append && state.position != state.size)
+        {
+            volume.Defer(onDone, volume.Available(generation) ? Result::unsupported : Result::notMounted);
+            return;
+        }
+
         writeData = data;
         this->onDone = onDone;
         Claim(Call::write);

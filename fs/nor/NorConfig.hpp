@@ -33,6 +33,7 @@ namespace fs
         bool rename{ true };
         bool truncate{ true };
         bool format{ true };
+        bool overwrite{ true };
     };
 
     constexpr std::size_t norMinimumCachedNodes = 15;

@@ -559,16 +559,17 @@ The fields marked as format parameters are stored in the superblock, and a volum
 
 The reserve and the watermark of the pool are computed from the configuration and the geometry of the device.
 
-`fs::NorFeatures` leaves out calls that a product never makes, so that their code is not linked; a call that is left out completes with `unsupported` on a mounted volume, and with `notMounted` otherwise, before its path is validated.
+`fs::NorFeatures` leaves out calls, and uses of calls, that a product never makes, so that their code is not linked; a call that is left out completes with `unsupported` on a mounted volume, and with `notMounted` otherwise, before its path is validated.
 Every feature is in by default.
 
-| `fs::NorFeatures` | Leaves out                                 |
-|-------------------|--------------------------------------------|
-| `makeDirectory`   | `MakeDirectory`                            |
-| `remove`          | `Remove`                                   |
-| `rename`          | `Rename`                                   |
-| `truncate`        | `Truncate`                                 |
-| `format`          | `Format`, so the flash is formatted before |
+| `fs::NorFeatures` | Leaves out                                                                                                          |
+|-------------------|---------------------------------------------------------------------------------------------------------------------|
+| `makeDirectory`   | `MakeDirectory`                                                                                                     |
+| `remove`          | `Remove`                                                                                                            |
+| `rename`          | `Rename`                                                                                                            |
+| `truncate`        | `Truncate`                                                                                                          |
+| `format`          | `Format`, so the flash is formatted before                                                                          |
+| `overwrite`       | Writing before the end of a file: a `Write` at a position before the end of a file that is not opened for appending |
 
 A volume mounts whatever a volume with every feature wrote, so leaving a feature out never changes the format on flash; F-1 measures the volume with every feature left out as `embedded-filesystem/nor-minimal`.
 

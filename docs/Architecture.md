@@ -256,7 +256,7 @@ A `Write` that fails leaves `Position()` and `Size()` at the bytes that were act
 `Seek` beyond the end of the file moves the position to the end.
 `Truncate` cuts the file at the current position.
 `ExpectSize` announces the size the file will reach, so that the filesystem can reserve contiguous space; it never changes `Size()`, and it may complete with `unsupported`.
-A volume that is configured without a call, with `fs::FatFeatures` or `fs::NorFeatures`, completes it with `unsupported`, so that its code is not linked.
+A volume that is configured without a call, or without a use of one such as creating a long name or writing before the end of a file, with `fs::FatFeatures` or `fs::NorFeatures`, completes it with `unsupported`, so that its code is not linked.
 `Sync` makes everything written so far durable, including on power loss, before it completes.
 `Close` writes back pending data, commits it and releases the handle.
 Each handle runs one call at a time: a call made while another call on the same handle is pending completes with `busy`.
@@ -370,7 +370,7 @@ hal::Flash& norFlash = ...;
 fs::NorFileSystem::WithStorage<norConfig, 4> norVolume{ norFlash };
 ```
 
-For FAT, the template arguments are the number of open files and the number of sectors in the cache, followed by an optional `fs::FatLimits` with the other sizes and an optional `fs::FatFeatures` with the calls the volume leaves out; `fs::FatConfig` holds the settings that need no storage, such as the allocation unit of the card and the timer service that gives the time of timestamps, as described in [Fat.md](Fat.md#configuration).
+For FAT, the template arguments are the number of open files and the number of sectors in the cache, followed by an optional `fs::FatLimits` with the other sizes and an optional `fs::FatFeatures` with the calls and the work the volume leaves out; `fs::FatConfig` holds the settings that need no storage, such as the allocation unit of the card and the timer service that gives the time of timestamps, as described in [Fat.md](Fat.md#configuration).
 `fs::FatReader::WithStorage<Files, Directories, Limits>` takes the number of open files and of open directory handles, and an optional `fs::PathLimits`, as described in [Fat.md](Fat.md#read-only-volume).
 For NOR, they are the configuration, the number of open files and an optional `fs::NorFeatures`; the constructor takes the device and an optional idle delay, as described in [NorFilesystem.md](NorFilesystem.md#configuration).
 The block states and the erase-count table are sized by `maxBlocks`, the largest number of blocks the volume may span; mounting a device with more blocks fails with `Result::unsupported`.

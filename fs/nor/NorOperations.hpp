@@ -3,6 +3,7 @@
 
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorPathSlot.hpp"
+#include "infra/util/ByteRange.hpp"
 #include "infra/util/Function.hpp"
 #include <cstdint>
 
@@ -15,6 +16,7 @@ namespace fs
     using NorPathOperation = void (*)(NorVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished);
     using NorTruncateOperation = void (*)(NorVolume& volume, NorOpenFile& file, uint32_t size, const infra::Function<void(Result result)>& onDone);
     using NorFormatOperation = void (*)(NorVolume& volume, const infra::Function<void(Result result)>& onDone);
+    using NorOverwriteOperation = void (*)(NorVolume& volume, NorOpenFile& file, infra::ConstByteRange data, const infra::Function<void(Result result)>& onDone);
 
     struct NorOperations
     {
@@ -23,6 +25,7 @@ namespace fs
         NorPathOperation<NorRenameCall> rename{ nullptr };
         NorTruncateOperation truncate{ nullptr };
         NorFormatOperation format{ nullptr };
+        NorOverwriteOperation overwrite{ nullptr };
     };
 }
 
