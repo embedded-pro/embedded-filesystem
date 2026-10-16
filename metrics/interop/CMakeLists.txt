@@ -9,6 +9,7 @@ endif()
 target_link_libraries(metrics.interop_test PUBLIC
     gmock_main
     fs.fat
+    fs.fat_lite
     fs.fat_reader
     metrics.fat
     metrics.device

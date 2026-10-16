@@ -2,6 +2,7 @@ add_library(metrics.fat STATIC)
 
 target_link_libraries(metrics.fat PUBLIC
     fs.fat
+    fs.fat_lite
     fs.fat_test_doubles
     metrics.device
     metrics.power_cut

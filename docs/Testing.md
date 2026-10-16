@@ -67,6 +67,7 @@ A write step is one program request or one erased sector on NOR flash, and one w
 For NOR flash, every cut is repeated with the interrupted step not started, partially done and completed: a partial program programs only the first bytes of the request, and a partial erase leaves the second half of the sector programmed.
 For block devices, every cut is repeated with the interrupted block left unwritten, written completely and torn, where only the first bytes of the block hold the new data.
 A run with loss of unflushed writes models a device cache that is not written back, and a run that keeps the writes of the interrupted request but loses the earlier unflushed ones models a device cache that writes back in another order.
+The FAT sweep runs every case on `fs::FatFileSystem`, and the cases of writing, truncating and creating a file on `fs::FatLite`, with names in the 8.3 format.
 The result of the sweep is metric P-1 in [Metrics.md](Metrics.md).
 
 The sweep is implemented by `metrics::NorPowerCutSweep` and `metrics::BlockPowerCutSweep` in `metrics/power_cut`.
@@ -129,6 +130,7 @@ Interoperability tests check that FAT volumes are exchanged correctly with the t
 * directories that the library makes and entries that it removes leave an image that `fsck.fat -n` accepts and `mtools` lists as expected;
 * entries that the library renames or moves, with the `..` entry of a moved directory, and files that it truncates leave an image that `fsck.fat -n` accepts and `mtools` lists and reads back as expected;
 * files written into an image with `mtools` are listed and read back by the library, by `fs::FatFileSystem` and by `fs::FatReader`, and both mount the images that `mkfs.fat` creates;
+* files that `fs::FatLite` appends to, creates and truncates leave an image that `fsck.fat -n` accepts and `mtools` lists and reads back as expected;
 * an image created by `fs::FatFormatter` passes `fsck.fat -n`.
 
 These tests need `dosfstools` and `mtools`, and image files on the host, so they live in `metrics/interop` and are built with the metrics.
