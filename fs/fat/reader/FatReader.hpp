@@ -10,6 +10,7 @@
 #include "fs/fat/reader/FatReaderFile.hpp"
 #include "fs/fat/reader/FatReaderMount.hpp"
 #include "fs/fat/reader/FatReaderVolume.hpp"
+#include "fs/fat/reader/FatReaderWindow.hpp"
 #include "fs/interfaces/FileSystem.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/event/ClaimableResource.hpp"
@@ -80,6 +81,7 @@ namespace fs
         void Entered(Result result);
 
     private:
+        FatReaderWindow window;
         FatReaderVolume volume;
         FatReaderMount mount;
         PathLimits limits;

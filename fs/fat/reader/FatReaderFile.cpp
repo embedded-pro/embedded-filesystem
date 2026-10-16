@@ -129,7 +129,7 @@ namespace fs
 
     void FatReaderFile::Transfer()
     {
-        auto sectorSize = volume.Window().SectorSize();
+        auto sectorSize = volume.Sectors().SectorSize();
         auto sectorInCluster = position % ClusterBytes() / sectorSize;
         auto sector = volume.Geometry().SectorOfCluster(cluster) + sectorInCluster;
 
@@ -141,7 +141,7 @@ namespace fs
 
     void FatReaderFile::TransferPart(uint32_t sector)
     {
-        volume.Window().Read(sector, [this](Result result, infra::ConstByteRange contents)
+        volume.Sectors().Read(sector, [this](Result result, infra::ConstByteRange contents)
             {
                 auto offset = position % contents.size();
                 auto bytes = std::min<std::size_t>(contents.size() - offset, Remaining());
@@ -155,7 +155,7 @@ namespace fs
 
     void FatReaderFile::TransferSectors(uint32_t sector, uint32_t sectors)
     {
-        transferBytes = std::size_t{ sectors } * volume.Window().SectorSize();
+        transferBytes = std::size_t{ sectors } * volume.Sectors().SectorSize();
         volume.Device().ReadBlocks(infra::Head(infra::DiscardHead(buffer, bytesRead), transferBytes), sector, [this](hal::BlockDevice::Result result)
             {
                 Transferred(ToResult(result), transferBytes);
@@ -189,7 +189,7 @@ namespace fs
 
     uint32_t FatReaderFile::ClusterBytes() const
     {
-        return volume.Geometry().sectorsPerCluster * volume.Window().SectorSize();
+        return volume.Geometry().sectorsPerCluster * volume.Sectors().SectorSize();
     }
 
     Result FatReaderFile::Writable() const

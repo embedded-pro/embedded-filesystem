@@ -3,12 +3,12 @@
 
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/Deliver.hpp"
+#include "fs/common/SectorSource.hpp"
 #include "fs/fat/FatDirectoryReader.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatGeometry.hpp"
 #include "fs/fat/FatPathWalk.hpp"
 #include "fs/fat/FatTableReader.hpp"
-#include "fs/fat/reader/FatReaderWindow.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/event/ClaimableResource.hpp"
@@ -21,14 +21,14 @@ namespace fs
     class FatReaderVolume
     {
     public:
-        FatReaderVolume(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved);
+        FatReaderVolume(hal::BlockDevice& device, SectorSource& sectors, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved);
         FatReaderVolume(const FatReaderVolume& other) = delete;
         FatReaderVolume& operator=(const FatReaderVolume& other) = delete;
         ~FatReaderVolume();
 
         infra::ClaimableResource& Queue();
         hal::BlockDevice& Device() const;
-        FatReaderWindow& Window();
+        SectorSource& Sectors();
         FatGeometry& Geometry();
         FatTableReader& Table();
         FatDirectoryReader& Reader();
@@ -51,10 +51,10 @@ namespace fs
         DeferredCompletions& deferred;
         infra::Function<void()> onMediaRemoved;
         FatGeometry geometry;
-        FatReaderWindow window;
-        FatTableReader table{ window, geometry };
+        SectorSource& sectors;
+        FatTableReader table{ sectors, geometry };
         FatEntryAssembler assembler;
-        FatDirectoryReader reader{ window, geometry, assembler };
+        FatDirectoryReader reader{ sectors, geometry, assembler };
         FatPathWalk walk{ reader, geometry };
         uint32_t generation{ 0 };
         bool mounted{ false };

@@ -1,9 +1,9 @@
 #ifndef FS_FAT_READER_FAT_READER_MOUNT_HPP
 #define FS_FAT_READER_FAT_READER_MOUNT_HPP
 
+#include "fs/common/SectorSource.hpp"
 #include "fs/fat/FatBootSector.hpp"
 #include "fs/fat/FatGeometry.hpp"
-#include "fs/fat/reader/FatReaderWindow.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -16,7 +16,7 @@ namespace fs
     class FatReaderMount
     {
     public:
-        FatReaderMount(hal::BlockDevice& device, FatReaderWindow& window, FatGeometry& geometry);
+        FatReaderMount(hal::BlockDevice& device, SectorSource& source, FatGeometry& geometry);
         FatReaderMount(const FatReaderMount& other) = delete;
         FatReaderMount& operator=(const FatReaderMount& other) = delete;
         ~FatReaderMount();
@@ -31,7 +31,7 @@ namespace fs
 
     private:
         hal::BlockDevice& device;
-        FatReaderWindow& window;
+        SectorSource& source;
         FatGeometry& geometry;
         uint32_t volumeStart{ 0 };
         uint32_t volumeSectors{ 0 };

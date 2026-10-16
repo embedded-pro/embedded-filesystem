@@ -3,9 +3,9 @@
 
 namespace fs
 {
-    FatReaderMount::FatReaderMount(hal::BlockDevice& device, FatReaderWindow& window, FatGeometry& geometry)
+    FatReaderMount::FatReaderMount(hal::BlockDevice& device, SectorSource& source, FatGeometry& geometry)
         : device(device)
-        , window(window)
+        , source(source)
         , geometry(geometry)
     {}
 
@@ -14,12 +14,11 @@ namespace fs
     void FatReaderMount::Start(const infra::Function<void(Result result)>& onDone)
     {
         this->onDone = onDone;
-        window.Forget();
 
-        if (device.BlockSize() != window.SectorSize())
+        if (device.BlockSize() != source.SectorSize())
             this->onDone(Result::unsupported);
         else
-            window.Read(0, [this](Result result, infra::ConstByteRange contents)
+            source.Read(0, [this](Result result, infra::ConstByteRange contents)
                 {
                     OnFirstSector(result, contents);
                 });
@@ -47,7 +46,7 @@ namespace fs
     {
         volumeStart = sector;
         volumeSectors = sectors;
-        window.Read(sector, [this](Result result, infra::ConstByteRange contents)
+        source.Read(sector, [this](Result result, infra::ConstByteRange contents)
             {
                 OnBootSector(result, contents);
             });

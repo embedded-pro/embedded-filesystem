@@ -2,11 +2,11 @@
 
 namespace fs
 {
-    FatReaderVolume::FatReaderVolume(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved)
+    FatReaderVolume::FatReaderVolume(hal::BlockDevice& device, SectorSource& sectors, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved)
         : device(device)
         , deferred(deferred)
         , onMediaRemoved(onMediaRemoved)
-        , window(device, sector)
+        , sectors(sectors)
         , assembler(nameBuffer)
     {}
 
@@ -22,9 +22,9 @@ namespace fs
         return device;
     }
 
-    FatReaderWindow& FatReaderVolume::Window()
+    SectorSource& FatReaderVolume::Sectors()
     {
-        return window;
+        return sectors;
     }
 
     FatGeometry& FatReaderVolume::Geometry()

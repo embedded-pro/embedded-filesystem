@@ -4,11 +4,12 @@
 namespace fs
 {
     FatReader::FatReader(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const PathLimits& limits)
-        : volume(device, sector, nameBuffer, deferred, [this]
+        : window(device, sector)
+        , volume(device, window, nameBuffer, deferred, [this]
               {
                   lifecycle.Dispatch(FatMediaRemoved{});
               })
-        , mount(device, volume.Window(), volume.Geometry())
+        , mount(device, window, volume.Geometry())
         , limits(limits)
         , lifecycleClaimer(volume.Queue())
         , pathClaimer(volume.Queue())
@@ -235,6 +236,7 @@ namespace fs
                     {
                         return FatMountDone{ result };
                     });
+                window.Forget();
                 mount.Start([this](Result result)
                     {
                         Mounted(result);
