@@ -369,9 +369,9 @@ def test_runs_that_would_write_the_same_fragment_are_an_error(tmp_path, capsys):
     assert "both write 2026_10_20.json" in capsys.readouterr().err
 
 
-RAM_FLASH = "EVT device id=1 device=ramflash kind=nor sectors=512 sectorSize=4096 memory=sdram"
+RAM_FLASH = "EVT device id=1 device=ramflash kind=nor sectors=1024 sectorSize=4096 memory=sdram"
 CYCLES = (
-    "EVT cycles id=2 subject=embedded-filesystem/nor device=ramflash op=mount n=100 ramBytes=17764 "
+    "EVT cycles id=2 subject=embedded-filesystem/nor device=ramflash op=mount n=100 ramBytes=13504 "
     "minCycles=900 medianCycles=1000 maxCycles=1500 settledCycles=4000"
 )
 
@@ -384,7 +384,7 @@ def f2(workload: str, value: int) -> dict[str, object]:
         "device": f"{BOARD}/ramflash",
         "unit": "cycles",
         "value": value,
-        "ramBytes": 17764,
+        "ramBytes": 13504,
         "better": "lower",
     }
 
@@ -394,7 +394,7 @@ def test_a_cycles_record_becomes_f2_until_the_completion_and_until_the_volume_is
 
     assert fragment["devices"][f"{BOARD}/ramflash"] == {
         "kind": "nor",
-        "sectors": "512",
+        "sectors": "1024",
         "sectorSize": "4096",
         "memory": "sdram",
         "run": "2026_10_20",
@@ -416,6 +416,21 @@ def test_a_cycles_record_needs_its_keys(tmp_path, key):
 
 
 def test_a_failed_run_of_f2_is_not_converted(tmp_path):
-    lines = [RAM_FLASH, "EVT cycles.failed id=2 subject=embedded-filesystem/nor op=mount run=0 status=-28"]
+    lines = [RAM_FLASH, CYCLES, "EVT cycles.failed id=3 subject=embedded-filesystem/nor op=open run=0 status=-28"]
 
     assert convert_run(write_run(tmp_path / "2026_10_20", lines), {})["results"] == []
+
+
+def test_a_failed_run_of_f2_leaves_the_other_subjects(tmp_path):
+    lines = [RAM_FLASH, CYCLES, "EVT cycles.failed id=3 subject=littlefs/ram-matched op=open run=0 status=-28"]
+
+    assert convert_run(write_run(tmp_path / "2026_10_20", lines), {})["results"] == [f2("mount", 1000), f2("mount settled", 4000)]
+
+
+def test_the_last_run_of_a_subject_replaces_its_earlier_runs(tmp_path):
+    again = CYCLES.replace("id=2", "id=3").replace("medianCycles=1000", "medianCycles=1100")
+    again = again.replace("settledCycles=4000", "settledCycles=4400")
+
+    fragment = convert_run(write_run(tmp_path / "2026_10_20", [RAM_FLASH, CYCLES, again]), {})
+
+    assert fragment["results"] == [f2("mount", 1100), f2("mount settled", 4400)]

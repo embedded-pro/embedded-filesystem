@@ -18,6 +18,7 @@ from typing import Any
 TRANSCRIPT = "transcript.log"
 RUN = "run.json"
 RESULT_KEYS = ("metric", "workload", "subject", "device", "unit", "value", "ramBytes", "better")
+RESULT_IDENTITY = ("metric", "workload", "subject", "device")
 RUN_NAME = re.compile(r"^(\d{4})_(\d{2})_(\d{2})(?:_(\d+))?$")
 
 
@@ -111,13 +112,19 @@ class Fragment:
         return name
 
     def result(self, entry: dict[str, Any]) -> None:
+        """Adds a result, in place of an earlier one of the same metric, workload, subject and device."""
         for key in RESULT_KEYS:
             if key not in entry:
                 raise ConversionError(f"a result of {entry.get('metric')} has no '{key}'")
         name = f"{self.board}/{entry['device']}"
         if name not in self.devices:
             raise ConversionError(f"a result of {entry['metric']} is on an unknown device '{entry['device']}'")
-        self.results.append({**entry, "device": name})
+        entry = {**entry, "device": name}
+        self.discard(lambda earlier: all(earlier[key] == entry[key] for key in RESULT_IDENTITY))
+        self.results.append(entry)
+
+    def discard(self, matches: Callable[[dict[str, Any]], bool]) -> None:
+        self.results = [result for result in self.results if not matches(result)]
 
     def json(self) -> dict[str, Any]:
         return {"devices": self.devices, "results": self.results}
@@ -146,9 +153,16 @@ def convert_cycles(fragment: Fragment, record: Record) -> None:
     fragment.result({**common, "workload": f"{operation} settled", "value": record.number("settledCycles")})
 
 
+def convert_cycles_failed(fragment: Fragment, record: Record) -> None:
+    """A run of F-2 that failed leaves no F-2 for its subject, not even for the operations it completed."""
+    subject = record.field("subject")
+    fragment.discard(lambda result: result["metric"] == "F-2" and result["subject"] == subject)
+
+
 CONVERTERS: dict[str, Callable[[Fragment, Record], None]] = {
     "device": convert_device,
     "cycles": convert_cycles,
+    "cycles.failed": convert_cycles_failed,
 }
 
 
