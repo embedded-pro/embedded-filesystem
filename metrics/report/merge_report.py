@@ -262,7 +262,9 @@ def markdown(report):
 def parse_arguments(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fragments", nargs="*", help="report fragments written by the metric executables")
-    parser.add_argument("--fragment-directory", type=Path, help="directory whose *.json files are added to the fragments")
+    parser.add_argument(
+        "--fragment-directory", type=Path, action="append", default=[], help="directory whose *.json files are added to the fragments; repeatable"
+    )
     parser.add_argument("--json", type=Path, required=True, help="merged report to write")
     parser.add_argument("--markdown", type=Path, required=True, help="Markdown summary to write")
     parser.add_argument("--baseline", type=Path, help="merged report of main, to detect regressions")
@@ -272,8 +274,10 @@ def parse_arguments(argv):
 
 def fragment_paths(arguments):
     paths = list(arguments.fragments)
-    if arguments.fragment_directory is not None:
-        paths.extend(sorted(str(path) for path in arguments.fragment_directory.glob("*.json")))
+    for directory in arguments.fragment_directory:
+        if not directory.is_dir():
+            print(f"merge_report: no fragment directory {directory}", file=sys.stderr)
+        paths.extend(sorted(str(path) for path in directory.glob("*.json")))
     return paths
 
 
