@@ -11,4 +11,5 @@ target_link_libraries(validation.devices_test PUBLIC
 
 target_sources(validation.devices_test PRIVATE
     TestNullDevices.cpp
+    TestRamDevices.cpp
 )

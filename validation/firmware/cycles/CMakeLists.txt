@@ -1,0 +1,27 @@
+add_library(validation.cycles ${EMFS_EXCLUDE_FROM_ALL} STATIC)
+
+target_include_directories(validation.cycles PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../..>"
+)
+
+target_link_libraries(validation.cycles PUBLIC
+    infra.event
+    infra.stream
+    infra.timer
+    validation.results
+)
+
+target_sources(validation.cycles PRIVATE
+    CycleCounter.hpp
+    CycleRun.cpp
+    CycleRun.hpp
+    CycleSamples.cpp
+    CycleSamples.hpp
+    CycleSubject.hpp
+    IdleCycleCounter.cpp
+    IdleCycleCounter.hpp
+)
+
+if (EMFS_BUILD_TESTS)
+    add_subdirectory(test)
+endif()
