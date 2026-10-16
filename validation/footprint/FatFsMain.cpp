@@ -14,12 +14,14 @@ int main()
     disk.Construct(platform.blockDevice, tuned ? validation::footprint::allocationUnitBlocks : 0);
     static FATFS volume;
     static FIL file;
-    std::array<BYTE, FF_MAX_SS> workArea{};
     auto& buffer = platform.buffer;
-    MKFS_PARM parameters{ FM_ANY, 0, validation::footprint::allocationUnitBlocks, 0, 0 };
     UINT bytes = 0;
 
+#if FF_USE_MKFS
+    std::array<BYTE, FF_MAX_SS> workArea{};
+    MKFS_PARM parameters{ FM_ANY, 0, validation::footprint::allocationUnitBlocks, 0, 0 };
     f_mkfs("", tuned ? &parameters : nullptr, workArea.data(), static_cast<UINT>(workArea.size()));
+#endif
     f_mount(&volume, "", 1);
     f_open(&file, "/log.txt", FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
 #if FF_USE_FASTSEEK

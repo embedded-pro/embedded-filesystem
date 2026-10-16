@@ -17,10 +17,15 @@ METRICS = "memory_metrics.json"
 IMAGES = {
     "fat": "embedded-filesystem/fat",
     "nor": "embedded-filesystem/nor",
+    "fat_reads": "embedded-filesystem/fat-reads",
+    "nor_reads": "embedded-filesystem/nor-reads",
     "fatfs_default": "fatfs/default",
     "fatfs_tuned": "fatfs/tuned",
+    "fatfs_minimal": "fatfs/minimal",
+    "fatfs_read_only": "fatfs/read-only",
     "littlefs_default": "littlefs/default",
     "littlefs_ram_matched": "littlefs/ram-matched",
+    "littlefs_read_only": "littlefs/read-only",
 }
 
 
