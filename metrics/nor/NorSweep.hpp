@@ -68,6 +68,7 @@ namespace metrics
         bool JournalMoreThanHalfFull();
         std::size_t ModifiedNodes();
         bool RecordsStartOutsideTheCheckpointBlock();
+        bool CollectionDueForSpace();
         fs::NorCounters Counters() const;
         std::optional<fs::EntryType> TypeOf(const std::string& path);
         fs::Result OpenFile(const std::string& path, fs::OpenMode mode);
@@ -89,6 +90,7 @@ namespace metrics
             bool JournalMoreThanHalfFull();
             std::size_t ModifiedNodes();
             bool RecordsStartOutsideTheCheckpointBlock();
+            bool CollectionDueForSpace();
 
         private:
             infra::SharedPtr<fs::NorDirectory> AllocateDirectory() override;
