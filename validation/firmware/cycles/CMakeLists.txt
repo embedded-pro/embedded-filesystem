@@ -22,6 +22,8 @@ target_sources(validation.cycles PRIVATE
     IdleCycleCounter.hpp
 )
 
+add_subdirectory(subjects)
+
 if (EMFS_BUILD_TESTS)
     add_subdirectory(test)
 endif()

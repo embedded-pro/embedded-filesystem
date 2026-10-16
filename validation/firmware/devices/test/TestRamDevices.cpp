@@ -75,6 +75,40 @@ TEST_F(RamFlashTest, an_erase_sets_the_bytes_of_its_sectors_only)
     EXPECT_EQ((std::array<uint8_t, 4>{ { 0, 0, 0xff, 0xff } }), Read(14));
 }
 
+TEST_F(RamFlashTest, erases_up_to_its_last_sector)
+{
+    Write({ { 0, 0, 0, 0 } }, 60);
+
+    flash.EraseSectors(3, 4, [this]
+        {
+            done.callback();
+        });
+    EXPECT_CALL(done, callback());
+    ExecuteAllActions();
+
+    EXPECT_EQ((std::array<uint8_t, 4>{ { 0xff, 0xff, 0xff, 0xff } }), Read(60));
+}
+
+TEST_F(RamFlashTest, completes_within_the_call_when_its_completion_is_immediate)
+{
+    validation::RamFlash immediate{ infra::MakeRange(storage), 16, validation::RamCompletion::immediate };
+    std::array<uint8_t, 4> buffer{};
+
+    EXPECT_CALL(done, callback()).Times(3);
+    immediate.WriteBuffer(infra::MakeRange(buffer), 0, [this]
+        {
+            done.callback();
+        });
+    immediate.ReadBuffer(infra::MakeRange(buffer), 0, [this]
+        {
+            done.callback();
+        });
+    immediate.EraseSectors(0, 1, [this]
+        {
+            done.callback();
+        });
+}
+
 TEST_F(RamFlashTest, completes_only_from_the_event_dispatcher)
 {
     std::array<uint8_t, 4> buffer{};
@@ -176,6 +210,16 @@ TEST_F(RamBlockDeviceTest, requests_beyond_the_device_complete_with_out_of_range
 
     device.EraseBlocks(2, 1, Done());
     Expect(hal::BlockDevice::Result::outOfRange);
+}
+
+TEST_F(RamBlockDeviceTest, completes_within_the_call_when_its_completion_is_immediate)
+{
+    validation::RamBlockDevice immediate{ infra::MakeRange(storage), validation::RamCompletion::immediate };
+
+    EXPECT_CALL(done, callback(hal::BlockDevice::Result::success));
+    immediate.WriteBlocks(infra::MakeRange(block), 0, Done());
+    EXPECT_CALL(done, callback(hal::BlockDevice::Result::outOfRange));
+    immediate.ReadBlocks(infra::MakeRange(block), 4, Done());
 }
 
 TEST_F(RamBlockDeviceTest, a_flush_succeeds_from_the_event_dispatcher)

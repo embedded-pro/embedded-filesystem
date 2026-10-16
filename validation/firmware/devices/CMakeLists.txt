@@ -16,6 +16,7 @@ target_sources(validation.devices PRIVATE
     NullFlash.hpp
     RamBlockDevice.cpp
     RamBlockDevice.hpp
+    RamCompletion.hpp
     RamFlash.cpp
     RamFlash.hpp
 )

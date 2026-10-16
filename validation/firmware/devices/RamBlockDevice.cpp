@@ -5,8 +5,9 @@
 
 namespace validation
 {
-    RamBlockDevice::RamBlockDevice(infra::ByteRange storage)
+    RamBlockDevice::RamBlockDevice(infra::ByteRange storage, RamCompletion completion)
         : storage(storage)
+        , completion(completion)
     {
         really_assert(storage.size() % blockSize == 0);
         std::fill(storage.begin(), storage.end(), 0);
@@ -71,6 +72,12 @@ namespace validation
 
     void RamBlockDevice::Complete(const infra::Function<void(Result)>& onDone, Result result)
     {
+        if (completion == RamCompletion::immediate)
+        {
+            onDone(result);
+            return;
+        }
+
         pending = onDone;
         pendingResult = result;
         infra::EventDispatcher::Instance().Schedule([this]

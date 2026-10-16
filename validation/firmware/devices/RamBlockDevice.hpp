@@ -4,6 +4,7 @@
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/ByteRange.hpp"
+#include "validation/firmware/devices/RamCompletion.hpp"
 
 namespace validation
 {
@@ -13,7 +14,7 @@ namespace validation
     public:
         static constexpr uint32_t blockSize = 512;
 
-        explicit RamBlockDevice(infra::ByteRange storage);
+        explicit RamBlockDevice(infra::ByteRange storage, RamCompletion completion = RamCompletion::scheduled);
         RamBlockDevice(const RamBlockDevice& other) = delete;
         RamBlockDevice& operator=(const RamBlockDevice& other) = delete;
         ~RamBlockDevice() = default;
@@ -31,6 +32,7 @@ namespace validation
 
     private:
         infra::ByteRange storage;
+        RamCompletion completion;
         infra::AutoResetFunction<void(Result)> pending;
         Result pendingResult{ Result::success };
     };
