@@ -7,6 +7,7 @@ endif()
 option(CMAKE_COMPILE_WARNING_AS_ERROR "Enable warnings-as-error" ON)
 option(EMFS_BUILD_TESTS "Enable building the tests" Off)
 option(EMFS_BUILD_METRICS "Enable building the host-only metrics harness and baselines" Off)
+option(EMFS_BUILD_VALIDATION "Enable building the validation on boards and the reference images of F-1" Off)
 
 if (EMFS_BUILD_TESTS OR EMFS_BUILD_METRICS)
     # CTest cannot be included before the first project() statement, but embedded-infra-lib
@@ -36,6 +37,11 @@ project(embedded_filesystem LANGUAGES C CXX VERSION 0.1.0) # x-release-please-ve
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED On)
 
+# The startup code of hal-st is assembly, and a language must be enabled in the directory that links it
+if (EMFS_STANDALONE AND EMFS_BUILD_VALIDATION AND TARGET_MCU_VENDOR STREQUAL st)
+    enable_language(ASM)
+endif()
+
 set_directory_properties(PROPERTY USE_FOLDERS ON)
 
 # When building embedded-filesystem by itself do not exclude any targets from all
@@ -58,6 +64,9 @@ endif()
 add_subdirectory(fs)
 if (EMFS_BUILD_METRICS)
     add_subdirectory(metrics)
+endif()
+if (EMFS_STANDALONE AND EMFS_BUILD_VALIDATION)
+    add_subdirectory(validation)
 endif()
 
 if (EMFS_STANDALONE)
