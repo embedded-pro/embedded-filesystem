@@ -300,6 +300,7 @@ fs::FatReader::WithStorage<2> reader{ sdCard };
 
 The template arguments of `fs::FatReader::WithStorage<Files, Directories, Limits>` are the number of open files, the number of open directory handles, 1 by default, and an optional `fs::PathLimits`, the longest name and the longest path in UTF-8 bytes, 255 each by default.
 The longest name also sizes the buffer that holds a name while it is reported, as `FatLimits::maxNameBytes` does for `fs::FatFileSystem`.
+On a Cortex-M4, F-1 measures 22.2 KB of flash and 2.0 KB of RAM for `fs::FatReader::WithStorage<1>`, against 66.4 KB and 7.7 KB for `fs::FatFileSystem` with the same calls and 5.9 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 
 ## Configuration
 

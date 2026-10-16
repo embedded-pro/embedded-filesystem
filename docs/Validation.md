@@ -335,24 +335,25 @@ Both are reported until the first runs show their spread, and a later step sets 
 
 `validation/footprint` builds one reference image per subject for the presets `cortex-m4`, `cortex-m7` and `cortex-m33`, and for `cortex-m4-lto`, the Cortex-M4 with link-time optimization, the target `validation.footprint`:
 
-| Image                                          | Subject                         | Configuration                                                                                                        |
-|------------------------------------------------|---------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| `validation.footprint.empty`                   |                                 | The platform alone                                                                                                   |
-| `validation.footprint.fat`                     | `embedded-filesystem/fat`       | `fs::FatFileSystem::WithStorage<1, 8>`, the allocation unit of `sd-card-256m`, and `fs::FatFormatter`                |
-| `validation.footprint.nor`                     | `embedded-filesystem/nor`       | `fs::NorFileSystem::WithStorage` with the configuration of `nor-qspi-16m` and one file                               |
-| `validation.footprint.fatfs_default`, `_tuned` | `fatfs/default`, `/tuned`       | One `FIL`, through `validation::FatFsDisk`; the tuned variant with the allocation unit and a link map of 64 entries  |
-| `validation.footprint.littlefs_default`        | `littlefs/default`              | Caches of 16 bytes and one file, through `validation::LittleFsFlash`                                                 |
-| `validation.footprint.littlefs_ram_matched`    | `littlefs/ram-matched`          | Caches of one sector, the lookahead of `nor-qspi-16m`, one file and `lfs_fs_gc`, through `validation::LittleFsFlash` |
-| `validation.footprint.fat_reads`               | `embedded-filesystem/fat-reads` | As `fat`, without the formatter, with only the calls that read                                                       |
-| `validation.footprint.nor_reads`               | `embedded-filesystem/nor-reads` | As `nor`, without `Format`, with only the calls that read                                                            |
-| `validation.footprint.fatfs_minimal`           | `fatfs/minimal`                 | As `fatfs/default`, without long names and without `f_mkfs`                                                          |
-| `validation.footprint.fatfs_read_only`         | `fatfs/read-only`               | `FF_FS_READONLY` with long names, with only the calls that read                                                      |
-| `validation.footprint.littlefs_read_only`      | `littlefs/read-only`            | `LFS_READONLY` with the caches of `littlefs/default`, with only the calls that read                                  |
+| Image                                          | Subject                             | Configuration                                                                                                        |
+|------------------------------------------------|-------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `validation.footprint.empty`                   |                                     | The platform alone                                                                                                   |
+| `validation.footprint.fat`                     | `embedded-filesystem/fat`           | `fs::FatFileSystem::WithStorage<1, 8>`, the allocation unit of `sd-card-256m`, and `fs::FatFormatter`                |
+| `validation.footprint.nor`                     | `embedded-filesystem/nor`           | `fs::NorFileSystem::WithStorage` with the configuration of `nor-qspi-16m` and one file                               |
+| `validation.footprint.fatfs_default`, `_tuned` | `fatfs/default`, `/tuned`           | One `FIL`, through `validation::FatFsDisk`; the tuned variant with the allocation unit and a link map of 64 entries  |
+| `validation.footprint.littlefs_default`        | `littlefs/default`                  | Caches of 16 bytes and one file, through `validation::LittleFsFlash`                                                 |
+| `validation.footprint.littlefs_ram_matched`    | `littlefs/ram-matched`              | Caches of one sector, the lookahead of `nor-qspi-16m`, one file and `lfs_fs_gc`, through `validation::LittleFsFlash` |
+| `validation.footprint.fat_reads`               | `embedded-filesystem/fat-reads`     | As `fat`, without the formatter, with only the calls that read                                                       |
+| `validation.footprint.nor_reads`               | `embedded-filesystem/nor-reads`     | As `nor`, without `Format`, with only the calls that read                                                            |
+| `validation.footprint.fat_read_only`           | `embedded-filesystem/fat-read-only` | `fs::FatReader::WithStorage<1>`, with only the calls that read                                                       |
+| `validation.footprint.fatfs_minimal`           | `fatfs/minimal`                     | As `fatfs/default`, without long names and without `f_mkfs`                                                          |
+| `validation.footprint.fatfs_read_only`         | `fatfs/read-only`                   | `FF_FS_READONLY` with long names, with only the calls that read                                                      |
+| `validation.footprint.littlefs_read_only`      | `littlefs/read-only`                | `LFS_READONLY` with the caches of `littlefs/default`, with only the calls that read                                  |
 
 The configurations are those of the host metrics, with one open file, as their `RamBytes()` counts; `Configurations.hpp` holds them, and `metrics.baselines_test` checks that they equal the device models and the configurations of the host.
 Each image calls every operation of the API of its subject, and the formatter, on a device that does nothing, so that the linker keeps every function a product could call; `validation::footprint::Exercise` makes the calls of `fs::FileSystem` for both subjects of embedded-filesystem.
 The images of the calls that read call only `Mount`, `Open` in `read` mode, `Seek`, `Read`, `Close`, `OpenDirectory`, `Next`, `Stat` and `Unmount`, through `validation::footprint::ExerciseReads`, or the same functions of FatFs and littlefs, so that F-1 shows how much of its code a product that only reads still links.
-`fatfs/minimal` and the read-only baselines are what a smaller profile of embedded-filesystem is compared with; FatFs and littlefs built read-only have no free-space query, so the images of the calls that read leave out `Usage`.
+`fatfs/minimal` and the read-only baselines are what a smaller profile of embedded-filesystem is compared with, such as `embedded-filesystem/fat-read-only` with `fatfs/read-only`; FatFs and littlefs built read-only have no free-space query, so the images of the calls that read leave out `Usage`.
 The volumes and their buffers are static, so that their RAM is counted, in `infra::StaticStorage`, so that the destructors a product never runs are not linked; the formatter of `fs/fat`, the work area of `f_mkfs` and the directory and entry structures of FatFs and littlefs are on the stack of `main`, as `RamBytes()` leaves them out on the host, and the buffer of the reads and writes is in the platform.
 F-1 counts the code of EmIL that a subject uses and the empty image does not, such as `infra::SharedPtr`, `infra::ClaimableResource` and the timers of the idle work of NOR, since a product that has none of the subjects does not link it either.
 
