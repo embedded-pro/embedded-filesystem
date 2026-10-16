@@ -92,7 +92,14 @@ jobs:
       matrix:
         configuration: ["RelWithDebInfo"]
         gcc: ["15.2.Rel1"]
-        target: ["cortex-m4", "cortex-m7", "cortex-m33"]
+        target:
+          - cortex-m4
+          - cortex-m7
+          - cortex-m33
+          - stm32h757-cm7
+          - stm32h757-cm4
+          - stm32h745-cm7
+          - stm32h745-cm4
     steps:
       - name: Configure Git
         run: |
@@ -104,6 +111,8 @@ jobs:
         uses: carlosperate/arm-none-eabi-gcc-action@98c40e51546516419841748d3210c290df0d2c6c # v1.13.0
         with:
           release: ${{ matrix.gcc }}
+      - name: Install xsltproc for the pin tables of hal-st
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xsltproc
       - uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67 # v6
       - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
         with:
@@ -115,3 +124,31 @@ jobs:
           configurePreset: ${{ matrix.target }}
           buildPreset: ${{ matrix.target }}-${{ matrix.configuration }}
           configurePresetAdditionalArgs: "['-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache']"
+  validation_host_tests:
+    name: Validation Host Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure Git
+        run: |
+          git config --global url."https://${{ secrets.PRIVATE_REPO_TOKEN  }}@github.com/".insteadOf "https://github.com/"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the validation host package
+        working-directory: validation/host
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install ".[dev]"
+      - name: Ruff
+        working-directory: validation/host
+        run: |
+          "$RUNNER_TEMP/venv/bin/ruff" check .
+          "$RUNNER_TEMP/venv/bin/ruff" format --check .
+      - name: Unit tests
+        working-directory: validation/host
+        run: '"$RUNNER_TEMP/venv/bin/python" -m pytest tests/unit -q'
+      - name: Scenarios on the fake firmware
+        working-directory: validation/host
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" -m pytest tests/hil -q --fake --no-ad3 --board stm32h757i_eval
+          "$RUNNER_TEMP/venv/bin/python" -m pytest tests/hil -q --fake --no-ad3 --board stm32h745i_disco
