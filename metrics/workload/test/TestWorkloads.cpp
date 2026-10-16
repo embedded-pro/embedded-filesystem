@@ -162,17 +162,17 @@ TEST_F(WorkloadsTest, data_logger_appends_a_second_log_once_the_first_is_full)
     EXPECT_EQ(32, subject.idleHints);
 }
 
-TEST_F(WorkloadsTest, the_second_log_stops_once_it_holds_64_appends_from_4_kib)
+TEST_F(WorkloadsTest, the_second_log_holds_as_much_as_the_first)
 {
     parameters.scaleDivisor = 64;
 
     metrics::DataLogger(runner, parameters);
 
     EXPECT_EQ(64 * 1024, subject.files.at("/log").size());
-    EXPECT_EQ(8192, subject.files.at("/log2").size());
+    EXPECT_EQ(64 * 1024, subject.files.at("/log2").size());
 }
 
-TEST_F(WorkloadsTest, the_second_log_of_a_subject_that_counts_stops_two_checkpoints_after_the_periods_from_4_kib)
+TEST_F(WorkloadsTest, the_second_log_of_a_subject_that_counts_checkpoints_also_holds_as_much_as_the_first)
 {
     parameters.scaleDivisor = 64;
     subject.counters = metrics::VolumeCounters{};
@@ -180,7 +180,7 @@ TEST_F(WorkloadsTest, the_second_log_of_a_subject_that_counts_stops_two_checkpoi
 
     metrics::DataLogger(runner, parameters);
 
-    EXPECT_EQ(4096 + (metrics::checkpointPeriods + 2) * metrics::appendSize, subject.files.at("/log2").size());
+    EXPECT_EQ(64 * 1024, subject.files.at("/log2").size());
 }
 
 TEST_F(WorkloadsTest, data_logger_records_the_growing_file_size)
