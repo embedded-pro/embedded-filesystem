@@ -1,4 +1,5 @@
 #include "fs/fat/FatFileSystem.hpp"
+#include "infra/util/ReallyAssert.hpp"
 #include <utility>
 
 namespace fs
@@ -51,40 +52,60 @@ namespace fs
 
     void FatFileSystem::Open(infra::BoundedConstString path, OpenMode mode, const infra::Function<void(Result result, infra::SharedPtr<File> file)>& onDone)
     {
-        StartPathCall(path, FatOpenCall{ path, mode, onDone });
+        if (auto refusal = Refusal(path); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(FatOpenCall{ path, mode, onDone });
     }
 
     void FatFileSystem::OpenDirectory(infra::BoundedConstString path, const infra::Function<void(Result result, infra::SharedPtr<Directory> directory)>& onDone)
     {
-        StartPathCall(path, FatOpenDirectoryCall{ path, onDone });
+        if (auto refusal = Refusal(path); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(FatOpenDirectoryCall{ path, onDone });
     }
 
     void FatFileSystem::Stat(infra::BoundedConstString path, const infra::Function<void(Result result, const EntryInfo& info)>& onDone)
     {
-        StartPathCall(path, FatStatCall{ path, onDone });
+        if (auto refusal = Refusal(path); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(FatStatCall{ path, onDone });
     }
 
     void FatFileSystem::Remove(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        StartPathCall(path, FatRemoveCall{ path, onDone });
+        if (auto refusal = Refusal(path); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(FatRemoveCall{ path, onDone });
     }
 
     void FatFileSystem::Rename(infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone)
     {
-        if (auto validation = ValidatePath(to, volume.Limits()); IsMounted() && validation != Result::success)
-            volume.Defer(onDone, validation);
+        auto validation = ValidatePath(to, volume.Limits());
+
+        if (auto refusal = Refusal(validation != Result::success ? validation : ValidatePath(from, volume.Limits())); refusal != Result::success)
+            volume.Defer(onDone, refusal);
         else
-            StartPathCall(from, FatRenameCall{ from, to, onDone });
+            Start(FatRenameCall{ from, to, onDone });
     }
 
     void FatFileSystem::MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        StartPathCall(path, FatMakeDirectoryCall{ path, onDone });
+        if (auto refusal = Refusal(path); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(FatMakeDirectoryCall{ path, onDone });
     }
 
     void FatFileSystem::Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone)
     {
-        StartCall(FatUsageCall{ onDone });
+        if (auto refusal = Refusal(Result::success); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(FatUsageCall{ onDone });
     }
 
     FatVolume& FatFileSystem::Volume()
@@ -171,30 +192,31 @@ namespace fs
             volume.Defer(std::exchange(onDone, nullptr), result);
     }
 
-    template<class Call>
-    void FatFileSystem::StartPathCall(infra::BoundedConstString path, Call&& call)
+    Result FatFileSystem::Refusal(infra::BoundedConstString path) const
     {
-        if (auto validation = ValidatePath(path, volume.Limits()); IsMounted() && validation != Result::success)
-            volume.Defer(call.onDone.Clone(), validation);
-        else
-            StartCall(std::forward<Call>(call));
+        return Refusal(ValidatePath(path, volume.Limits()));
     }
 
-    template<class Call>
-    void FatFileSystem::StartCall(Call&& call)
+    Result FatFileSystem::Refusal(Result validation) const
     {
         if (!IsMounted())
-            volume.Defer(call.onDone.Clone(), Unavailable());
-        else if (auto slot = FreePathSlot())
-        {
-            slot->call = std::forward<Call>(call);
-            slot->claimer.Claim([this, slot]
-                {
-                    RunPathCall(*slot);
-                });
-        }
-        else
-            volume.Defer(call.onDone.Clone(), Result::busy);
+            return Unavailable();
+        if (validation != Result::success)
+            return validation;
+        if (FreePathSlot() == nullptr)
+            return Result::busy;
+        return Result::success;
+    }
+
+    void FatFileSystem::Start(FatPathCall&& call)
+    {
+        auto* slot = FreePathSlot();
+        really_assert(slot != nullptr);
+        slot->call = std::move(call);
+        slot->claimer.Claim([this, slot]
+            {
+                RunPathCall(*slot);
+            });
     }
 
     FatPathSlot* FatFileSystem::FreePathSlot() const

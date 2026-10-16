@@ -1,5 +1,6 @@
 #include "fs/nor/NorFileSystem.hpp"
 #include "infra/event/EventDispatcher.hpp"
+#include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 #include <utility>
 
@@ -68,38 +69,60 @@ namespace fs
 
     void NorFileSystem::Open(infra::BoundedConstString path, OpenMode mode, const infra::Function<void(Result result, infra::SharedPtr<File> file)>& onDone)
     {
-        StartPathCall(path, NorOpenCall{ path, mode, onDone });
+        if (auto refusal = Refusal(path); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorOpenCall{ path, mode, onDone });
     }
 
     void NorFileSystem::OpenDirectory(infra::BoundedConstString path, const infra::Function<void(Result result, infra::SharedPtr<Directory> directory)>& onDone)
     {
-        StartPathCall(path, NorOpenDirectoryCall{ path, onDone });
+        if (auto refusal = Refusal(path); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorOpenDirectoryCall{ path, onDone });
     }
 
     void NorFileSystem::Stat(infra::BoundedConstString path, const infra::Function<void(Result result, const EntryInfo& info)>& onDone)
     {
-        StartPathCall(path, NorStatCall{ path, onDone });
+        if (auto refusal = Refusal(path); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorStatCall{ path, onDone });
     }
 
     void NorFileSystem::Remove(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        StartPathCall(path, NorRemoveCall{ path, onDone });
+        if (auto refusal = Refusal(path); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorRemoveCall{ path, onDone });
     }
 
     void NorFileSystem::Rename(infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone)
     {
         auto validation = ValidatePath(from, volume.Limits());
-        StartPathCall(validation != Result::success ? validation : ValidatePath(to, volume.Limits()), NorRenameCall{ from, to, onDone });
+
+        if (auto refusal = Refusal(validation != Result::success ? validation : ValidatePath(to, volume.Limits())); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorRenameCall{ from, to, onDone });
     }
 
     void NorFileSystem::MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        StartPathCall(path, NorMakeDirectoryCall{ path, onDone });
+        if (auto refusal = Refusal(path); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorMakeDirectoryCall{ path, onDone });
     }
 
     void NorFileSystem::Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone)
     {
-        StartCall(NorUsageCall{ onDone });
+        if (auto refusal = Refusal(Result::success); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorUsageCall{ onDone });
     }
 
     NorVolume& NorFileSystem::Volume()
@@ -117,38 +140,31 @@ namespace fs
         return std::holds_alternative<NorMounted>(lifecycle.CurrentState());
     }
 
-    template<class Call>
-    void NorFileSystem::StartPathCall(infra::BoundedConstString path, Call&& call)
+    Result NorFileSystem::Refusal(infra::BoundedConstString path) const
     {
-        StartPathCall(ValidatePath(path, volume.Limits()), std::forward<Call>(call));
+        return Refusal(ValidatePath(path, volume.Limits()));
     }
 
-    template<class Call>
-    void NorFileSystem::StartPathCall(Result validation, Call&& call)
+    Result NorFileSystem::Refusal(Result validation) const
     {
-        if (IsMounted() && validation != Result::success)
-            volume.Defer(call.onDone.Clone(), validation);
-        else
-            StartCall(std::forward<Call>(call));
+        if (!IsMounted())
+            return Result::notMounted;
+        if (validation != Result::success)
+            return validation;
+        if (FreePathSlot() == nullptr)
+            return Result::busy;
+        return Result::success;
     }
 
-    template<class Call>
-    void NorFileSystem::StartCall(Call&& call)
+    void NorFileSystem::Start(NorPathCall&& call)
     {
         auto* slot = FreePathSlot();
-
-        if (!IsMounted())
-            volume.Defer(call.onDone.Clone(), Result::notMounted);
-        else if (slot == nullptr)
-            volume.Defer(call.onDone.Clone(), Result::busy);
-        else
-        {
-            slot->call = std::forward<Call>(call);
-            slot->claimer.Claim([this, slot]
-                {
-                    RunPathCall(*slot);
-                });
-        }
+        really_assert(slot != nullptr);
+        slot->call = std::move(call);
+        slot->claimer.Claim([this, slot]
+            {
+                RunPathCall(*slot);
+            });
     }
 
     NorPathSlot* NorFileSystem::FreePathSlot() const

@@ -73,10 +73,9 @@ namespace fs
         void Entered(Result result);
         void DeferCompletion(infra::Function<void(Result result)>& onDone, Result result);
 
-        template<class Call>
-        void StartPathCall(infra::BoundedConstString path, Call&& call);
-        template<class Call>
-        void StartCall(Call&& call);
+        Result Refusal(infra::BoundedConstString path) const;
+        Result Refusal(Result validation) const;
+        void Start(FatPathCall&& call);
         FatPathSlot* FreePathSlot() const;
         void RunPathCall(FatPathSlot& slot);
         void RunOperation(FatPathSlot& slot, FatPathCall& call);
