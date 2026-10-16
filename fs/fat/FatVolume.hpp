@@ -113,6 +113,7 @@ namespace fs
         void MarkMounted();
         void MarkUnmounted(Result reason);
         void Report(Result result) const;
+        void AttachBackground(FatBackgroundScan& scan);
 
         template<class Callback>
         void Defer(const Callback& onDone, Result result);
@@ -147,7 +148,7 @@ namespace fs
         infra::IntrusiveList<FatFile> openFiles;
         infra::IntrusiveList<FatDirectory> openDirectories;
         OperationQueue queue;
-        FatBackgroundScan background;
+        FatBackgroundScan* background{ nullptr };
         FatOperation operation;
         uint32_t generation{ 0 };
         bool mounted{ false };

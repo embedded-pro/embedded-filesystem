@@ -320,16 +320,18 @@ The template arguments of `fs::FatFileSystem::WithStorage<Files, CacheSectors, L
 | `freeRuns`       | 8       | The cache of free runs                                        |
 | `maxNameBytes`   | 255     | The longest name in UTF-8 bytes, and the buffer that holds it |
 
-`fs::FatFeatures` leaves out calls that a product never makes, so that their code is not linked; a call that is left out completes with `unsupported` on a mounted volume, and with `notMounted` otherwise, before its path is validated.
+`fs::FatFeatures` leaves out what a product does not need, so that its code is not linked: calls it never makes, which then complete with `unsupported` on a mounted volume, and with `notMounted` otherwise, before their paths are validated, and work that it can do without.
 Every feature is in by default.
 
-| `fs::FatFeatures` | Leaves out      |
-|-------------------|-----------------|
-| `makeDirectory`   | `MakeDirectory` |
-| `remove`          | `Remove`        |
-| `rename`          | `Rename`        |
-| `expectSize`      | `ExpectSize`    |
-| `usage`           | `Usage`         |
+| `fs::FatFeatures` | Leaves out                                                                                                                                                                                                            |
+|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `makeDirectory`   | `MakeDirectory`                                                                                                                                                                                                       |
+| `remove`          | `Remove`                                                                                                                                                                                                              |
+| `rename`          | `Rename`                                                                                                                                                                                                              |
+| `expectSize`      | `ExpectSize`                                                                                                                                                                                                          |
+| `usage`           | `Usage`                                                                                                                                                                                                               |
+| `backgroundScan`  | The count of the free clusters while the volume is idle: `Usage` counts them on its first call, and until then a file opened for appending starts at the allocation cursor instead of in a whole free allocation unit |
+| `timestamps`      | The time of entries: every entry is dated 1980-01-01 00:00:00, as with a clock that is not set                                                                                                                        |
 
 F-1 measures the volume with every feature left out as `embedded-filesystem/fat-minimal`.
 

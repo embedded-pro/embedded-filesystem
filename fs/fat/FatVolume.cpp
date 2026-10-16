@@ -24,17 +24,14 @@ namespace fs
         , freeSpace(parts.cache, state, parts.freeRuns)
         , tableWriter(parts.cache, state.geometry)
         , allocator(parts.cache, state, tableWriter, *this, freeSpace)
-        , entryUpdate(parts.cache, reader, config.timerServiceId)
+        , entryUpdate(parts.cache, reader, *this)
         , chainFree(parts.cache, transfers, state, tableWriter, freeSpace, config.discard)
         , dirtyFlag(parts.cache, state)
         , closedFiles(parts.closedFiles)
         , queue(config.idleDelay, [this]
               {
-                  background.Idle();
-              })
-        , background(queue, freeSpace, [this](Result result)
-              {
-                  Report(result);
+                  if (background != nullptr)
+                      background->Idle();
               })
     {}
 
@@ -157,7 +154,7 @@ namespace fs
 
     FatDateTime FatVolume::Timestamp() const
     {
-        return ToFatDateTime(infra::Now(timerServiceId));
+        return operations.now != nullptr ? operations.now(timerServiceId) : fatEpoch;
     }
 
     uint32_t FatVolume::Generation() const
@@ -189,13 +186,17 @@ namespace fs
         dirtyFlag.Reset();
         ++generation;
         mounted = true;
-        background.Start();
+
+        if (background != nullptr)
+            background->Start();
     }
 
     void FatVolume::MarkUnmounted(Result reason)
     {
         mounted = false;
-        background.Stop();
+
+        if (background != nullptr)
+            background->Stop();
 
         while (!openFiles.empty())
             openFiles.front().Detach();
@@ -240,5 +241,10 @@ namespace fs
     {
         if (result == Result::mediaRemoved)
             onMediaRemoved();
+    }
+
+    void FatVolume::AttachBackground(FatBackgroundScan& scan)
+    {
+        background = &scan;
     }
 }

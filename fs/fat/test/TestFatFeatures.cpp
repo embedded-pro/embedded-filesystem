@@ -5,18 +5,20 @@
 #include "infra/util/test_helper/MockCallback.hpp"
 #include "gmock/gmock.h"
 #include <array>
+#include <chrono>
 #include <optional>
 
 namespace
 {
     constexpr fs::FatFeatures withoutChanges{ .makeDirectory = false, .remove = false, .rename = false, .expectSize = false, .usage = false };
 
-    class FatFeaturesTest
+    template<fs::FatFeatures Features>
+    class FatFeaturesFixture
         : public testing::Test
         , public infra::ClockFixture
     {
     public:
-        FatFeaturesTest()
+        FatFeaturesFixture()
         {
             std::optional<fs::Result> formatted;
             formatter.Format(fs::FatFormatConfig{}, [&formatted](fs::Result result)
@@ -67,9 +69,30 @@ namespace
 
         fs::SparseBlockDevice::WithStorage<64> device{ 4096 };
         fs::FatFormatter::WithStorage<8> formatter{ device };
-        fs::FatFileSystem::WithStorage<1, 4, fs::FatLimits{}, withoutChanges> volume{ device };
+        fs::FatFileSystem::WithStorage<1, 4, fs::FatLimits{}, Features> volume{ device };
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
         std::array<uint8_t, 100> data{};
+    };
+
+    class FatFeaturesTest
+        : public FatFeaturesFixture<withoutChanges>
+    {};
+
+    class FatWithoutBackgroundScanTest
+        : public FatFeaturesFixture<fs::FatFeatures{ .backgroundScan = false }>
+    {
+    public:
+        void ExpectUsage(fs::Result result)
+        {
+            volume.Usage([this](fs::Result result, fs::VolumeUsage usage)
+                {
+                    this->usage = usage;
+                    done.callback(result);
+                });
+            ExpectDone(result);
+        }
+
+        fs::VolumeUsage usage;
     };
 }
 
@@ -144,4 +167,31 @@ TEST_F(FatFeaturesTest, the_calls_that_stay_enabled_write_and_read_files)
         });
     ExpectDone(fs::Result::success);
     EXPECT_EQ(data, readBack);
+}
+
+TEST_F(FatWithoutBackgroundScanTest, nothing_is_read_while_the_volume_is_idle)
+{
+    volume.Mount(Done());
+    ExpectDone(fs::Result::success);
+    auto reads = device.ReadRequests();
+
+    ForwardTime(std::chrono::seconds(1));
+
+    EXPECT_EQ(reads, device.ReadRequests());
+}
+
+TEST_F(FatWithoutBackgroundScanTest, usage_counts_the_free_clusters_on_its_first_call)
+{
+    volume.Mount(Done());
+    ExpectDone(fs::Result::success);
+    auto reads = device.ReadRequests();
+
+    ExpectUsage(fs::Result::success);
+    EXPECT_LT(reads, device.ReadRequests());
+    EXPECT_EQ(0u, usage.usedBytes);
+    EXPECT_LT(0u, usage.totalBytes);
+
+    reads = device.ReadRequests();
+    ExpectUsage(fs::Result::success);
+    EXPECT_EQ(reads, device.ReadRequests());
 }

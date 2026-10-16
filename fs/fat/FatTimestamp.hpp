@@ -14,7 +14,10 @@ namespace fs
         bool operator==(const FatDateTime& other) const = default;
     };
 
+    constexpr FatDateTime fatEpoch{ (1 << 5) | 1, 0 };
+
     FatDateTime ToFatDateTime(infra::TimePoint time);
+    FatDateTime FatNow(uint32_t timerServiceId);
 }
 
 #endif

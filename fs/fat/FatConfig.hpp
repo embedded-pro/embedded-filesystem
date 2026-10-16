@@ -25,6 +25,8 @@ namespace fs
         bool rename{ true };
         bool expectSize{ true };
         bool usage{ true };
+        bool backgroundScan{ true };
+        bool timestamps{ true };
     };
 
     struct FatConfig

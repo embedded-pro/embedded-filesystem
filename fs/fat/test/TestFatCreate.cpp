@@ -400,6 +400,7 @@ namespace
 
         infra::DerivedTimerService localTime{ localTimeTimerServiceId, systemTimerService };
         fs::FatFileSystem::WithStorage<2, 4> timed{ device, LocalTime() };
+        fs::FatFileSystem::WithStorage<2, 4, fs::FatLimits{}, fs::FatFeatures{ .timestamps = false }> untimed{ device, LocalTime() };
     };
 }
 
@@ -441,6 +442,41 @@ TEST_F(FatCreateTimestampTest, sync_after_a_write_updates_the_write_time)
     EXPECT_EQ(created.time, entry.createTime);
     EXPECT_EQ(written.time, entry.writeTime);
     EXPECT_EQ(written.date, entry.writeDate);
+}
+
+TEST_F(FatCreateTimestampTest, a_volume_without_timestamps_dates_every_entry_1980)
+{
+    untimed.Mount([this](fs::Result result)
+        {
+            lifecycleDone.callback(result);
+        });
+    EXPECT_CALL(lifecycleDone, callback(fs::Result::success));
+    ExecuteAllActions();
+    infra::SharedPtr<fs::File> file;
+    untimed.Open("/new.txt", fs::OpenMode::write, [this, &file](fs::Result result, infra::SharedPtr<fs::File> opened)
+        {
+            file = opened;
+            openDone.callback(result);
+        });
+    EXPECT_CALL(openDone, callback(fs::Result::success));
+    ExecuteAllActions();
+    std::array<uint8_t, 4> data{ 1, 2, 3, 4 };
+    file->Write(infra::MakeRange(data), [this](fs::Result result)
+        {
+            done.callback(result);
+        });
+    ExpectDone(fs::Result::success);
+    file->Sync([this](fs::Result result)
+        {
+            done.callback(result);
+        });
+    ExpectDone(fs::Result::success);
+
+    auto entry = RawEntry(fs::FatEntryPosition{ 0, 0 });
+    EXPECT_EQ(fs::fatEpoch.date, entry.createDate);
+    EXPECT_EQ(fs::fatEpoch.time, entry.createTime);
+    EXPECT_EQ(fs::fatEpoch.date, entry.writeDate);
+    EXPECT_EQ(fs::fatEpoch.time, entry.writeTime);
 }
 
 TEST_F(FatCreateTest, default_timer_service_dates_files_1980)

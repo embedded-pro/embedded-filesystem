@@ -117,6 +117,28 @@ namespace fs
         }
 
         void StartFatExpectSize(FatVolume& volume, FatOpenFile& file, FatExtentCache& extents, uint32_t size, const infra::Function<void(Result result)>& onDone);
+
+        template<bool Enabled>
+        struct FatBackgroundStorage
+        {
+            explicit FatBackgroundStorage(FatVolume&)
+            {}
+        };
+
+        template<>
+        struct FatBackgroundStorage<true>
+        {
+            explicit FatBackgroundStorage(FatVolume& volume)
+                : scan(volume.Queue(), volume.FreeSpace(), [&volume](Result result)
+                      {
+                          volume.Report(result);
+                      })
+            {
+                volume.AttachBackground(scan);
+            }
+
+            FatBackgroundScan scan;
+        };
     }
 
     template<FatFeatures Features>
@@ -134,6 +156,8 @@ namespace fs
             operations.expectSize = &detail::StartFatExpectSize;
         if constexpr (Features.usage)
             operations.usage = &detail::StartFatOperation<FatUsage, FatUsageCall>;
+        if constexpr (Features.timestamps)
+            operations.now = &FatNow;
 
         return operations;
     }
@@ -175,6 +199,7 @@ namespace fs
         typename infra::BoundedVector<FatPathSlot>::template WithMaxSize<Limits.pathOperations> pathSlots;
         HandlePool<FatDirectory, Limits.directories> directories{ Volume() };
         HandlePool<FatFile::WithExtents<Limits.extentsPerFile>, Files> files{ Volume() };
+        detail::FatBackgroundStorage<Features.backgroundScan> background{ Volume() };
     };
 
     constexpr std::array<FatFileSystem::Machine::Transition, 7> FatFileSystem::Rows()
