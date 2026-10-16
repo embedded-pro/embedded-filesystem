@@ -24,6 +24,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 namespace fs
 {
@@ -99,6 +100,7 @@ namespace fs
         infra::Function<void(Result result)> onMountDone;
         infra::Function<void(Result result)> onUnmountDone;
         infra::Function<void(Result result)> lifecycleDone;
+        std::optional<NorRecordPosition> replayCheckpointBefore;
         Result lifecycleResult{ Result::success };
     };
 

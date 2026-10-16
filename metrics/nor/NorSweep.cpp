@@ -140,6 +140,17 @@ namespace metrics
         return Volume().Journal().IsMoreThanHalfFull();
     }
 
+    std::size_t NorSweepVolume::FileSystem::ModifiedNodes()
+    {
+        return Volume().Cache().ModifiedNodes();
+    }
+
+    bool NorSweepVolume::FileSystem::RecordsStartOutsideTheCheckpointBlock()
+    {
+        const auto& state = Volume().State();
+        return state.checkpoint.recordsBlock != state.checkpointBlock;
+    }
+
     infra::SharedPtr<fs::NorDirectory> NorSweepVolume::FileSystem::AllocateDirectory()
     {
         return directories.Allocate();
@@ -211,6 +222,16 @@ namespace metrics
     bool NorSweepVolume::JournalMoreThanHalfFull()
     {
         return fileSystem.JournalMoreThanHalfFull();
+    }
+
+    std::size_t NorSweepVolume::ModifiedNodes()
+    {
+        return fileSystem.ModifiedNodes();
+    }
+
+    bool NorSweepVolume::RecordsStartOutsideTheCheckpointBlock()
+    {
+        return fileSystem.RecordsStartOutsideTheCheckpointBlock();
     }
 
     fs::NorCounters NorSweepVolume::Counters() const

@@ -190,7 +190,7 @@ namespace fs
             return block;
         }
 
-        infra::BoundedVector<NorEntry>::WithMaxSize<10> entries;
+        infra::BoundedVector<NorEntry>::WithMaxSize<16> entries;
         std::array<uint8_t, 512> recordBuffer{};
     };
 }

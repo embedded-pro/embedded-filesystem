@@ -432,8 +432,11 @@ public:
     std::map<uint32_t, uint32_t> setUpDataBlocks;
     uint32_t mostMoves{ 0 };
     std::vector<std::string> removedDirectories;
+    uint32_t replayedDirectories{ 0 };
+    bool replayCheckpointed{ false };
 
     static constexpr std::size_t initialLog = 100;
+    static constexpr std::size_t largerCache = 24;
     static constexpr uint32_t wornEraseCount = 9;
     static constexpr std::size_t youngFreeBlocks = 6;
     static constexpr std::size_t appendAfterLoss = 1000;
@@ -443,6 +446,107 @@ public:
     {
         config.journalBlocks = journalBlocks;
         return config;
+    }
+
+    static fs::NorConfig WithCache(fs::NorConfig config, std::size_t cachedNodes)
+    {
+        config.cachedNodes = cachedNodes;
+        return config;
+    }
+
+    static std::string ReplayedName(uint32_t index)
+    {
+        return "/r" + std::to_string(index);
+    }
+
+    void SetUpReplay(Context& context)
+    {
+        auto larger = WithCache(longJournal, largerCache);
+        ASSERT_EQ(fs::Result::success, metrics::Format(context, larger));
+        {
+            metrics::NorSweepVolume volume{ context, larger };
+            ASSERT_EQ(fs::Result::success, volume.Mount());
+            replayedDirectories = 0;
+            while (volume.ModifiedNodes() <= config.cachedNodes)
+                ASSERT_EQ(fs::Result::success, volume.MakeDirectory(ReplayedName(replayedDirectories++)));
+
+            ASSERT_EQ(fs::Result::success, volume.OpenFile("/g", fs::OpenMode::write));
+            ASSERT_EQ(fs::Result::success, volume.Write(FileBytes(0, payload / 2)));
+            ASSERT_EQ(fs::Result::success, volume.Close());
+        }
+
+        WearFreeBlocks(context, 0, std::nullopt, wornEraseCount);
+    }
+
+    void ReplayWithTheSmallerCache(Context& context)
+    {
+        replayCheckpointed = false;
+        metrics::NorSweepVolume volume{ context, longJournal };
+        if (volume.Mount() != fs::Result::success)
+            return;
+
+        replayCheckpointed = volume.RecordsStartOutsideTheCheckpointBlock();
+        if (volume.MakeDirectory("/m") != fs::Result::success)
+            return;
+
+        volume.Unmount();
+    }
+
+    std::optional<std::string> VerifyReplayed(Context& context, bool uncut) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        for (uint32_t index = 0; index != replayedDirectories; ++index)
+            if (check.Find(ReplayedName(index)) == nullptr)
+                return ReplayedName(index) + " is lost";
+
+        const auto* file = check.Find("/g");
+        if (file == nullptr || metrics::ReadContents(image, check, *file) != FileBytes(0, payload / 2))
+            return "/g is lost";
+
+        if (uncut && (!replayCheckpointed || check.Find("/m") == nullptr))
+            return "the run without a cut did not checkpoint during replay and make /m";
+
+        {
+            metrics::NorSweepVolume volume{ context, WithCache(longJournal, largerCache) };
+            if (volume.Mount() != fs::Result::success)
+                return "the volume does not mount with the larger cache";
+
+            for (uint32_t index = 0; index != replayedDirectories; ++index)
+                if (volume.TypeOf(ReplayedName(index)) != fs::EntryType::directory)
+                    return "the larger cache and the checker disagree on " + ReplayedName(index);
+
+            if (volume.ReadFile("/g") != FileBytes(0, payload / 2))
+                return "the larger cache reads other contents of /g than the checker";
+        }
+
+        {
+            metrics::NorSweepVolume volume{ context, longJournal };
+            if (volume.Mount() != fs::Result::success)
+                return "the volume does not mount with the smaller cache";
+
+            for (uint32_t index = 0; index != replayedDirectories; ++index)
+                if (volume.TypeOf(ReplayedName(index)) != fs::EntryType::directory)
+                    return "the library and the checker disagree on " + ReplayedName(index);
+
+            if (volume.TypeOf("/m").has_value() != (check.Find("/m") != nullptr))
+                return "the library and the checker disagree on /m";
+
+            if (volume.ReadFile("/g") != FileBytes(0, payload / 2))
+                return "the library reads other contents of /g than the checker";
+
+            if (volume.MakeDirectory("/z") != fs::Result::success || volume.Unmount() != fs::Result::success)
+                return "a change after the mount fails";
+        }
+
+        auto after = metrics::CheckImage(context, model);
+        if (after.problem.has_value())
+            return "after a change after the mount: " + *after.problem;
+
+        return std::nullopt;
     }
 
     static fs::NorConfig WithLeveling(fs::NorConfig config)
@@ -693,6 +797,40 @@ public:
             return;
 
         volume.Unmount();
+    }
+
+    void AppendAndUnmountWithTheFileOpen(Context& context) const
+    {
+        metrics::NorSweepVolume volume{ context, config };
+        if (volume.Mount() != fs::Result::success || volume.OpenFile("/log", fs::OpenMode::append) != fs::Result::success)
+            return;
+
+        for (std::size_t index = 0; index != appends.size(); ++index)
+            if (volume.Write(FileBytes(SizeAfter(index), appends[index])) != fs::Result::success)
+                return;
+
+        volume.Unmount();
+    }
+
+    std::optional<std::string> VerifyUnmountedWithTheFileOpen(Context& context, bool uncut) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        const auto* log = check.Find("/log");
+        if (log == nullptr)
+            return "the log is gone";
+
+        auto contents = metrics::ReadContents(image, check, *log);
+        if (auto problem = ExpectCommitted(contents, { initialLog, SizeAfter(appends.size()) }, "/log"))
+            return problem;
+
+        if (uncut && contents.size() != SizeAfter(appends.size()))
+            return "the run without a cut did not commit the open file at the unmount";
+
+        return VerifyAfterMount(context, "/log", contents);
     }
 
     std::optional<std::string> VerifyLog(Context& context, bool uncut) const
@@ -1914,6 +2052,40 @@ TEST_P(NorAppendPowerCut, the_fallback_of_static_wear_leveling_moves_node_blocks
     SweepLevelingFallback("leveling-fallback-nodes", false);
 
     EXPECT_LE(1, mostMoves);
+}
+
+TEST_P(NorAppendPowerCut, an_unmount_commits_a_file_left_open_completely_or_not_at_all)
+{
+    SweepEveryMode(
+        model, "unmount with an open file", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpLog(context);
+        },
+        [this](Context& context)
+        {
+            AppendAndUnmountWithTheFileOpen(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return VerifyUnmountedWithTheFileOpen(context, uncut);
+        });
+}
+
+TEST_P(NorAppendPowerCut, a_mount_with_a_smaller_cache_than_the_writer_checkpoints_during_replay_and_a_cut_leaves_consistent)
+{
+    SweepEveryMode(
+        model, "replay with a smaller cache", metrics::SweepRamBytes(model), [this](Context& context)
+        {
+            SetUpReplay(context);
+        },
+        [this](Context& context)
+        {
+            ReplayWithTheSmallerCache(context);
+        },
+        [this](Context& context, bool uncut)
+        {
+            return VerifyReplayed(context, uncut);
+        });
 }
 
 INSTANTIATE_TEST_SUITE_P(Nor, NorAppendPowerCut, testing::Values(&metrics::norSweep128k, &metrics::internalSweep96k, &metrics::norSweep128kTwoSectors), ParameterName);

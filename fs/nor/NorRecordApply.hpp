@@ -51,6 +51,7 @@ namespace fs
         bool IsOfEpoch(uint32_t block) const;
         uint32_t BlocksOfSize(uint32_t size) const;
         std::optional<infra::ConstByteRange> RecordOfType(uint32_t inode, NorInodeType type) const;
+        bool HasRoomFor(uint32_t createdNodes) const;
         bool IsInVolume(uint32_t block) const;
         bool IsFreeBlock(uint32_t block) const;
         void Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, const infra::Function<void()>& onFetchedDone);

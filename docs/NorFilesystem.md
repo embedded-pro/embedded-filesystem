@@ -300,7 +300,7 @@ It is written between operations, so it holds only committed state, and as one u
    The address of a written node replaces its address in the cache in its parent, which is written later; the address of the root of a data map or a directory map goes into the record of its inode in the inode table, and the address of the root of the inode table into the checkpoint.
 2. When a collection is due, a collection step for the garbage collection of node blocks, described below, and the nodes it modified are written as in step 1.
 3. A new checkpoint block is allocated and programmed with the checkpoint, in pieces of the size of the journal buffer, the last of which holds the CRC.
-   The bitmap marks every block that is in use in RAM, except the previous checkpoint block and the blocks of its epoch.
+   The bitmap marks every block that is in use in RAM, except the previous checkpoint block and the blocks of its epoch, and always marks the block where the records of the new epoch start.
 
 | Offset          | Size       | Field                                           |
 |-----------------|------------|-------------------------------------------------|
@@ -424,7 +424,13 @@ A power loss before step 5 leaves a device that completes `Mount` with `corrupte
    A block that the checkpoint marks is in use even when its header is erased or of another type, because a record of the epoch may have released it, and it may have been erased and allocated again since; replaying that record releases it again, unless the block is now a journal block of the epoch.
    The exception is a marked block whose header says journal or checkpoint: apart from the checkpoint block and the block where its records start, it is in use only when the journal chain reaches it.
 4. Replay the records of the epoch, as described under [Journal](#journal).
-   Only a configuration with a smaller cache than the one that wrote the journal can fill the cache during replay; the mount then writes a checkpoint whose epoch starts at the next record to replay, which is why a checkpoint names where its records start.
+   Only a configuration with a smaller cache than the one that wrote the journal can fill the cache during replay, which is why a checkpoint names where its records start.
+   A record that finds no room in the cache, for the nodes on its paths or for the nodes its splits create, stops the replay before it changes anything on the flash; the mount then starts again from the header scan, and this time writes a checkpoint right before that record.
+   Before writing it, the mount reads the records from that one to the end of the epoch and marks every free block that they map as allocated but not committed, so that the checkpoint neither takes nor erases a block that a later record maps.
+   That checkpoint names the journal block and offset of the record as where its records start, keeps that block and the blocks after it in the epoch, frees the blocks before it and the previous checkpoint block unless the record is in it, and replay goes on from the record.
+   A record that starts a journal block begins with its link, which replay skips; a record that does not fit even after the checkpoint makes the mount complete with `unsupported`, which no record the library writes does with the minimum cache of 15 nodes.
+   The checkpoint completes the mount with `noSpace` when no free block is left for it: on a nearly full volume, the blocks that later records map are held, and the blocks they release are still in use until their records are replayed.
+   A mount with the cache of the writer still mounts the volume, because that checkpoint programs and erases only free blocks.
 5. Classify the remaining blocks: blocks with a valid part A and an erased part B are free and erased; every other block that is not in use is free and not erased.
    A block whose part A is not valid, because its erase was interrupted, gets the average erase count of the device as an estimate, as UBI does on Linux; this happens at most once per power loss and per block.
    Static wear leveling erases the most-worn blocks, so such an estimate usually lowers the count of a worn block, by at most the spread, until its next erase.
@@ -469,6 +475,7 @@ The superblocks never change after formatting.
 | Programming a record               | The record has an invalid CRC and is ignored; the operation did not happen                                                                                             |
 | Programming data before its record | The blocks are not referenced by any committed record and are free; the file has its committed contents                                                                |
 | Writing a checkpoint               | The previous checkpoint and its journal are used, with the nodes in the node blocks the collection step passed, which stay in use until the new checkpoint is complete |
+| Writing a checkpoint during replay | The previous checkpoint and its whole journal are used, and the next mount with the smaller cache writes the checkpoint again                                          |
 | Erasing a block                    | The block has no valid part A; it is erased again and its count is estimated                                                                                           |
 | Programming part A or part B       | As for an interrupted erase, or the block is not in use and is free                                                                                                    |
 | Moving a block for wear leveling   | Either the old or the new location is referenced, never neither: a copied data block is free until its record commits, and a node block moves with a checkpoint        |
@@ -502,7 +509,7 @@ The power-cut sweep in [Testing.md](Testing.md) interrupts every operation and b
 | Each open file | Position, size, 8 uncommitted entries and a buffer of one page, or of the inline area if larger |
 
 For a 16 MiB device with 4 KiB blocks, that is 4096 blocks, so 1 KiB for the block states, 4 KiB for the erase counts and 0.5 KiB for the node blocks, plus 8 KiB for the default cache of 16 nodes of 512 bytes, and about 0.6 KiB per open file: about 14 KiB with one open file.
-The state of the volume, its handles and its operations comes on top: the metrics report 19,528 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M.
+The state of the volume, its handles and its operations comes on top: the metrics report 19,544 bytes for the volume with one open file on `nor-qspi-16m`, measured on the 64-bit host, where pointers take twice their size on Cortex-M.
 Using larger blocks reduces the tables proportionally: with 64 KiB blocks, the same device needs 352 bytes for block states, erase counts and node blocks, and about 9 KiB in all.
 This is more RAM than littlefs needs for the same device; it is the price of allocation without traversal and of wear leveling based on actual erase counts.
 

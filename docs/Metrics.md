@@ -145,6 +145,60 @@ What the baselines show:
 * littlefs levels wear only dynamically: with 70 % static data, the most erased block is erased 13.8 times as often as the average one.
 * `littlefs/default` programs 16 B at a time, and the model charges every program request a whole page program, which is why it writes three times slower than `littlefs/ram-matched`; this is a pessimistic assumption until the models are calibrated on hardware.
 
+### NOR results
+
+The results of `embedded-filesystem/nor`, from the same run as the littlefs baselines, on the typical timings except W-6, which uses the maximum timings.
+
+On `nor-qspi-16m`:
+
+| Metric | Measurement                                           | `embedded-filesystem/nor` | `littlefs/default` | `littlefs/ram-matched` |
+|--------|-------------------------------------------------------|---------------------------|--------------------|------------------------|
+| W-1    | Sequential write of 4 MiB in 4 KiB chunks (kB/s)      | 77.4                      | 27.7               | 79.4                   |
+| W-2    | Append and sync at 4 MiB against 4 KiB, 50 % full     | 1.05                      | 1.01               | 1                      |
+| W-3    | Append and sync on a 90 % against a 10 % full volume  | 1                         | 1                  | 1                      |
+| W-4    | Write amplification of the data logger, 50 % full     | 1.99                      | 33.6               | 35.1                   |
+| W-5    | Overwrite in a 4 MiB against a 64 KiB file, 50 % full | 1.04                      | 64.2               | 60.2                   |
+| W-6    | Longest append and sync at maximum timings (ms)       | not measured              | 1653               | 851                    |
+| R-1    | Sequential read (MB/s)                                | 50                        | 49.2               | 48.9                   |
+| R-2    | Device reads for a random 512 B read in a 4 MiB file  | 1.19                      | 39.6               | 7.86                   |
+| R-4    | Mount of a 90 % full volume (ms)                      | 3.17                      | 0.3                | 0.33                   |
+| WL-1   | Erase spread with 70 % static data, short run         | 2.75                      | 13.8               | 13.8                   |
+|        | RAM (B)                                               | 19544                     | 328                | 13064                  |
+
+On `internal-flash`, with the file sizes divided by 64:
+
+| Metric | Measurement                                           | `embedded-filesystem/nor` | `littlefs/default` | `littlefs/ram-matched` |
+|--------|-------------------------------------------------------|---------------------------|--------------------|------------------------|
+| W-1    | Sequential write of 64 KiB in 4 KiB chunks (kB/s)     | 91.9                      | 94.5               | 94.5                   |
+| W-2    | Append and sync at 64 KiB against 4 KiB, 50 % full    | 0.708                     | 1                  | 1                      |
+| W-3    | Append and sync on a 90 % against a 10 % full volume  | 0.907                     | 1                  | 1                      |
+| W-4    | Write amplification of the data logger, 50 % full     | 1.76                      | 17.5               | 18.9                   |
+| W-5    | Overwrite in a 64 KiB against a 1 KiB file, 50 % full | 1.18                      | 18.5               | 18.5                   |
+| W-6    | Longest append and sync at maximum timings (ms)       | 14                        | 41.1               | 42                     |
+| R-1    | Sequential read (MB/s)                                | 100                       | 97.2               | 79.2                   |
+| R-2    | Device reads for a random 512 B read in a 64 KiB file | 1.11                      | 35.8               | 4.03                   |
+| R-4    | Mount of a 90 % full volume (ms)                      | 0.0783                    | 0.127              | 0.146                  |
+| WL-1   | Erase spread with 70 % static data, short run         | 2.75                      | 3                  | 3                      |
+|        | RAM (B)                                               | 14080                     | 328                | 6440                   |
+
+On the lifetime run of L5 on `nor-qspi-1m`, until a block reaches 1000 erases:
+
+| Metric | Measurement                                               | `embedded-filesystem/nor` | `littlefs/default` | `littlefs/ram-matched` |
+|--------|-----------------------------------------------------------|---------------------------|--------------------|------------------------|
+| WL-1   | Erase spread                                              | 1.02                      | 3.15               | 3.15                   |
+| WL-2   | Leveling efficiency                                       | 0.977                     | 0.318              | 0.318                  |
+| WL-3   | User data written (MiB)                                   | 935                       | 315                | 315                    |
+| WL-4   | Blocks moved by static wear leveling per erased block (%) | 0.918                     | not measured       | not measured           |
+
+What the NOR results show:
+
+* An append with `Sync` programs what it adds and one journal record, so the data logger writes about twice its data, against 17 to 35 times for littlefs, and an overwrite costs about the same in a large file as in a small one.
+* A random read follows the radix map of the file, cached after the first reads, so it takes about one device read in any file size.
+* The mount reads the header of every block, so it is the one metric where littlefs is faster on a large device: 3.17 ms against 0.3 ms on `nor-qspi-16m`.
+* With static wear leveling, the erase spread stays near 1 over the life of the device, and the volume takes almost three times as much user data before a block reaches 1000 erases.
+* On `internal-flash`, W-2 is below 1, because the 64 KiB log holds about 8 checkpoint periods and collection runs in bursts further apart than its windows; it is reported there, as is W-1 on the smaller files of L1.
+* The NOR subject uses more RAM than `littlefs/ram-matched` for its block states, erase counts and node cache, as [NorFilesystem.md](NorFilesystem.md#ram-use) details.
+
 ## Workloads
 
 All workloads use a fixed random seed.
@@ -240,6 +294,34 @@ WL-3 is reported, and `merge_report.py` adds its ratio to the best littlefs subj
 | P-1 | Power-cut sweep | Share of cut points after which the volume mounts consistently and every file holds its previous or its new contents | NOR: 100 %, with the interrupted program or erase not started, partial or completed. FAT: 100 % with atomic sector writes, also when unflushed writes are lost or reordered, and reported with torn sector writes |
 
 The sweep is described in [Testing.md](Testing.md).
+
+On NOR, every case of the sweep holds at 100 % on the three sweep models, with the interrupted program or erase not started, partial and completed.
+The cut points of a case are the programs and sector erases of its swept phase, and each is cut in the three modes, 18,150 cuts in all:
+
+| Case                                           | `nor-128k` | `internal-96k` | `nor-128k-two-sector-blocks` |
+|------------------------------------------------|------------|----------------|------------------------------|
+| format                                         | 68         | 100            | 100                          |
+| make directory                                 | 146        | 187            | 156                          |
+| append                                         | 46         | 291            | 47                           |
+| append after a cut with uncommitted pages      | 25         | 80             | 27                           |
+| append after a cut with an uncommitted block   | 42         | 84             | 48                           |
+| journal in a released block                    | 20         | 77             | 22                           |
+| write nine blocks                              | 188        | 1144           | 199                          |
+| overwrite                                      | 81         | 52             | 86                           |
+| overwrite after a cut with an uncommitted copy | 54         | 34             | 60                           |
+| truncate                                       | 22         | 24             | 22                           |
+| journal in a removed block                     | 7          | 7              | 8                            |
+| remove                                         | 16         | 16             | 15                           |
+| rename                                         | 20         | 21             | 19                           |
+| background                                     | 63         | 89             | 89                           |
+| collection                                     | 54         | 52             | 60                           |
+| leveling-data                                  | 114        | 141            | 144                          |
+| leveling-nodes                                 | 66         | 98             | 96                           |
+| leveling-fallback                              | 83         | 291            | 90                           |
+| leveling-fallback-nodes                        | 57         | 271            | 63                           |
+| unmount with an open file                      | 37         | 283            | 40                           |
+| replay with a smaller cache                    | 33         | 37             | 38                           |
+| Total                                          | 1242       | 3379           | 1429                         |
 
 M-2 counts blocks rather than requests, and every block of a request after its first follows the block before it, so writing the same blocks in fewer, larger requests leaves the share unchanged; only a block that neither starts an allocation unit nor follows the previous one counts against it.
 Counted by requests, a filesystem that coalesces small writes would lower its share by sending fewer data requests next to the same number of metadata requests.

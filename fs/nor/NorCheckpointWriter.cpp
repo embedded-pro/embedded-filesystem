@@ -1,6 +1,7 @@
 #include "fs/nor/NorCheckpointWriter.hpp"
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorVolume.hpp"
+#include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 #include <utility>
 
@@ -18,6 +19,18 @@ namespace fs
     NorCheckpointWriter::~NorCheckpointWriter() = default;
 
     void NorCheckpointWriter::Write(const infra::Function<void(Result result)>& onWritten)
+    {
+        replayRecords = std::nullopt;
+        Start(onWritten);
+    }
+
+    void NorCheckpointWriter::WriteBefore(const NorRecordPosition& records, const infra::Function<void(Result result)>& onWritten)
+    {
+        replayRecords = records;
+        Start(onWritten);
+    }
+
+    void NorCheckpointWriter::Start(const infra::Function<void(Result result)>& onWritten)
     {
         onDone = onWritten;
         collectionDue = volume.Collector().Due();
@@ -97,7 +110,8 @@ namespace fs
         const auto& geometry = volume.Geometry();
         block = allocated.value_or(0);
         state.blocks.Set(block, NorBlockState::inUse);
-        checkpoint = NorCheckpoint{ state.inodeTable.address, state.inodeTable.height, state.nextInode, block, geometry.HeaderSize() + geometry.RoundToProgramUnit(geometry.CheckpointBytes()), state.liveNodes - volume.Cache().ReleasedNodes(), geometry.blocks };
+        auto records = replayRecords.value_or(NorRecordPosition{ block, geometry.HeaderSize() + geometry.RoundToProgramUnit(geometry.CheckpointBytes()) });
+        checkpoint = NorCheckpoint{ state.inodeTable.address, state.inodeTable.height, state.nextInode, records.block, records.offset, state.liveNodes - volume.Cache().ReleasedNodes(), geometry.blocks };
         SerializeNorCheckpointFixedPart(checkpoint, infra::MakeRange(fixedPart));
         written = 0;
         crc.Reset();
@@ -137,9 +151,12 @@ namespace fs
     void NorCheckpointWriter::Commit()
     {
         auto& state = volume.State();
-        state.blocks.Set(state.checkpointBlock, NorBlockState::freeNotErased);
-        for (auto epochBlock : state.epoch)
-            state.blocks.Set(epochBlock, NorBlockState::freeNotErased);
+        auto kept = std::ranges::find(state.epoch, checkpoint.recordsBlock);
+        really_assert(!replayRecords.has_value() || kept != state.epoch.end());
+        if (state.checkpointBlock != checkpoint.recordsBlock)
+            state.blocks.Set(state.checkpointBlock, NorBlockState::freeNotErased);
+        for (auto epochBlock = state.epoch.begin(); epochBlock != kept; ++epochBlock)
+            state.blocks.Set(*epochBlock, NorBlockState::freeNotErased);
 
         volume.Collector().Committed();
         ++volume.Counters().checkpoints;
@@ -147,10 +164,19 @@ namespace fs
         volume.Cache().ClearReleasedNodes();
         state.checkpoint = checkpoint;
         state.checkpointBlock = block;
-        state.journal = NorJournal{ block, checkpoint.recordsOffset, 1 };
-        state.epoch.clear();
-        state.epoch.push_back(block);
-        state.startNewJournalBlock = false;
+        if (replayRecords.has_value())
+        {
+            state.epoch.erase(state.epoch.begin(), kept);
+            state.journal.blocks = static_cast<uint32_t>(state.epoch.size());
+        }
+        else
+        {
+            state.journal = NorJournal{ block, checkpoint.recordsOffset, 1 };
+            state.epoch.clear();
+            state.epoch.push_back(block);
+            state.startNewJournalBlock = false;
+        }
+
         onDone(Result::success);
     }
 
@@ -171,7 +197,7 @@ namespace fs
     bool NorCheckpointWriter::IsInNewCheckpoint(uint32_t candidate) const
     {
         const auto& state = volume.State();
-        return state.blocks.State(candidate) == NorBlockState::inUse && candidate != state.checkpointBlock && std::ranges::find(state.epoch, candidate) == state.epoch.end();
+        return candidate == checkpoint.recordsBlock || (state.blocks.State(candidate) == NorBlockState::inUse && candidate != state.checkpointBlock && std::ranges::find(state.epoch, candidate) == state.epoch.end());
     }
 
     NorNodeWriteBack NorCheckpointWriter::WriteBack() const

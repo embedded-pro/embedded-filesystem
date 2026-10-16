@@ -66,6 +66,8 @@ namespace metrics
         fs::Result Rename(const std::string& from, const std::string& to);
         void Settle();
         bool JournalMoreThanHalfFull();
+        std::size_t ModifiedNodes();
+        bool RecordsStartOutsideTheCheckpointBlock();
         fs::NorCounters Counters() const;
         std::optional<fs::EntryType> TypeOf(const std::string& path);
         fs::Result OpenFile(const std::string& path, fs::OpenMode mode);
@@ -85,6 +87,8 @@ namespace metrics
             FileSystem(hal::Flash& flash, const fs::NorConfig& config);
 
             bool JournalMoreThanHalfFull();
+            std::size_t ModifiedNodes();
+            bool RecordsStartOutsideTheCheckpointBlock();
 
         private:
             infra::SharedPtr<fs::NorDirectory> AllocateDirectory() override;

@@ -1,3 +1,4 @@
+#include "fs/nor/NorBTree.hpp"
 #include "fs/nor/NorDirectoryKey.hpp"
 #include "fs/nor/test/NorRecordsFixture.hpp"
 #include "gmock/gmock.h"
@@ -27,6 +28,23 @@ namespace
         Record File(const char* name, uint32_t parent = root)
         {
             return Serialized(fs::NorInodeRecord{ parent, fs::NorInodeType::file, 0, 0, 0, {}, Bytes(name) });
+        }
+
+        void AddNumberedDirectories(uint32_t count)
+        {
+            for (uint32_t index = 0; index != count; ++index)
+            {
+                std::array<char, 3> name{ 'd', static_cast<char>('a' + index / 10), static_cast<char>('0' + index % 10) };
+                Builder().AddDirectory(root, infra::BoundedConstString(name.data(), name.size()));
+            }
+        }
+
+        void FillCacheWithModifiedNodes(uint32_t highestDirectory, std::size_t leftFree = 0)
+        {
+            auto record = Directory("x");
+            for (uint32_t inode = highestDirectory; Volume().Cache().ModifiedNodes() < Volume().Cache().Capacity() - leftFree; inode -= 3)
+                ASSERT_EQ(fs::Result::success, Apply({ fs::NorInodePut{ inode, infra::MakeRange(record) } })) << inode;
+            ASSERT_EQ(Volume().Cache().Capacity() - leftFree, Volume().Cache().ModifiedNodes());
         }
     };
 }
@@ -301,6 +319,25 @@ TEST_F(NorRecordApplyTest, a_block_set_to_block_0_clears_the_index_and_releases_
     EXPECT_EQ(fs::NorBlockState::freeNotErased, State().blocks.State(previous));
 }
 
+TEST_F(NorRecordApplyTest, a_released_block_that_an_uncommitted_checkpoint_took_for_nodes_is_no_longer_a_node_block)
+{
+    std::array<uint8_t, 5000> contents{};
+    auto file = Builder().AddFile(root, "f", infra::MakeRange(contents));
+    Builder().Commit();
+    Mount();
+    auto previous = BlockInVolume(file, 1);
+    Unmount();
+    Builder().EraseBlock(previous);
+    Builder().SetEraseCount(previous, 2);
+    Builder().Allocate(previous, fs::NorBlockType::node);
+    Mount();
+    ASSERT_TRUE(State().nodeBlocks.Contains(previous));
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorBlockSet{ file, 1, previous, 0 } }));
+
+    EXPECT_FALSE(State().nodeBlocks.Contains(previous));
+}
+
 TEST_F(NorRecordApplyTest, a_block_set_from_block_0_to_block_0_changes_nothing)
 {
     auto file = Builder().AddFile(root, "f", Bytes("abc"));
@@ -478,6 +515,106 @@ TEST_F(NorRecordApplyTest, a_path_that_does_not_fit_in_the_cache_is_unsupported)
     ASSERT_EQ(15, Volume().Cache().ModifiedNodes());
 
     EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorInodePut{ 47, infra::MakeRange(record) } }));
+}
+
+TEST_F(NorRecordApplyTest, an_inode_put_whose_split_the_cache_has_no_room_for_is_unsupported)
+{
+    AddNumberedDirectories(46);
+    Builder().Commit();
+    Mount();
+    FillCacheWithModifiedNodes(47);
+
+    auto record = Directory("x");
+    fs::NorBTree inodes{ Volume().Cache(), InodeTableId() };
+    uint32_t inode = 48;
+    while (inodes.NodesModifiedByInsert(State().inodeTable, inode) == inodes.NodesModifiedByChange(State().inodeTable, inode))
+        ASSERT_EQ(fs::Result::success, Apply({ fs::NorInodePut{ inode++, infra::MakeRange(record) } }));
+    ASSERT_LT(48, inode);
+
+    EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorInodePut{ inode, infra::MakeRange(record) } }));
+}
+
+TEST_F(NorRecordApplyTest, an_inode_put_into_an_unmodified_leaf_with_room_fits_a_cache_with_room_for_that_leaf)
+{
+    AddNumberedDirectories(46);
+    Builder().Commit();
+    Mount();
+    FillCacheWithModifiedNodes(44, 1);
+    auto record = Directory("x");
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorInodePut{ 48, infra::MakeRange(record) } }));
+    EXPECT_EQ(Volume().Cache().Capacity(), Volume().Cache().ModifiedNodes());
+}
+
+TEST_F(NorRecordApplyTest, a_directory_entry_put_into_an_unmodified_leaf_with_room_fits_a_cache_with_room_for_that_leaf)
+{
+    AddNumberedDirectories(60);
+    auto directory = Builder().AddDirectory(root, "d");
+    Builder().AddDirectory(directory, "e");
+    Builder().Commit();
+    Mount();
+    FillCacheWithModifiedNodes(60, 2);
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorDirectoryEntryPut{ directory, 1, 3 } }));
+    EXPECT_EQ(Volume().Cache().Capacity(), Volume().Cache().ModifiedNodes());
+}
+
+TEST_F(NorRecordApplyTest, a_directory_entry_put_whose_split_the_cache_has_no_room_for_is_unsupported)
+{
+    AddNumberedDirectories(60);
+    Builder().Commit();
+    Mount();
+    ASSERT_EQ(fs::Result::success, Apply({ fs::NorDirectoryEntryPut{ 2, 0, 3 } }));
+    FillCacheWithModifiedNodes(60);
+
+    fs::NorBTree entries{ Volume().Cache(), DirectoryId(2) };
+    auto map = [this]
+    {
+        auto record = RecordInVolume(2);
+        return fs::NorMapRoot{ record->mapRoot, record->mapHeight };
+    };
+    uint32_t key = 1;
+    while (entries.NodesModifiedByInsert(map(), key) == entries.NodesModifiedByChange(map(), key))
+        ASSERT_EQ(fs::Result::success, Apply({ fs::NorDirectoryEntryPut{ 2, key++, 3 } }));
+    ASSERT_LT(1, key);
+
+    EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorDirectoryEntryPut{ 2, key, 3 } }));
+}
+
+TEST_F(NorRecordApplyTest, a_block_set_whose_new_map_node_the_cache_has_no_room_for_is_unsupported)
+{
+    AddNumberedDirectories(60);
+    auto file = Builder().AddFile(root, "f", Bytes("abc"));
+    Builder().Commit();
+    Mount();
+    auto record = File("f");
+    ASSERT_EQ(fs::Result::success, Apply({ fs::NorInodePut{ file, infra::MakeRange(record) } }));
+    FillCacheWithModifiedNodes(60);
+
+    EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorBlockSet{ file, 0, 0, 9 } }));
+}
+
+TEST_F(NorRecordApplyTest, a_block_set_counts_the_unmodified_node_of_its_inode_as_taken)
+{
+    AddNumberedDirectories(60);
+    auto file = Builder().AddFile(root, "f", Bytes("abc"));
+    Builder().Commit();
+    Mount();
+    FillCacheWithModifiedNodes(60, 1);
+
+    EXPECT_EQ(fs::Result::unsupported, Apply({ fs::NorBlockSet{ file, 0, 0, 9 } }));
+}
+
+TEST_F(NorRecordApplyTest, a_block_set_fits_a_cache_with_room_for_the_node_of_its_inode_and_its_new_map_node)
+{
+    AddNumberedDirectories(60);
+    auto file = Builder().AddFile(root, "f", Bytes("abc"));
+    Builder().Commit();
+    Mount();
+    FillCacheWithModifiedNodes(60, 2);
+
+    EXPECT_EQ(fs::Result::success, Apply({ fs::NorBlockSet{ file, 0, 0, 9 } }));
+    EXPECT_EQ(Volume().Cache().Capacity(), Volume().Cache().ModifiedNodes());
 }
 
 namespace

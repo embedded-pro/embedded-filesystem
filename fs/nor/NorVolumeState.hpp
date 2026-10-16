@@ -23,6 +23,14 @@ namespace fs
         bool operator==(const NorJournal& other) const = default;
     };
 
+    struct NorRecordPosition
+    {
+        uint32_t block{ 0 };
+        uint32_t offset{ 0 };
+
+        bool operator==(const NorRecordPosition& other) const = default;
+    };
+
     struct NorVolumeState
     {
         NorVolumeState(infra::ByteRange blockStates, infra::ByteRange eraseCountStorage, infra::ByteRange nodeBlockStorage);
