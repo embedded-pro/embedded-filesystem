@@ -141,9 +141,9 @@ def test_the_report_lists_the_libraries_kinds_and_objects_of_every_image(tmp_pat
 
 
 def test_an_image_without_a_subject_is_named_by_its_image(tmp_path):
-    write_maps(tmp_path, {"empty": EMPTY, "spike": FAT})
+    write_maps(tmp_path, {"empty": EMPTY, "prototype": FAT})
 
-    assert "## spike: 174 B of flash, 12 B of RAM\n" in report(tmp_path, "cortex-m4")
+    assert "## prototype: 174 B of flash, 12 B of RAM\n" in report(tmp_path, "cortex-m4")
 
 
 def test_a_directory_without_the_map_of_the_empty_image_is_an_error(tmp_path):
