@@ -11,3 +11,5 @@ megalinter-reports/
 .claude/scheduled_tasks.lock
 CLAUDE.local.md
 __pycache__/
+*.egg-info/
+.venv/

@@ -1,0 +1,9 @@
+# STM32H757I-EVAL (MB1246): the validation firmware runs on the Cortex-M7 at 400 MHz from the 25 MHz HSE,
+# with its terminal on USART1 (PB14, PB15); the Cortex-M4 runs the parked image.
+board: stm32h757i-eval
+family: stm32h7
+sysclk: 400000000
+baud: 115200
+command_timeout: 2.0
+scale: 16
+devices: []

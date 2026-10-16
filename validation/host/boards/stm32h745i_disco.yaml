@@ -1,0 +1,9 @@
+# STM32H745I-DISCO (MB1381): the validation firmware runs on the Cortex-M7 at 400 MHz from the 25 MHz HSE,
+# with its terminal on USART3 (PB10, PB11); the Cortex-M4 runs the parked image.
+board: stm32h745i-disco
+family: stm32h7
+sysclk: 400000000
+baud: 115200
+command_timeout: 2.0
+scale: 16
+devices: []
