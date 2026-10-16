@@ -12,6 +12,7 @@
 #include "fs/fat/FatDirectory.hpp"
 #include "fs/fat/FatFile.hpp"
 #include "fs/fat/FatLifecycle.hpp"
+#include "fs/fat/FatLongNames.hpp"
 #include "fs/fat/FatPathSlot.hpp"
 #include "fs/fat/FatVolume.hpp"
 #include "fs/interfaces/FileSystem.hpp"
@@ -167,6 +168,9 @@ namespace fs
             operations.markClean = &detail::MarkFatClean;
             operations.readCleanState = &detail::ReadFatCleanState;
         }
+
+        if constexpr (Features.longNames)
+            operations.longNames = &fatLongNames;
 
         return operations;
     }

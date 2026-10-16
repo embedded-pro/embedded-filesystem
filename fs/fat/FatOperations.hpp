@@ -11,6 +11,7 @@ namespace fs
 {
     class FatDirtyFlag;
     class FatExtentCache;
+    struct FatLongNames;
     class FatMount;
     class FatVolume;
     struct FatOpenFile;
@@ -33,6 +34,7 @@ namespace fs
         FatDirtyMark markDirty{ nullptr };
         FatDirtyMark markClean{ nullptr };
         FatCleanState readCleanState{ nullptr };
+        const FatLongNames* longNames{ nullptr };
     };
 }
 

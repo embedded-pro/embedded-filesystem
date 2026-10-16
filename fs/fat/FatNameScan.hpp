@@ -13,6 +13,8 @@
 
 namespace fs
 {
+    struct FatLongNames;
+
     struct FatFreeSlots
     {
         FatEntryPosition first;
@@ -26,7 +28,7 @@ namespace fs
         : private FatDirectoryVisitor
     {
     public:
-        explicit FatNameScan(FatDirectoryReader& reader);
+        FatNameScan(FatDirectoryReader& reader, const FatLongNames* longNames);
         FatNameScan(const FatNameScan& other) = delete;
         FatNameScan& operator=(const FatNameScan& other) = delete;
         ~FatNameScan();
@@ -51,6 +53,7 @@ namespace fs
 
     private:
         FatDirectoryReader& reader;
+        const FatLongNames* longNames;
         uint32_t directory{ 0 };
         infra::BoundedConstString name;
         uint8_t slots{ 1 };

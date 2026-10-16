@@ -1,5 +1,6 @@
 #include "fs/fat/FatParentDirectory.hpp"
 #include "fs/common/Path.hpp"
+#include "fs/fat/FatLongNames.hpp"
 #include "fs/fat/FatName.hpp"
 #include "fs/fat/FatVolume.hpp"
 
@@ -7,8 +8,8 @@ namespace fs
 {
     FatParentDirectory::FatParentDirectory(FatVolume& volume)
         : volume(volume)
-        , scan(volume.Reader())
-        , writer(volume.Cache(), volume.Reader(), volume.Allocator(), volume.Geometry())
+        , scan(volume.Reader(), volume.Operations().longNames)
+        , writer(volume.Cache(), volume.Reader(), volume.Allocator(), volume.Geometry(), volume.Operations().longNames)
     {}
 
     FatParentDirectory::~FatParentDirectory() = default;
@@ -40,16 +41,19 @@ namespace fs
     void FatParentDirectory::PrepareAlias(const infra::Function<void(Result result)>& onDone)
     {
         this->onDone = onDone;
+        const auto* longNames = volume.Operations().longNames;
 
-        if (!scan.Slots())
+        if (!exact && longNames == nullptr)
+            this->onDone(Result::unsupported);
+        else if (!scan.Slots())
             this->onDone(Result::noSpace);
         else if (exact)
             Prepared(*exact);
         else if (auto tail = scan.FreeTail(); tail.has_value())
-            Prepared(ShortName{ WithNumericTail(alias, *tail) });
+            Prepared(ShortName{ longNames->withTail(alias, *tail) });
         else
         {
-            alias = HashedAlias(alias, name);
+            alias = longNames->hashed(alias, name);
             scan.ScanForAlias(alias, [this](Result result)
                 {
                     OnAliasScanned(result);
@@ -105,9 +109,18 @@ namespace fs
 
         cluster = volume.Walk().FoundCluster();
         exact = ExactShortName(name);
-        alias = BasisName(name);
-        auto slots = static_cast<uint8_t>(exact ? 1 : LongEntriesFor(name) + 1);
-        auto basis = exact || !forCreation ? std::nullopt : std::make_optional(alias);
+        const auto* longNames = volume.Operations().longNames;
+        uint8_t slots = 1;
+        std::optional<ShortNameBytes> basis;
+
+        if (!exact && longNames != nullptr)
+        {
+            slots = static_cast<uint8_t>(longNames->entriesFor(name) + 1);
+            alias = longNames->basis(name);
+
+            if (forCreation)
+                basis = alias;
+        }
 
         scan.Scan(cluster, name, slots, basis, except, [this](Result result)
             {

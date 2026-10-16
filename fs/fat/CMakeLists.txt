@@ -67,6 +67,7 @@ target_sources(fs.fat PRIVATE
     FatGeometry.cpp
     FatGeometry.hpp
     FatLifecycle.hpp
+    FatLongNames.hpp
     FatMakeDirectory.cpp
     FatMakeDirectory.hpp
     FatMount.cpp

@@ -30,7 +30,7 @@ A name may start with a space or a dot.
 Names are compared case-insensitively for ASCII letters, as on Windows, and byte by byte otherwise; a path component matches either the long or the short name of an entry.
 
 A name that fits the 8.3 format, with a base and an extension that are each all lower case or all upper case, is stored as a short entry only, with the lower-case flags that Windows NT introduced.
-Every other name is stored in long name entries, followed by a short alias:
+Every other name is stored in long name entries, followed by a short alias, or completes with `unsupported` when `fs::FatFeatures::longNames` is left out:
 
 1. The basis of the alias is the name in upper case, without spaces and leading dots; every character that a short name cannot hold, including `+`, `,`, `;`, `=`, `[`, `]` and every non-ASCII character, becomes `_`.
 2. Its base is the part before the last dot, cut to 8 characters, and its extension the part after the last dot, cut to 3.
@@ -323,16 +323,17 @@ The template arguments of `fs::FatFileSystem::WithStorage<Files, CacheSectors, L
 `fs::FatFeatures` leaves out what a product does not need, so that its code is not linked: calls it never makes, which then complete with `unsupported` on a mounted volume, and with `notMounted` otherwise, before their paths are validated, and work that it can do without.
 Every feature is in by default.
 
-| `fs::FatFeatures` | Leaves out                                                                                                                                                                                                                                        |
-|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `makeDirectory`   | `MakeDirectory`                                                                                                                                                                                                                                   |
-| `remove`          | `Remove`                                                                                                                                                                                                                                          |
-| `rename`          | `Rename`                                                                                                                                                                                                                                          |
-| `expectSize`      | `ExpectSize`                                                                                                                                                                                                                                      |
-| `usage`           | `Usage`                                                                                                                                                                                                                                           |
-| `backgroundScan`  | The count of the free clusters while the volume is idle: `Usage` counts them on its first call, and until then a file opened for appending starts at the allocation cursor instead of in a whole free allocation unit                             |
-| `timestamps`      | The time of entries: every entry is dated 1980-01-01 00:00:00, as with a clock that is not set                                                                                                                                                    |
-| `cleanShutdown`   | The clean-shutdown bit of the FAT: the volume never marks itself dirty, so a PC cannot tell that it was removed without `Unmount`, and a FAT32 mount reads neither FSINFO nor the FAT, so `Usage` and the allocation do not start from its counts |
+| `fs::FatFeatures` | Leaves out                                                                                                                                                                                                                                                           |
+|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `makeDirectory`   | `MakeDirectory`                                                                                                                                                                                                                                                      |
+| `remove`          | `Remove`                                                                                                                                                                                                                                                             |
+| `rename`          | `Rename`                                                                                                                                                                                                                                                             |
+| `expectSize`      | `ExpectSize`                                                                                                                                                                                                                                                         |
+| `usage`           | `Usage`                                                                                                                                                                                                                                                              |
+| `backgroundScan`  | The count of the free clusters while the volume is idle: `Usage` counts them on its first call, and until then a file opened for appending starts at the allocation cursor instead of in a whole free allocation unit                                                |
+| `timestamps`      | The time of entries: every entry is dated 1980-01-01 00:00:00, as with a clock that is not set                                                                                                                                                                       |
+| `cleanShutdown`   | The clean-shutdown bit of the FAT: the volume never marks itself dirty, so a PC cannot tell that it was removed without `Unmount`, and a FAT32 mount reads neither FSINFO nor the FAT, so `Usage` and the allocation do not start from its counts                    |
+| `longNames`       | The creation of long names: `Open`, `MakeDirectory` and `Rename` complete with `unsupported` for a name that is not 8.3 with each part all lower or all upper case, while long names already on the volume are still found, read, renamed to short names and removed |
 
 F-1 measures the volume with every feature left out as `embedded-filesystem/fat-minimal`.
 

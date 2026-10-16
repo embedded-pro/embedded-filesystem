@@ -113,6 +113,21 @@ namespace
 
         fs::VolumeUsage usage;
     };
+
+    class FatWithoutLongNamesTest
+        : public FatFeaturesFixture<fs::FatFeatures{ .longNames = false }>
+    {
+    public:
+        void ExpectStat(infra::BoundedConstString path, const fs::EntryInfo& expected)
+        {
+            volume.Stat(path, [this, &expected](fs::Result result, const fs::EntryInfo& info)
+                {
+                    EXPECT_EQ(expected, info);
+                    done.callback(result);
+                });
+            ExpectDone(fs::Result::success);
+        }
+    };
 }
 
 TEST_F(FatFeaturesTest, disabled_calls_complete_with_unsupported)
@@ -243,4 +258,98 @@ TEST_F(FatWithoutCleanShutdownOnFat32Test, a_mount_reads_only_the_partition_tabl
     ExpectDone(fs::Result::success);
 
     EXPECT_EQ(reads + 2, device.ReadRequests());
+}
+
+TEST_F(FatWithoutLongNamesTest, names_that_need_long_name_entries_are_not_created)
+{
+    volume.Mount(Done());
+    ExpectDone(fs::Result::success);
+    auto file = Open("/log.txt", fs::OpenMode::write);
+    file->Close(Done());
+    ExpectDone(fs::Result::success);
+    file = nullptr;
+
+    volume.Open("/Meeting notes.txt", fs::OpenMode::write, [this](fs::Result result, infra::SharedPtr<fs::File> opened)
+        {
+            EXPECT_EQ(nullptr, opened);
+            done.callback(result);
+        });
+    ExpectDone(fs::Result::unsupported);
+    volume.MakeDirectory("/Notes", Done());
+    ExpectDone(fs::Result::unsupported);
+    volume.Rename("/log.txt", "/log+old.txt", Done());
+    ExpectDone(fs::Result::unsupported);
+
+    ExpectStat("/log.txt", fs::EntryInfo{ "log.txt", fs::EntryType::file, 0 });
+}
+
+TEST_F(FatWithoutLongNamesTest, names_that_fit_short_entries_are_created_with_their_case)
+{
+    volume.Mount(Done());
+    ExpectDone(fs::Result::success);
+
+    volume.MakeDirectory("/logs", Done());
+    ExpectDone(fs::Result::success);
+    auto file = Open("/logs/day1.txt", fs::OpenMode::write);
+    file->Close(Done());
+    ExpectDone(fs::Result::success);
+    file = nullptr;
+    volume.Rename("/logs/day1.txt", "/logs/DAY2.TXT", Done());
+    ExpectDone(fs::Result::success);
+
+    ExpectStat("/LOGS", fs::EntryInfo{ "logs", fs::EntryType::directory, 0 });
+    ExpectStat("/logs/day2.txt", fs::EntryInfo{ "DAY2.TXT", fs::EntryType::file, 0 });
+}
+
+TEST_F(FatWithoutLongNamesTest, long_names_on_the_volume_are_still_found_read_renamed_and_removed)
+{
+    data.fill(0x33);
+    {
+        fs::FatFileSystem::WithStorage<1, 4> full{ device };
+        full.Mount(Done());
+        ExpectDone(fs::Result::success);
+        infra::SharedPtr<fs::File> file;
+        full.Open("/Meeting notes.txt", fs::OpenMode::write, [this, &file](fs::Result result, infra::SharedPtr<fs::File> opened)
+            {
+                file = opened;
+                done.callback(result);
+            });
+        ExpectDone(fs::Result::success);
+        file->Write(infra::MakeRange(data), Done());
+        ExpectDone(fs::Result::success);
+        file->Close(Done());
+        ExpectDone(fs::Result::success);
+        file = nullptr;
+        full.MakeDirectory("/Old notes", Done());
+        ExpectDone(fs::Result::success);
+        full.Unmount(Done());
+        ExpectDone(fs::Result::success);
+    }
+
+    volume.Mount(Done());
+    ExpectDone(fs::Result::success);
+    ExpectStat("/meeting NOTES.txt", fs::EntryInfo{ "Meeting notes.txt", fs::EntryType::file, 100 });
+
+    auto reader = Open("/Meeting notes.txt", fs::OpenMode::read);
+    std::array<uint8_t, 100> readBack{};
+    reader->Read(infra::MakeRange(readBack), [this](fs::Result result, std::size_t bytesRead)
+        {
+            EXPECT_EQ(100u, bytesRead);
+            done.callback(result);
+        });
+    ExpectDone(fs::Result::success);
+    EXPECT_EQ(data, readBack);
+    reader = nullptr;
+
+    volume.Rename("/Meeting notes.txt", "/meeting.txt", Done());
+    ExpectDone(fs::Result::success);
+    ExpectStat("/meeting.txt", fs::EntryInfo{ "meeting.txt", fs::EntryType::file, 100 });
+
+    volume.Remove("/Old notes", Done());
+    ExpectDone(fs::Result::success);
+    volume.Stat("/Old notes", [this](fs::Result result, const fs::EntryInfo&)
+        {
+            done.callback(result);
+        });
+    ExpectDone(fs::Result::notFound);
 }
