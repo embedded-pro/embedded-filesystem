@@ -75,7 +75,11 @@ ctest --preset host
 
 Metrics: `cmake --preset metrics && cmake --build --preset metrics && ctest --preset metrics` (Linux host only). Options use the `EMFS_` prefix (`EMFS_BUILD_TESTS`, `EMFS_BUILD_METRICS`, `EMFS_BUILD_VALIDATION`).
 
-Validation (`docs/Validation.md`, `validation/README.md`): board presets `stm32h757-cm7`, `stm32h757-cm4`, `stm32h745-cm7`, `stm32h745-cm4`, built with `cmake --build --preset <preset>-RelWithDebInfo` (Arm GNU toolchain and `xsltproc`). The host package: `cd validation/host && pip install ".[dev]" && ruff check . && python -m pytest tests/unit`, and the scenarios on the fake firmware with `python -m pytest tests/hil --fake --no-ad3 --board <board>`.
+Validation (`docs/Validation.md`, `validation/README.md`):
+
+- Board presets `stm32h757-cm7`, `stm32h757-cm4`, `stm32h745-cm7`, `stm32h745-cm4`, built with `cmake --build --preset <preset>-RelWithDebInfo` (Arm GNU toolchain and `xsltproc`)
+- Host package: `cd validation/host && pip install ".[dev]" && ruff check . && python -m pytest tests/unit`
+- Scenarios on the fake firmware: `python -m pytest tests/hil --fake --no-ad3 --board <board>`
 
 Before pushing, run `tools/verify.sh`: the checks of CI that can run locally, and scans for what CI reported on earlier pull requests (`tools/README.md`).
 
