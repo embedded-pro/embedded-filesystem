@@ -1,0 +1,3 @@
+cortex-memory-budget==0.2.0 \
+    --hash=sha256:a4d49a59689017b559114ee48116e5be85cb1d0c6f1af976ae8294e4b21689c9 \
+    --hash=sha256:0214ce792ecea682d69b04f16b28bca61832b246adcee61ea1a6d529cf2776f6

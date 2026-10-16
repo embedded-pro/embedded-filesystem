@@ -84,10 +84,15 @@ if (EMFS_STANDALONE)
     emil_coverage_targets(DIRECTORIES ${EMFS_SOURCE_DIRECTORIES})
 endif()
 
+set(EMFS_FORMAT_DIRECTORIES ${EMFS_SOURCE_DIRECTORIES})
+if (TARGET validation.footprint)
+    list(APPEND EMFS_FORMAT_DIRECTORIES validation/footprint)
+endif()
+
 if (EMFS_BUILD_METRICS)
-    emil_clangformat_directories(embedded_filesystem DIRECTORIES ${EMFS_SOURCE_DIRECTORIES} metrics)
+    emil_clangformat_directories(embedded_filesystem DIRECTORIES ${EMFS_FORMAT_DIRECTORIES} metrics)
 else()
-    emil_clangformat_directories(embedded_filesystem DIRECTORIES ${EMFS_SOURCE_DIRECTORIES})
+    emil_clangformat_directories(embedded_filesystem DIRECTORIES ${EMFS_FORMAT_DIRECTORIES})
 endif()
 
 if (EMFS_STANDALONE)
