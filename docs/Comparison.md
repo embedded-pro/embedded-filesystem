@@ -102,3 +102,4 @@ embedded-filesystem keeps only files of up to 64 bytes in the record of their in
 FatFs and littlefs need much less code.
 F-1 measures what each subject adds to an EmIL application on a Cortex-M4 in `MinSizeRel`, with its glue: 70,968 bytes of flash for `embedded-filesystem/fat` against 11,940 for `fatfs/default`, and 85,752 bytes for `embedded-filesystem/nor` against 15,244 for `littlefs/default`.
 The asynchronous state machines, the index trees, the caches and the background work take that code; a product that needs the smallest image keeps using FatFs or littlefs.
+A product that links with link-time optimization saves about 15 % of the flash of embedded-filesystem, as F-1 shows on `cortex-m4-lto`, but FatFs gains 11 % too, so the ratio barely changes on FAT.
