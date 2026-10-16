@@ -232,7 +232,7 @@ namespace fs
         }
     }
 
-    void NorNodeCollector::Relocate()
+    void NorNodeCollector::Relocate() const
     {
         auto& cache = volume.Cache();
         std::array<std::size_t, norMaxLevels> path{};

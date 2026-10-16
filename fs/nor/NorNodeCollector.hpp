@@ -40,7 +40,7 @@ namespace fs
         void ParentFetched(NorFetchResult result);
         void Compare(uint32_t address);
         void NodeFetched(NorFetchResult result);
-        void Relocate();
+        void Relocate() const;
         void Next();
         void Skip();
         void Pass();
