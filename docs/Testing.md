@@ -140,6 +140,13 @@ Metric tests are GoogleTest executables with the CTest label `metrics`, built wh
 Each test runs a workload from [Metrics.md](Metrics.md) on a metered device and asserts the target of the metric.
 Like any other test, a metric test is written before the code that makes it pass.
 
+## On-target validation
+
+The boards of [Validation.md](Validation.md) check the filesystems against real drivers, and measure what the host cannot.
+The libraries of `validation/firmware` are developed test first on the host like `fs/`, with the StrictMock doubles of EmIL and `infra::ClockFixture`, and the cycle counter behind an interface that the tests fake; they are covered 100 %.
+The host package in `validation/host` has unit tests of its own, against a fake firmware, which CI runs with ruff.
+What only a board can show, the drivers, the timings and the cycles, runs in the scenarios of `validation/host` on the bench, and the runs are committed in `validation/results`.
+
 ## Running
 
 ```bash

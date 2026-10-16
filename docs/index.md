@@ -16,4 +16,5 @@ Read [Goals.md](Goals.md) first for what the library sets out to do, and [Compar
 | [NorFilesystem.md](NorFilesystem.md) | The NOR filesystem: on-flash format, journal, checkpoints, garbage collection, wear leveling |
 | [Metrics.md](Metrics.md)             | Metric definitions, workloads, device models, baselines and targets                          |
 | [Testing.md](Testing.md)             | Test-driven development, test doubles, power-cut sweep and interoperability tests            |
+| [Validation.md](Validation.md)       | Validation on boards: firmware, host package, calibration of the device models, F-1 and F-2  |
 | [Roadmap.md](Roadmap.md)             | Phases of the implementation and later extensions                                            |

@@ -6,7 +6,7 @@ Every performance and wear claim of embedded-filesystem is backed by a metric de
 Each metric has an identifier, a definition, the workloads it is measured on, the subjects it compares and a target.
 The metrics run on the host, on deterministic models of the storage devices, so that the same commit always gives the same numbers, and they run in CI on every pull request.
 FatFs and littlefs are measured on the same device models and workloads as baselines.
-A few metrics, such as code size and processor cycles, can only be measured on a real target and are run separately.
+A few metrics cannot be measured on the host: code size is measured in CI on images built for Cortex-M, and processor cycles and the calibration of the device models on boards, as described in [Validation.md](Validation.md).
 
 ## Principles
 
@@ -44,7 +44,8 @@ The device models and the metered devices are host-only code in `metrics/`, and 
 
 The NOR timings follow the datasheets of common 128 Mbit QSPI NOR devices.
 The SD card model is a simplification of the behaviour measured on low-cost cards with flashbench, where writes spread over many allocation units are much slower than writes concentrated in a few.
-All parameters are assumptions until they are calibrated against real devices in the on-target phase described in [Roadmap.md](Roadmap.md), and every report states the parameters it used.
+All parameters are assumptions until they are calibrated against real devices on the boards of [Validation.md](Validation.md), and every report states the parameters it used.
+The calibration keeps the names and the geometry of the models, takes the measured typical timings and keeps the maxima of the datasheets, as [Validation.md](Validation.md#calibration) describes; `nor-parallel-16m` and a model of the eMMC of the boards join them from their datasheets, and only C-1 and C-2 are computed on them.
 Typical timings are used for throughput; maximum timings are used for latency bounds.
 The models are defined in `metrics/device/DeviceModels.cpp`, and the metered devices `metrics::MeteredFlash` and `metrics::MeteredBlockDevice` delay every completion by the modelled time on a virtual clock, `metrics::VirtualTime`, so that latencies and background work are measured deterministically.
 
@@ -56,9 +57,9 @@ For latency metrics, workloads contain idle periods, during which background wor
 
 ### Baselines
 
-FatFs and littlefs are fetched with FetchContent at pinned versions, only when `EMFS_BUILD_METRICS` is enabled, and only for the host.
+FatFs and littlefs are fetched with FetchContent at pinned versions, only when `EMFS_BUILD_METRICS` or `EMFS_BUILD_VALIDATION` is enabled: the metrics build them for the host, and the validation of [Validation.md](Validation.md) for Cortex-M, for F-1 and F-2.
 Their storage callbacks are adapted to the metered devices through a synchronous shim that runs the event dispatcher until the device request completes.
-The shim exists only in the metrics harness; it is the blocking adapter that an EmIL application would otherwise need.
+The shim exists only in the metrics harness and, for the devices of F-2, in the glue of the validation; it is the blocking adapter that an EmIL application would otherwise need.
 
 | Subject                | Version                               | Configuration                                                                                                                                                                                             |
 |------------------------|---------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -335,12 +336,22 @@ That costs M-1 on L4, 1.918 against 1.920 for FatFs, and M-2 on the first phase 
 
 ## On-target metrics
 
-| Id  | Metric           | Definition                                                                                                                           | Target                                                            |
-|-----|------------------|--------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------|
-| F-1 | Footprint        | Flash and RAM used by each filesystem in a reference configuration on Cortex-M4 and Cortex-M33, measured with `cortex-memory-budget` | Reported, next to FatFs and littlefs in equivalent configurations |
-| F-2 | Processor cycles | Cycles spent per operation on the target, measured with the data watchpoint and trace unit or estimated with `cortex-cycle-budget`   | Reported                                                          |
+| Id  | Metric           | Definition                                                                                                                                                                                                              | Target                                                     |
+|-----|------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------|
+| F-1 | Footprint        | Flash and RAM that a subject adds to an empty EmIL image, in a reference image that calls its whole API, on Cortex-M4, Cortex-M7 and Cortex-M33, measured with `cortex-memory-budget`                                   | Reported, next to the configurations of FatFs and littlefs |
+| F-2 | Processor cycles | Median cycles from a call to its completion, and until the volume is idle again, per operation, on the Cortex-M7 of the boards over a RAM device, measured with the cycle counter of the data watchpoint and trace unit | Reported, next to `fatfs/tuned` and `littlefs/ram-matched` |
+| C-1 | Model error      | Absolute difference between the device time that the model of a device gives the requests of a workload phase on a board and the time the device took for them, divided by the time it took                             | Reported                                                   |
+| C-2 | Latency bound    | Longest measured latency of a call of L2 on a board, divided by the W-6 bound of the model and the configuration of the device                                                                                          | Reported                                                   |
 
-On target, the device timing models are also calibrated: the same workloads run on real NOR flash and SD cards, and the simulated device time is compared with the measured time.
+F-1 needs no board: its reference images are built for Cortex-M in CI, and the metrics workflow measures them in a job of its own and adds their fragments to the merge.
+F-2, C-1 and C-2 are measured on the boards, and so are the metrics of the workloads on the real devices, W-1 to W-6, R-1 to R-5 and M-1 to M-3, with the file sizes scaled down, on the devices named `<board>/<device>`, as reported results.
+C-1 and C-2 are reported until the first runs show their spread; a later step sets their targets from the data.
+The reference images, the boards, the procedures and how a run becomes fragments are described in [Validation.md](Validation.md).
+
+### On-target results
+
+No run on a board has been recorded yet.
+The results of the committed runs of `validation/results` are summarized here, next to the results of the host on the same models.
 
 ## Reports
 
@@ -373,6 +384,7 @@ The targets of a subject come from its `metrics::Targets`, which the metric exec
 A target is either a bound, such as `<= 1.1`, which the metric executable decides, or a comparison with other subjects, such as `>= baselines` (the best of FatFs and littlefs), `<= fatfs` (the best FatFs configuration) or `>= 0.97 baselines` (0.97 times the best baseline), which is decided when the fragments are merged.
 `metrics/report/merge_report.py` merges the fragments into `metrics.json`, with the same shape, and writes a Markdown summary of it, `metrics.md`.
 Given the `metrics.json` of `main` with `--baseline`, it marks a reported metric of embedded-filesystem as failed when it is worse than on `main` by more than 5 %, in the direction given by `better`; results on a device model whose parameters changed, and results that the metric executables mark as `diagnostic` or that were diagnostic on `main`, are not compared.
+The merge also takes fragments made outside the metric executables: the F-1 fragments of the footprint job, and the fragments that the metrics build converts from the runs committed in `validation/results`, as [Validation.md](Validation.md#results) describes.
 The metrics workflow posts the summary as a comment on the pull request, updating the same comment on every push.
 The `metrics.json` of `main` is kept as a workflow artifact and used to detect regressions.
 
@@ -399,3 +411,4 @@ The `metrics` preset builds an optimized Linux host build with `EMFS_BUILD_METRI
 The metric tests are GoogleTest executables with the CTest label `metrics`, run as several shards each so that `ctest --parallel` spreads them over the cores; they assert the targets of this document, so a missed target is a failing test, and every call of a workload must succeed.
 Each shard writes a report fragment to `build/metrics/metrics/fragments`, and the `metrics.merge` test writes `build/metrics/metrics/metrics.json` and `build/metrics/metrics/metrics.md`.
 Configuring with `-DEMFS_METRICS_BASELINE=<path to the metrics.json of main>` enables the 5 % rule; the metrics workflow does this on pull requests, with the report of the latest run on `main`.
+The `metrics` preset also enables `EMFS_BUILD_VALIDATION`, so that the runs committed in `validation/results` are converted and merged, and `-DEMFS_METRICS_EXTRA_FRAGMENTS=<directories>` adds fragments made elsewhere, such as the F-1 fragments that the metrics workflow takes from its footprint job.

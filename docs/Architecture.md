@@ -27,16 +27,18 @@ The on-disk designs are described in [Fat.md](Fat.md) and [NorFilesystem.md](Nor
       outside this repository)       flash (services/flash in EmIL)
 ```
 
-| Folder          | Target          | Contents                                                                                                        |
-|-----------------|-----------------|-----------------------------------------------------------------------------------------------------------------|
-| `fs/interfaces` | `fs.interfaces` | `fs::Result`, `fs::OpenMode`, `fs::File`, `fs::Directory`, `fs::EntryInfo`, `fs::VolumeUsage`, `fs::FileSystem` |
-| `fs/common`     | `fs.common`     | Path parsing, sector cache, per-volume operation queue, handle pools, CRC-protected records                     |
-| `fs/fat`        | `fs.fat`        | FAT12, FAT16 and FAT32 with long file names, and the formatter                                                  |
-| `fs/nor`        | `fs.nor`        | The log-structured NOR filesystem, its garbage collection and its wear leveling                                 |
-| `metrics`       | `metrics.*`     | Host-only device models, metered devices, workloads and baselines, see [Metrics.md](Metrics.md)                 |
+| Folder          | Target          | Contents                                                                                                                       |
+|-----------------|-----------------|--------------------------------------------------------------------------------------------------------------------------------|
+| `fs/interfaces` | `fs.interfaces` | `fs::Result`, `fs::OpenMode`, `fs::File`, `fs::Directory`, `fs::EntryInfo`, `fs::VolumeUsage`, `fs::FileSystem`                |
+| `fs/common`     | `fs.common`     | Path parsing, sector cache, per-volume operation queue, handle pools, CRC-protected records                                    |
+| `fs/fat`        | `fs.fat`        | FAT12, FAT16 and FAT32 with long file names, and the formatter                                                                 |
+| `fs/nor`        | `fs.nor`        | The log-structured NOR filesystem, its garbage collection and its wear leveling                                                |
+| `metrics`       | `metrics.*`     | Host-only device models, metered devices, workloads and baselines, see [Metrics.md](Metrics.md)                                |
+| `validation`    | `validation.*`  | Firmware for boards, the reference images of F-1 and the host package that runs the boards, see [Validation.md](Validation.md) |
 
 Storage drivers are not part of this repository.
 NOR flash drivers are in EmIL (`services/flash`), and SD card and eMMC drivers implement `hal::BlockDevice` in EmIL or in the vendor HAL repositories such as hal-st and hal-ti.
+The validation on boards uses the drivers of hal-st, which it fetches only when it is built for an ST board; the libraries never depend on hal-st.
 
 ## Dependencies on EmIL
 

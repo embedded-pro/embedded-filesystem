@@ -124,6 +124,8 @@ An operation that needs a barrier, as described under [Writing](#writing), asks 
 The whole sectors of a read go directly from the device into the buffer of the caller, one request per contiguous run of clusters, and the cache then copies the sectors it holds of that range over the buffer, so that the caller sees the latest contents.
 A write goes directly to the device when its whole sectors form a contiguous run longer than the cache can collect, which is the number of cache sectors minus two; the cache drops the sectors it holds of that range, and the run is written at rank 0 in one request.
 Shorter writes, and the partial sectors at the ends of any transfer, go through the cache.
+A driver that moves data with DMA may need aligned buffers: `hal::SdCardStm` of hal-st needs 4 bytes, and, while the data cache of a Cortex-M7 is on, buffers aligned and sized to its cache line of 32 bytes, so that it can clean and invalidate the cache itself.
+The sectors of the cache, and the buffer of `fs::FatFormatter`, are therefore aligned to 32 bytes, and `FatConfig::transferAlignment` gives the alignment the driver needs: the whole sectors of a transfer go directly to or from the buffer of the caller only when their place in it is aligned to it, and through the cache otherwise.
 The cache writes back consecutive sectors of the same rank that it holds in adjacent slots in one multi-block request, so that collected writes leave the cache as multi-block requests.
 To keep such sectors adjacent, a sector that is written takes the slot after the one of its predecessor; when that slot holds a modified sector, the cache moves it to the first free or unmodified slot after it, and otherwise a written sector takes the first free slot, else the first unmodified one.
 Modified metadata thereby moves to the last slots, and a stream of collected writes fills the others in order.
@@ -159,6 +161,7 @@ Clusters are allocated in this order:
 
 With rule 3, new files take the clusters that removed files freed in the unit the card is already writing; its search from the start of the unit reads the FAT sectors that cover it, one or two on a card formatted to the SD specification.
 The allocation unit is given by `FatConfig::blocksPerAllocationUnit`, because `hal::BlockDevice` does not report it.
+On an SD card it is the allocation unit of the SD status, and on eMMC the high-capacity erase group of the EXT_CSD register; on the boards of [Validation.md](Validation.md), the drivers of hal-st give both, and a benchmark checks by timing that the card behaves as the unit says.
 On FAT12, the allocator never takes a cluster whose 12-bit FAT entry straddles two sectors, because such an entry is changed by two writes; these clusters count as used.
 A file whose last cluster has such an entry, which only another implementation creates, is extended by writing both halves of that entry, so a power loss between the two writes can corrupt its chain.
 When the volume is full, writes complete with `noSpace`.
@@ -263,7 +266,7 @@ It follows the SD Association file system specification, part 2 of the SD specif
 | Larger       | FAT32 | 64                  | 32768                    |
 
 The specification formats cards larger than 32 GB, SDXC cards, with exFAT; the formatter uses FAT32 for them, as exFAT is not supported.
-These values have not yet been checked against the specification document itself; they are compared with cards formatted by the SD Memory Card Formatter of the SD Association in the on-target phase described in [Roadmap.md](Roadmap.md).
+These values have not yet been checked against the specification document itself; they are compared with cards formatted by the SD Memory Card Formatter of the SD Association on a board, as [Validation.md](Validation.md#formatter-comparison) describes, and the layouts of the cards are recorded here.
 
 The device holds an MBR with one primary partition, and the system area, from the boot sector up to and including the fixed root directory, ends on a boundary unit, so that the data area starts on one and clusters never straddle one.
 On FAT12 and FAT16, the start of the partition absorbs the difference; on FAT32, the partition starts on a boundary unit and the reserved sectors absorb it.
@@ -295,13 +298,14 @@ The template arguments of `fs::FatFileSystem::WithStorage<Files, CacheSectors, L
 
 `fs::FatConfig` holds the settings that need no storage:
 
-| `fs::FatConfig`           | Default                       | Meaning                                                         |
-|---------------------------|-------------------------------|-----------------------------------------------------------------|
-| `maxPathBytes`            | 255                           | The longest path in UTF-8 bytes                                 |
-| `idleDelay`               | 10 ms                         | The idle time after which the background scan of the FAT starts |
-| `discard`                 | `true`                        | Whether freed clusters are discarded                            |
-| `blocksPerAllocationUnit` | 0                             | The allocation unit of the card in blocks, 0 when it is unknown |
-| `timerServiceId`          | `infra::systemTimerServiceId` | The timer service that gives the time of timestamps             |
+| `fs::FatConfig`           | Default                       | Meaning                                                                  |
+|---------------------------|-------------------------------|--------------------------------------------------------------------------|
+| `maxPathBytes`            | 255                           | The longest path in UTF-8 bytes                                          |
+| `idleDelay`               | 10 ms                         | The idle time after which the background scan of the FAT starts          |
+| `discard`                 | `true`                        | Whether freed clusters are discarded                                     |
+| `blocksPerAllocationUnit` | 0                             | The allocation unit of the card in blocks, 0 when it is unknown          |
+| `transferAlignment`       | 1                             | The alignment in bytes of the buffers that the driver transfers directly |
+| `timerServiceId`          | `infra::systemTimerServiceId` | The timer service that gives the time of timestamps                      |
 
 ## RAM
 
