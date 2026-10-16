@@ -19,6 +19,7 @@ target_sources(fs.fat PRIVATE
     FatAllocator.hpp
     FatBackgroundScan.cpp
     FatBackgroundScan.hpp
+    FatBackgroundWork.hpp
     FatBootSector.cpp
     FatBootSector.hpp
     FatBytes.cpp

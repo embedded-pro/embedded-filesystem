@@ -7,6 +7,7 @@
 #include "fs/common/OperationQueue.hpp"
 #include "fs/common/Path.hpp"
 #include "fs/common/SectorCache.hpp"
+#include "fs/fat/FatBackgroundScan.hpp"
 #include "fs/fat/FatClosedFiles.hpp"
 #include "fs/fat/FatConfig.hpp"
 #include "fs/fat/FatDirectory.hpp"

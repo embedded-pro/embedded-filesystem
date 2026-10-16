@@ -9,7 +9,7 @@
 #include "fs/common/Path.hpp"
 #include "fs/common/SectorCache.hpp"
 #include "fs/fat/FatAllocator.hpp"
-#include "fs/fat/FatBackgroundScan.hpp"
+#include "fs/fat/FatBackgroundWork.hpp"
 #include "fs/fat/FatChainFree.hpp"
 #include "fs/fat/FatChainWalk.hpp"
 #include "fs/fat/FatClosedFiles.hpp"
@@ -112,7 +112,7 @@ namespace fs
         void MarkMounted();
         void MarkUnmounted(Result reason);
         void Report(Result result) const;
-        void AttachBackground(FatBackgroundScan& scan);
+        void AttachBackground(FatBackgroundWork& work);
         void MarkDirty(const infra::Function<void(Result result)>& onDone);
         void MarkClean(const infra::Function<void(Result result)>& onDone);
 
@@ -149,7 +149,7 @@ namespace fs
         infra::IntrusiveList<FatFile> openFiles;
         infra::IntrusiveList<FatDirectory> openDirectories;
         OperationQueue queue;
-        FatBackgroundScan* background{ nullptr };
+        FatBackgroundWork* background{ nullptr };
         FatOperation operation;
         uint32_t generation{ 0 };
         bool mounted{ false };

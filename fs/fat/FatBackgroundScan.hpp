@@ -2,6 +2,7 @@
 #define FS_FAT_FAT_BACKGROUND_SCAN_HPP
 
 #include "fs/common/OperationQueue.hpp"
+#include "fs/fat/FatBackgroundWork.hpp"
 #include "fs/fat/FatFreeSpaceScan.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/Function.hpp"
@@ -68,6 +69,7 @@ namespace fs
     using FatScanEvent = std::variant<FatScanStart, FatScanStop, FatScanIdle, FatScanGranted, FatScanStepped>;
 
     class FatBackgroundScan
+        : public FatBackgroundWork
     {
     public:
         using Machine = services::TableStateMachine<FatScanState, FatScanEvent, FatBackgroundScan>;
@@ -81,9 +83,9 @@ namespace fs
         FatBackgroundScan& operator=(const FatBackgroundScan& other) = delete;
         ~FatBackgroundScan();
 
-        void Start();
-        void Stop();
-        void Idle();
+        void Start() override;
+        void Stop() override;
+        void Idle() override;
 
     private:
         void Claim();

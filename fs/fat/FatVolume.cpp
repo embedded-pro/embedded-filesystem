@@ -238,9 +238,9 @@ namespace fs
             onMediaRemoved();
     }
 
-    void FatVolume::AttachBackground(FatBackgroundScan& scan)
+    void FatVolume::AttachBackground(FatBackgroundWork& work)
     {
-        background = &scan;
+        background = &work;
     }
 
     void FatVolume::MarkDirty(const infra::Function<void(Result result)>& onDone)
