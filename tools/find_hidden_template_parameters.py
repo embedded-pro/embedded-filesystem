@@ -22,7 +22,7 @@ def git(*arguments):
 
 
 def sources(ref):
-    names = git("ls-tree", "-r", "--name-only", ref, "fs", "metrics").split()
+    names = git("ls-tree", "-r", "--name-only", ref, "fs", "metrics", "validation/firmware").split()
     return [name for name in names if name.endswith((".hpp", ".cpp"))]
 
 
