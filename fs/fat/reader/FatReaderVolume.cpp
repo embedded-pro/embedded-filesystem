@@ -22,7 +22,7 @@ namespace fs
         return device;
     }
 
-    SectorSource& FatReaderVolume::Sectors()
+    SectorSource& FatReaderVolume::Sectors() const
     {
         return sectors;
     }

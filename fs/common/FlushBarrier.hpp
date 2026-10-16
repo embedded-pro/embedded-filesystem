@@ -16,7 +16,7 @@ namespace fs
         explicit FlushBarrier(hal::BlockDevice& device);
         FlushBarrier(const FlushBarrier& other) = delete;
         FlushBarrier& operator=(const FlushBarrier& other) = delete;
-        ~FlushBarrier() = default;
+        ~FlushBarrier();
 
         hal::BlockDevice& Device() const;
         bool HasUnflushedWrites() const;

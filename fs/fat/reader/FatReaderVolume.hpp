@@ -28,7 +28,7 @@ namespace fs
 
         infra::ClaimableResource& Queue();
         hal::BlockDevice& Device() const;
-        SectorSource& Sectors();
+        SectorSource& Sectors() const;
         FatGeometry& Geometry();
         FatTableReader& Table();
         FatDirectoryReader& Reader();
