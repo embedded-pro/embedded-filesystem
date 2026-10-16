@@ -16,7 +16,7 @@ namespace validation
         return infra::MakeRange(commands);
     }
 
-    services::HilStatus FirmwareCommands::Info(const services::HilArguments& arguments)
+    services::HilStatus FirmwareCommands::Info(const services::HilArguments& arguments) const
     {
         if (!arguments.Shape(0, 0, {}))
             return services::HilStatus::usage;

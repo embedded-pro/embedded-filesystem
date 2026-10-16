@@ -24,7 +24,7 @@ namespace validation
         infra::MemoryRange<const Command> Commands() override;
 
     private:
-        services::HilStatus Info(const services::HilArguments& arguments);
+        services::HilStatus Info(const services::HilArguments& arguments) const;
 
     private:
         services::HilContext& context;
