@@ -79,7 +79,7 @@ namespace fs
         movePassed = false;
         awaitingCommit = 0;
         surveying = false;
-        skippedInARow = 0;
+        leftInLap = 0;
         unusedAtFruitlessLap = std::nullopt;
     }
 
@@ -98,6 +98,10 @@ namespace fs
         onDone = onCollected;
         leftByStep = 0;
         freeSlots = FreeSlots();
+        if (!sparseOnly)
+            leftInLap = 0;
+        else if (collecting && !HasRoom())
+            unusedAtFruitlessLap = UnusedSlots();
         volume.Cache().UnpinAll();
         Examine();
     }
@@ -133,6 +137,11 @@ namespace fs
             slot = 0;
             surveying = sparseOnly;
             liveInBlock = 0;
+            if (sparseOnly && leftInLap == 0)
+            {
+                lapBlocks = CollectableBlocks();
+                unusedAtLapStart = UnusedSlots();
+            }
         }
 
         if (!block.has_value())
@@ -287,16 +296,24 @@ namespace fs
     void NorNodeCollector::EndSurvey()
     {
         surveying = false;
-        if (2 * liveInBlock < volume.Geometry().NodesPerBlock())
+        if (liveInBlock == 0)
+            Pass();
+        else if (2 * liveInBlock < volume.Geometry().NodesPerBlock())
             slot = 0;
         else
-        {
             Leave();
-            if (++skippedInARow >= CollectableBlocks())
-                unusedAtFruitlessLap = UnusedSlots();
-        }
 
         Examine();
+    }
+
+    void NorNodeCollector::EndLap()
+    {
+        leftInLap = 0;
+        auto unused = UnusedSlots();
+        if (unused + volume.Geometry().NodesPerBlock() > unusedAtLapStart)
+            unusedAtFruitlessLap = unused;
+        else
+            unusedAtFruitlessLap = std::nullopt;
     }
 
     void NorNodeCollector::Skip()
@@ -310,8 +327,6 @@ namespace fs
 
     void NorNodeCollector::Pass()
     {
-        skippedInARow = 0;
-        unusedAtFruitlessLap = std::nullopt;
         volume.State().blocks.Set(block.value_or(0), NorBlockState::pending);
         ++awaitingCommit;
         movePassed = movePassed || block == moving;
@@ -325,6 +340,8 @@ namespace fs
 
         ++left;
         ++leftByStep;
+        if (sparseOnly && ++leftInLap >= lapBlocks)
+            EndLap();
     }
 
     bool NorNodeCollector::HasRoom() const

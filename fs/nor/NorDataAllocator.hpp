@@ -30,7 +30,7 @@ namespace fs
         NorVolume& volume;
         NorBlockOwner owner;
         NorReserve reserve{ NorReserve::kept };
-        bool collected{ false };
+        bool checkpointWritten{ false };
         infra::AutoResetFunction<void(std::optional<uint32_t> block)> onDone;
     };
 }

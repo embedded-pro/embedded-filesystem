@@ -14,7 +14,7 @@ namespace fs
     {
         owner = allocationOwner;
         reserve = allocationReserve;
-        collected = false;
+        checkpointWritten = false;
         onDone = onAllocated;
         TryAllocate();
     }
@@ -29,7 +29,7 @@ namespace fs
 
     void NorDataAllocator::Allocated(std::optional<uint32_t> block)
     {
-        if (block.has_value() || std::exchange(collected, true) || !volume.Collector().DueForSpace())
+        if (block.has_value() || reserve != NorReserve::kept || std::exchange(checkpointWritten, true) || !volume.Collector().DueForSpace())
             onDone(block);
         else
             volume.Checkpoints().Write([this](Result result)

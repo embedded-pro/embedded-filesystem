@@ -368,6 +368,24 @@ TEST_F(NorBackgroundCollectionTest, writes_a_checkpoint_for_a_collection_that_lo
     EXPECT_FALSE(Volume().Collector().DueForSpace());
 }
 
+TEST_F(NorBackgroundCollectionTest, a_checkpoint_of_the_journal_waits_for_twice_the_pool_when_a_collection_is_due_for_space)
+{
+    for (auto name : { "a", "b", "c", "d", "e" })
+        Builder().AddDirectory(root, name);
+    Builder().AddDirectory(2, "x");
+    Builder().AddDirectory(3, "x");
+    Builder().Commit();
+    Mount();
+    FillJournalOverHalf();
+    KeepErased(Volume().Geometry().NodeBlocksPerCheckpoint() + 1);
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+    auto checkpointBlock = State().checkpointBlock;
+
+    Idle();
+
+    EXPECT_EQ(checkpointBlock, State().checkpointBlock);
+}
+
 TEST_F(NorBackgroundCollectionTest, a_due_checkpoint_collects)
 {
     Builder().AddDirectory(root, "a");

@@ -453,6 +453,37 @@ TEST_F(NorFileWriteTest, a_write_whose_checkpoint_for_a_collection_finds_no_free
     EXPECT_EQ(config.inlineBytes, file->Size());
 }
 
+TEST_F(NorFileWriteTest, a_sync_whose_copy_finds_no_free_block_writes_no_checkpoint_for_a_collection)
+{
+    Unmount();
+    auto contents = Pattern<5000>();
+    Builder().AddFile(root, "a", infra::MakeRange(contents));
+    Builder().Commit();
+    Mount();
+    for (auto path : { "/m", "/n", "/o", "/p", "/q", "/r", "/s", "/t" })
+    {
+        ASSERT_EQ(fs::Result::success, MakeDirectory(path));
+        std::optional<fs::Result> written;
+        Volume().Checkpoints().Write([&written](fs::Result result)
+            {
+                written = result;
+            });
+        ExecuteAllActions();
+        ASSERT_EQ(fs::Result::success, written) << path;
+    }
+    ASSERT_EQ(fs::Result::success, MakeDirectory("/u"));
+    auto file = Open("/a", fs::OpenMode::append);
+    ASSERT_EQ(fs::Result::success, Write(*file, Bytes("x")));
+    LeaveFreeBlocks(0);
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+    ASSERT_NE(0, Volume().Cache().ModifiedNodes());
+    device.recording = true;
+
+    EXPECT_EQ(fs::Result::noSpace, Sync(*file));
+
+    EXPECT_TRUE(device.requests.empty());
+}
+
 TEST_F(NorFileWriteTest, a_write_that_must_copy_a_block_written_before_the_mount_into_the_reserve_first_collects_node_blocks)
 {
     Unmount();

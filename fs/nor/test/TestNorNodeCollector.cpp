@@ -75,10 +75,10 @@ namespace
             return fs::NorBTree::ChildFor(infra::MakeRange(bytes), key);
         }
 
-        uint32_t LiveNodesIn(uint32_t block)
+        Blocks UsedNodesIn(uint32_t block)
         {
-            const auto& geometry = Volume().Geometry();
-            uint32_t live = 0;
+            const auto& geometry = Builder().Geometry();
+            Blocks used;
             for (uint32_t slot = 0; slot != geometry.NodesPerBlock(); ++slot)
             {
                 auto address = geometry.AddressOfBlock(block) + geometry.NodeSlotsOffset() + slot * geometry.nodeSize;
@@ -93,10 +93,27 @@ namespace
                 for (uint32_t level = map.height; level > header.level + 1u && node != 0; --level)
                     node = ChildOf(node, header.lowestKey);
                 if (header.level < map.height && node == address)
-                    ++live;
+                    used.push_back(address);
             }
 
-            return live;
+            return used;
+        }
+
+        uint32_t LiveNodesIn(uint32_t block)
+        {
+            return static_cast<uint32_t>(UsedNodesIn(block).size());
+        }
+
+        void BuildBlocksOfZeroFiveThreeAndSixUsedNodes()
+        {
+            for (auto name : { "a", "b", "c", "d", "e", "f" })
+                Builder().AddDirectory(Builder().AddDirectory(root, name), "x");
+            for (auto name : { "g", "h", "i" })
+                Builder().AddDirectory(root, name);
+            Builder().Commit();
+            Builder().AddDirectory(2, "y");
+            Builder().AddDirectory(4, "z");
+            Builder().Commit();
         }
 
         void AddDirectoriesWithAnEntry(uint32_t count)
@@ -477,14 +494,7 @@ TEST_F(NorNodeCollectorTest, a_corrupted_node_that_is_still_used_leaves_its_bloc
 
 TEST_F(NorNodeCollectorTest, a_collection_for_space_compacts_the_blocks_where_fewer_than_half_the_slots_hold_used_nodes_and_leaves_the_others)
 {
-    for (auto name : { "a", "b", "c", "d", "e", "f" })
-        Builder().AddDirectory(Builder().AddDirectory(root, name), "x");
-    for (auto name : { "g", "h", "i" })
-        Builder().AddDirectory(root, name);
-    Builder().Commit();
-    Builder().AddDirectory(2, "y");
-    Builder().AddDirectory(4, "z");
-    Builder().Commit();
+    BuildBlocksOfZeroFiveThreeAndSixUsedNodes();
     Mount();
     ASSERT_EQ(0, LiveNodesIn(2));
     ASSERT_EQ(5, LiveNodesIn(4));
@@ -522,7 +532,7 @@ TEST_F(NorNodeCollectorTest, a_collection_for_space_leaves_a_block_where_half_th
         EXPECT_TRUE(State().nodeBlocks.Contains(block)) << block;
 }
 
-TEST_F(NorNodeCollectorTest, after_a_lap_that_leaves_every_block_no_collection_is_due_for_space_until_another_block_of_slots_is_unused)
+TEST_F(NorNodeCollectorTest, after_a_lap_that_frees_less_than_a_block_of_slots_no_collection_is_due_for_space_until_another_block_of_slots_is_unused)
 {
     for (auto name : { "a", "b", "c", "d", "e", "f" })
         Builder().AddDirectory(Builder().AddDirectory(root, name), "x");
@@ -532,9 +542,14 @@ TEST_F(NorNodeCollectorTest, after_a_lap_that_leaves_every_block_no_collection_i
     Builder().AddDirectory(2, "y");
     Builder().Commit();
     Mount();
-    LeaveFreeBlocksInState(Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks());
+    auto lowSpace = Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks();
+    LeaveFreeBlocksInState(lowSpace);
     ASSERT_EQ(fs::Result::success, WriteCheckpoint());
-    LeaveFreeBlocksInState(Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks());
+    LeaveFreeBlocksInState(lowSpace);
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+
+    ASSERT_EQ(fs::Result::success, WriteCheckpoint());
+    LeaveFreeBlocksInState(lowSpace);
 
     EXPECT_FALSE(Volume().Collector().DueForSpace());
 
@@ -543,4 +558,35 @@ TEST_F(NorNodeCollectorTest, after_a_lap_that_leaves_every_block_no_collection_i
 
     --State().liveNodes;
     EXPECT_TRUE(Volume().Collector().DueForSpace());
+}
+
+TEST_F(NorNodeCollectorTest, a_lap_that_skips_every_block_for_a_corrupted_path_ends_the_collection_for_space)
+{
+    BuildBlocksOfZeroFiveThreeAndSixUsedNodes();
+    Builder().Corrupt(Builder().InodeTable().address + 2);
+    Mount();
+    auto lowSpace = Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks();
+    LeaveFreeBlocksInState(lowSpace);
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+    auto nodeBlocks = NodeBlocks();
+
+    ASSERT_EQ(fs::Result::success, WriteCheckpoint());
+
+    LeaveFreeBlocksInState(lowSpace);
+    EXPECT_EQ(nodeBlocks, NodeBlocks());
+    EXPECT_FALSE(Volume().Collector().DueForSpace());
+}
+
+TEST_F(NorNodeCollectorTest, a_collection_for_space_without_room_for_a_path_in_the_free_blocks_makes_no_collection_due_for_space)
+{
+    BuildBlocksOfZeroFiveThreeAndSixUsedNodes();
+    Mount();
+    LeaveFreeBlocksInState(1);
+    ASSERT_TRUE(Volume().Collector().DueForSpace());
+
+    ASSERT_EQ(fs::Result::success, WriteCheckpoint());
+
+    EXPECT_TRUE(State().nodeBlocks.Contains(5));
+    LeaveFreeBlocksInState(Volume().Geometry().ReserveBlocks() + Volume().Geometry().WatermarkBlocks());
+    EXPECT_FALSE(Volume().Collector().DueForSpace());
 }

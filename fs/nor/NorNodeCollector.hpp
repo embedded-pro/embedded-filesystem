@@ -46,6 +46,7 @@ namespace fs
         void Pass();
         void Leave();
         void EndSurvey();
+        void EndLap();
         bool HasRoom() const;
         uint32_t FreeSlots() const;
         uint64_t LiveNodes() const;
@@ -73,7 +74,9 @@ namespace fs
         bool sparseOnly{ false };
         bool surveying{ false };
         uint32_t liveInBlock{ 0 };
-        uint32_t skippedInARow{ 0 };
+        uint32_t leftInLap{ 0 };
+        uint32_t lapBlocks{ 0 };
+        uint64_t unusedAtLapStart{ 0 };
         std::optional<uint64_t> unusedAtFruitlessLap;
         std::array<uint8_t, norNodeHeaderBytes> headerBytes{};
         NorNodeHeader header;
