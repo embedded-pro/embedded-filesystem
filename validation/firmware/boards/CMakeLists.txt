@@ -23,10 +23,16 @@ if (TARGET_CORTEX STREQUAL m7)
     )
 
     target_link_libraries(validation.firmware PRIVATE
+        hal.cortex_m
         hal_st.instantiations
+        hal_st.stm32fxxx
         services.hil
         services.tracer
+        validation.cycles
+        validation.cycles_subjects
+        validation.devices
         validation.hil
+        validation.results
     )
 
     target_sources(validation.firmware PRIVATE
@@ -35,6 +41,8 @@ if (TARGET_CORTEX STREQUAL m7)
         BoardInfoStm.hpp
         Clocks.cpp
         Clocks.hpp
+        EventInfrastructure.cpp
+        EventInfrastructure.hpp
         MainCm7.cpp
         Memories.cpp
         Memories.hpp

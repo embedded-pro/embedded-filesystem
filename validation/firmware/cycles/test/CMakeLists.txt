@@ -9,9 +9,11 @@ target_link_libraries(validation.cycles_test PUBLIC
     infra.util_test_helper
     hal.interfaces_test_doubles
     validation.cycles
+    validation.cycles_test_doubles
 )
 
 target_sources(validation.cycles_test PRIVATE
     TestCycleCounting.cpp
     TestCycleRun.cpp
+    TestCyclesCommands.cpp
 )

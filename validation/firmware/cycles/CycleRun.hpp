@@ -133,8 +133,8 @@ namespace validation
         Step resumeWith{ nullptr };
         Step afterIdle{ nullptr };
         infra::TimerRepeating pollTimer;
-        uint32_t calibrationPolls{ 0 };
-        uint32_t noiseQ16{ 0 };
+        uint32_t polls{ 0 };
+        uint32_t busyCyclesPerPoll{ 0 };
 
         uint32_t startCycles{ 0 };
         uint64_t startIdle{ 0 };

@@ -187,7 +187,7 @@ namespace
         : public CycleSubjectTest
     {
     public:
-        validation::RamBlockDevice device{ infra::Head(infra::MakeRange(Memory()), validation::cycles::ramBlockDeviceBlocks * validation::RamBlockDevice::blockSize) };
+        validation::RamBlockDevice device{ infra::Head(infra::MakeRange(Memory()), validation::cycles::ramBlockDeviceBlocks* validation::RamBlockDevice::blockSize) };
         validation::EmfsFatSubject subject{ device };
     };
 
@@ -203,7 +203,7 @@ namespace
         : public CycleSubjectTest
     {
     public:
-        validation::RamBlockDevice device{ infra::Head(infra::MakeRange(Memory()), validation::cycles::ramBlockDeviceBlocks * validation::RamBlockDevice::blockSize), validation::RamCompletion::immediate };
+        validation::RamBlockDevice device{ infra::Head(infra::MakeRange(Memory()), validation::cycles::ramBlockDeviceBlocks* validation::RamBlockDevice::blockSize), validation::RamCompletion::immediate };
         validation::FatFsSubject subject{ device };
     };
 

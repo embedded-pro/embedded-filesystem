@@ -8,6 +8,7 @@ target_link_libraries(validation.cycles PUBLIC
     infra.event
     infra.stream
     infra.timer
+    services.hil.commands
     validation.results
 )
 
@@ -18,6 +19,8 @@ target_sources(validation.cycles PRIVATE
     CycleSamples.cpp
     CycleSamples.hpp
     CycleSubject.hpp
+    CyclesCommands.cpp
+    CyclesCommands.hpp
     IdleCycleCounter.cpp
     IdleCycleCounter.hpp
 )
@@ -26,4 +29,5 @@ add_subdirectory(subjects)
 
 if (EMFS_BUILD_TESTS)
     add_subdirectory(test)
+    add_subdirectory(test_doubles)
 endif()

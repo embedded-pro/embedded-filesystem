@@ -56,3 +56,29 @@ EVT <kind> id=<number> <key>=<value> ...
 
 `emfs_validation.convert` joins the lines of every record and ignores kinds and keys it does not know, so that a later firmware can add them; only a `device` record keeps every key, as a parameter of the device, except `run`, `model` and `model.<parameter>`, which the conversion adds.
 The kinds are described with the commands that print them.
+
+## Processor cycles
+
+| Command                            | Answer                                                                                                                            |
+|------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| `cycles.run <subject> [n=<count>]` | `EVT device` for the RAM device of the subject, one `EVT cycles` per operation, then `OK`; `n` runs from 1 to 200, 100 by default |
+
+The subjects are `embedded-filesystem/fat` and `fatfs/tuned` on `ramblock`, and `embedded-filesystem/nor` and `littlefs/ram-matched` on `ramflash`, the RAM devices in the first 4 MiB of the SDRAM.
+An unknown subject answers `ERR unsupported`, a count out of range `ERR range`, and a command while a run is going on `ERR busy`.
+A run that does not end within 10 minutes answers `ERR timeout`, and one in which a call of the subject fails prints `EVT cycles.failed` and answers `ERR failed`.
+
+```text
+EVT device id=<number> device=ramflash kind=nor sectors=512 sectorSize=4096 memory=sdram
+EVT device id=<number> device=ramblock kind=block blocks=4096 blockSize=512 memory=sdram
+EVT cycles id=<number> subject=<subject> device=<device> op=<operation> n=<count> ramBytes=<bytes> minCycles=<cycles> medianCycles=<cycles> maxCycles=<cycles> settledCycles=<cycles>
+EVT cycles.failed id=<number> subject=<subject> op=<operation> run=<run> status=<code>
+```
+
+| Key                                      | Value                                                                                                                                                |
+|------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `op`                                     | `format`, `mount`, `open`, `list`, `read`, `overwrite`, `create`, `append`, `write`, `rename`, `remove` or `unmount`, in this order                  |
+| `ramBytes`                               | The RAM of the subject, as the host metrics count it                                                                                                 |
+| `minCycles`, `medianCycles`, `maxCycles` | The cycles from the call to its completion, over the `n` runs; the median of an even count is the lower of the two middle values                     |
+| `settledCycles`                          | The median of the busy cycles from the call until the volume is idle again, without the cycles of waiting that the calibration of the run measured   |
+| `run`, `status`                          | The run, from 0, and the error code of the file system: an `fs::Result`, an `FRESULT` of FatFs or an error of littlefs; 100 is a short read or write |
+

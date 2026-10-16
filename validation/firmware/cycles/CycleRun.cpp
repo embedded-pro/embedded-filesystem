@@ -7,7 +7,6 @@ namespace validation
     namespace
     {
         constexpr int32_t success = 0;
-        constexpr uint32_t q16 = 16;
         constexpr uint32_t randomSeed = 0x2545f491;
 
         uint32_t BusyCycles(uint32_t elapsed, uint64_t idle)
@@ -105,14 +104,16 @@ namespace validation
             (this->*done)();
     }
 
+    // Every poll of a wait brings the same timer interrupt and the same poll, so a wait costs the busy cycles of a poll for each
+    // poll, whether or not the cycle counter runs while the processor sleeps
     void CycleRun::Calibrate()
     {
         startCycles = cycles.Cycles();
         startIdle = idle.IdleCycles();
-        calibrationPolls = static_cast<uint32_t>(plan.calibration / plan.pollInterval);
+        polls = 0;
         pollTimer.Start(plan.pollInterval, [this]
             {
-                if (--calibrationPolls == 0)
+                if (++polls == plan.calibration / plan.pollInterval)
                 {
                     pollTimer.Cancel();
                     Calibrated();
@@ -122,9 +123,7 @@ namespace validation
 
     void CycleRun::Calibrated()
     {
-        auto elapsed = cycles.Cycles() - startCycles;
-        auto busy = BusyCycles(elapsed, idle.IdleCycles() - startIdle);
-        noiseQ16 = elapsed == 0 ? 0 : static_cast<uint32_t>((uint64_t{ busy } << q16) / elapsed);
+        busyCyclesPerPoll = BusyCycles(cycles.Cycles() - startCycles, idle.IdleCycles() - startIdle) / polls;
         StartOperation();
     }
 
@@ -173,7 +172,7 @@ namespace validation
         auto elapsed = cycles.Cycles() - startCycles;
         auto afterElapsed = elapsed - callCycles;
         auto afterBusy = BusyCycles(afterElapsed, idle.IdleCycles() - startIdle - callIdle);
-        auto noise = static_cast<uint32_t>((uint64_t{ afterElapsed } * noiseQ16) >> q16);
+        auto noise = busyCyclesPerPoll * polls;
 
         callSamples.Add(callCycles);
         settledSamples.Add(BusyCycles(callCycles, callIdle) + (afterBusy > noise ? afterBusy - noise : 0));
@@ -213,6 +212,7 @@ namespace validation
     void CycleRun::WaitIdle(Step next)
     {
         afterIdle = next;
+        polls = 0;
 
         if (subject->Idle())
             (this->*afterIdle)();
@@ -225,6 +225,8 @@ namespace validation
 
     void CycleRun::PollIdle()
     {
+        ++polls;
+
         if (subject->Idle())
         {
             pollTimer.Cancel();
