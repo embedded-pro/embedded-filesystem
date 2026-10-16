@@ -378,3 +378,28 @@ TEST_F(OperationQueueTest, is_idle_once_claimers_with_outstanding_claims_are_des
 
     EXPECT_TRUE(queue.Idle());
 }
+
+TEST_F(OperationQueueTest, is_idle_once_claimers_granted_and_queued_again_are_destroyed)
+{
+    {
+        fs::OperationQueue::Claimer foreground{ queue };
+        Grant(foreground, 1);
+        EXPECT_CALL(granted, callback(1));
+        ExecuteAllActions();
+        foreground.Claim([] {});
+    }
+    ExecuteAllActions();
+
+    {
+        fs::OperationQueue::BackgroundClaimer inBackground{ queue };
+        inBackground.Claim([this]
+            {
+                granted.callback(0);
+            });
+        EXPECT_CALL(granted, callback(0));
+        ExecuteAllActions();
+        inBackground.ClaimUrgent([] {});
+    }
+
+    EXPECT_TRUE(queue.Idle());
+}

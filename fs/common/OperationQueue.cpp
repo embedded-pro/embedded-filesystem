@@ -49,7 +49,10 @@ namespace fs
 
     OperationQueue::Claimer::~Claimer()
     {
-        if (claimer.IsClaimed() || claimer.IsQueued())
+        if (claimer.IsClaimed())
+            queue.Withdrawn();
+
+        if (claimer.IsQueued())
             queue.Withdrawn();
     }
 
@@ -91,7 +94,10 @@ namespace fs
 
     OperationQueue::BackgroundClaimer::~BackgroundClaimer()
     {
-        if (claimer.IsClaimed() || claimer.IsQueued())
+        if (claimer.IsClaimed())
+            queue.Withdrawn();
+
+        if (claimer.IsQueued())
             queue.Withdrawn();
     }
 
