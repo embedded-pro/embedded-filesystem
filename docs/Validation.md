@@ -361,6 +361,7 @@ The empty image holds the platform alone, and F-1 is the difference between the 
 The images need no board: they are linked with `Footprint.ld`, a generic linker script with one `MEMORY` block for the flash and one for the RAM, `Startup.cpp`, a minimal vector table and reset handler, and the system call stubs of `hal.cortex_m.runtime`, in `MinSizeRel`.
 
 `validation/footprint/measure.sh <directory>` runs `cortex-memory-budget`, pinned by hash in `requirements.txt`, on every image of the three presets, with `memory_budget.json`, into `<directory>/reports`, and `python3 -m emfs_validation.footprint` turns the reports into the F-1 fragment, `<directory>/fragments/footprint.json`.
+Each image is also linked with a map, `validation.footprint.<image>.elf.map`, and `measure.sh` runs `python3 -m emfs_validation.attribution` on the maps of every core, into `<directory>/attribution/<core>.md`: what each image adds to the empty image by library, by object and by kind of code, the callbacks of `infra::Function`, the state machines of `services::TableStateMachine`, virtual tables and `std::variant`, so that a change shows which part of a subject it made larger or smaller; the attribution is no metric, and its totals leave out the alignment between output sections.
 Each subject has two results per core, the flash and the RAM it adds, each with the RAM in `ramBytes`, and each core is a device with the compiler, as the `.comment` of the images names it, and the configuration as its parameters:
 
 ```json

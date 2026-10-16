@@ -39,7 +39,7 @@ function(emfs_add_footprint_image image)
         SUFFIX .elf
         LINK_DEPENDS "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/Footprint.ld"
     )
-    target_link_options(validation.footprint.${image} PRIVATE "-T${CMAKE_CURRENT_FUNCTION_LIST_DIR}/Footprint.ld" "LINKER:--undefined=Reset_Handler,--no-warn-rwx-segments")
+    target_link_options(validation.footprint.${image} PRIVATE "-T${CMAKE_CURRENT_FUNCTION_LIST_DIR}/Footprint.ld" "LINKER:--undefined=Reset_Handler,--no-warn-rwx-segments" "LINKER:-Map=$<TARGET_FILE:validation.footprint.${image}>.map")
     target_link_libraries(validation.footprint.${image} PRIVATE hal.cortex_m.runtime validation.footprint_platform ${IMAGE_LIBRARIES})
     target_compile_definitions(validation.footprint.${image} PRIVATE ${IMAGE_DEFINITIONS})
     target_sources(validation.footprint.${image} PRIVATE ${IMAGE_SOURCES})
