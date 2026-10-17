@@ -1,7 +1,7 @@
 #include "fs/nor/NorBlockHeader.hpp"
+#include "fs/common/Crc32.hpp"
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorLayout.hpp"
-#include "fs/common/Crc32.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 

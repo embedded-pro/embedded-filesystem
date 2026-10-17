@@ -58,7 +58,7 @@ TEST_F(FatReaderDirectoryFat16Test, a_directory_is_listed_across_its_clusters)
     for (char index = 0; index != 20; ++index)
     {
         name[4] = static_cast<char>('A' + index);
-        builder->AddFile(sub, "", reinterpret_cast<const char(&)[12]>(*name.data()), infra::ConstByteRange());
+        builder->AddFile(sub, "", reinterpret_cast<const char (&)[12]>(*name.data()), infra::ConstByteRange());
     }
     ExpectMount();
     auto directory = ExpectOpenDirectory("/sub");

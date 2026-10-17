@@ -310,17 +310,17 @@ A handle returns to its pool once the last `infra::SharedPtr` and `infra::WeakPt
 The building blocks in `fs/common` are shared by both filesystems.
 Each one is sized at compile time:
 
-| Building block                                      | Sized by                                                                  | RAM                                                  |
-|-----------------------------------------------------|---------------------------------------------------------------------------|------------------------------------------------------|
-| `fs::PathLimits`                                    | The longest name and the longest path in UTF-8 bytes, 255 by default      | None: paths are not copied                           |
-| `fs::OperationQueue`                                | Claimed by the handles and the path-operation slots of the volume         | A claimable resource and two callbacks               |
-| `fs::IdleTimer`                                     | One per background work, which starts it when the queue empties           | A timer and its callback                             |
-| `fs::DeferredCompletions::WithMaxSize<N>`           | N completions with `busy` that wait for the event dispatcher              | N completions                                        |
-| `fs::HandlePool<Handle, N>`                         | N handles, constructed once with the volume                               | N handles                                            |
-| `fs::SectorCache::WithStorage<Sectors, SectorSize>` | Sectors buffers of SectorSize bytes, 512 by default; see [Fat.md](Fat.md) | Sectors buffers and their entries                    |
-| `fs::FlushBarrier`                                  | One per block device, in front of it                                      | The lowest rank written since the last flush         |
-| `fs::DirectTransfers`                               | One per volume, next to its sector cache                                  | One transfer in flight                               |
-| `fs::CrcRecord`                                     | The buffer of the caller                                                  | None: it frames and checks records in place          |
+| Building block                                      | Sized by                                                                  | RAM                                          |
+|-----------------------------------------------------|---------------------------------------------------------------------------|----------------------------------------------|
+| `fs::PathLimits`                                    | The longest name and the longest path in UTF-8 bytes, 255 by default      | None: paths are not copied                   |
+| `fs::OperationQueue`                                | Claimed by the handles and the path-operation slots of the volume         | A claimable resource and two callbacks       |
+| `fs::IdleTimer`                                     | One per background work, which starts it when the queue empties           | A timer and its callback                     |
+| `fs::DeferredCompletions::WithMaxSize<N>`           | N completions with `busy` that wait for the event dispatcher              | N completions                                |
+| `fs::HandlePool<Handle, N>`                         | N handles, constructed once with the volume                               | N handles                                    |
+| `fs::SectorCache::WithStorage<Sectors, SectorSize>` | Sectors buffers of SectorSize bytes, 512 by default; see [Fat.md](Fat.md) | Sectors buffers and their entries            |
+| `fs::FlushBarrier`                                  | One per block device, in front of it                                      | The lowest rank written since the last flush |
+| `fs::DirectTransfers`                               | One per volume, next to its sector cache                                  | One transfer in flight                       |
+| `fs::CrcRecord`                                     | The buffer of the caller                                                  | None: it frames and checks records in place  |
 
 The parts of `fs/fat` that only read sectors, the reader of the FAT and the reader of directories, read them through `fs::SectorSource`, which `fs::SectorCache` implements, so that `fs::FatReader` runs them on its one sector buffer.
 The writer of the FAT changes sectors through `fs::SectorStore`, which adds `Modify` to it, so that `fs::FatLite` runs it on its one sector buffer too.
@@ -383,7 +383,8 @@ hal::Flash& norFlash = ...;
 fs::NorFileSystem::WithStorage<norConfig, 4> norVolume{ norFlash };
 ```
 
-For FAT, the template arguments are the number of open files and the number of sectors in the cache, followed by an optional `fs::FatLimits` with the other sizes and an optional `fs::FatFeatures` with the calls and the work the volume leaves out; `fs::FatConfig` holds the settings that need no storage, such as the allocation unit of the card and the timer service that gives the time of timestamps, as described in [Fat.md](Fat.md#configuration).
+For FAT, the template arguments are the number of open files and the number of sectors in the cache, followed by an optional `fs::FatLimits` with the other sizes and an optional `fs::FatFeatures` with the calls and the work the volume leaves out.
+`fs::FatConfig` holds the settings that need no storage, such as the allocation unit of the card and the timer service that gives the time of timestamps, as described in [Fat.md](Fat.md#configuration).
 `fs::FatReader::WithStorage<Files, Directories, Limits>` takes the number of open files and of open directory handles, and an optional `fs::PathLimits`, as described in [Fat.md](Fat.md#read-only-volume), and `fs::FatLite::WithStorage<Files, Directories, Limits>` the same, as described in [Fat.md](Fat.md#lite-volume).
 For NOR, they are the configuration, the number of open files and an optional `fs::NorFeatures`; the constructor takes the device and an optional idle delay, as described in [NorFilesystem.md](NorFilesystem.md#configuration), and `fs::NorLite::WithStorage<Config, Files>` takes the configuration and the number of open files, as described in [NorFilesystem.md](NorFilesystem.md#lite-volume).
 The block states and the erase-count table are sized by `maxBlocks`, the largest number of blocks the volume may span; mounting a device with more blocks fails with `Result::unsupported`.

@@ -68,7 +68,8 @@ For NOR flash, every cut is repeated with the interrupted step not started, part
 For block devices, every cut is repeated with the interrupted block left unwritten, written completely and torn, where only the first bytes of the block hold the new data.
 A run with loss of unflushed writes models a device cache that is not written back, and a run that keeps the writes of the interrupted request but loses the earlier unflushed ones models a device cache that writes back in another order.
 The FAT sweep runs every case on `fs::FatFileSystem`, and the cases of writing, truncating and creating a file on `fs::FatLite`, with names in the 8.3 format.
-The NOR sweep runs every case on `fs::NorFileSystem`, and on `fs::NorLite` the cases of appending, creating and writing a file, an unmount with a file left open, a replay with a smaller cache, a write when space runs low and the two leveling cases with the fallback, where its moves come from `fs::NorForegroundLeveling`, with a file instead of a directory where a case makes one; one more case, on `fs::NorLite` only, opens a file for writing, which empties it.
+The NOR sweep runs every case on `fs::NorFileSystem`, and on `fs::NorLite` the cases of appending, creating and writing a file, an unmount with a file left open, a replay with a smaller cache, a write when space runs low and the two leveling cases with the fallback, where its moves come from `fs::NorForegroundLeveling`, with a file instead of a directory where a case makes one.
+One more case, on `fs::NorLite` only, opens a file for writing, which empties it.
 The result of the sweep is metric P-1 in [Metrics.md](Metrics.md).
 
 The sweep is implemented by `metrics::NorPowerCutSweep` and `metrics::BlockPowerCutSweep` in `metrics/power_cut`.
