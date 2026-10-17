@@ -4,10 +4,10 @@
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/FlushBarrier.hpp"
 #include "fs/common/HandlePool.hpp"
+#include "fs/common/LiteLifecycle.hpp"
 #include "fs/common/Path.hpp"
 #include "fs/fat/FatDirectoryEntry.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
-#include "fs/fat/FatLifecycle.hpp"
 #include "fs/fat/FatNameScan.hpp"
 #include "fs/fat/FatShortName.hpp"
 #include "fs/fat/lite/FatLiteFile.hpp"
@@ -24,12 +24,9 @@
 #include "infra/util/ByteRange.hpp"
 #include "infra/util/Function.hpp"
 #include "infra/util/SharedPtr.hpp"
-#include "services/fsm/StateMachineDefinition.hpp"
-#include "services/fsm/TableStateMachine.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <variant>
 
 namespace fs
 {
@@ -39,12 +36,6 @@ namespace fs
     public:
         template<std::size_t Files, std::size_t Directories = 1, PathLimits Limits = PathLimits{}, FatReaderFeatures Features = FatReaderFeatures{}>
         class WithStorage;
-
-        using Machine = services::TableStateMachine<FatLifecycleState, FatLifecycleEvent, FatLite>;
-        using Initial = FatUnmounted;
-
-        static constexpr std::array<Machine::Transition, 7> Rows();
-        static constexpr Machine::Rules Rules();
 
         void Mount(const infra::Function<void(Result result)>& onDone) override;
         void Unmount(const infra::Function<void(Result result)>& onDone) override;
@@ -69,8 +60,6 @@ namespace fs
         virtual infra::SharedPtr<FatLiteFile> AllocateFile() = 0;
         virtual infra::SharedPtr<FatReaderDirectory> AllocateDirectory() = 0;
 
-        bool IsMounted() const;
-        Result Unavailable() const;
         Result Unsupported() const;
         Result Refusal(infra::BoundedConstString path) const;
         bool PathCallPending() const;
@@ -120,8 +109,7 @@ namespace fs
         infra::AutoResetFunction<void(Result result, const EntryInfo& info)> onStat;
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<File> file)> onOpen;
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<Directory> directory)> onOpenDirectory;
-        Machine::WithStorage<2> lifecycle;
-        Result lifecycleResult{ Result::success };
+        LiteLifecycle lifecycle;
         infra::Function<void(Result result)> onMountDone;
         infra::Function<void(Result result)> onUnmountDone;
     };
@@ -164,54 +152,6 @@ namespace fs
         HandlePool<FatLiteFile, Files> files{ Volume() };
         HandlePool<FatReaderDirectory, Directories> directories{ Volume() };
     };
-
-    constexpr std::array<FatLite::Machine::Transition, 7> FatLite::Rows()
-    {
-        return {
-            Machine::Row<FatUnmounted, FatMountRequested, FatMounting>(nullptr, [](FatLite& lite, FatUnmounted&, const FatMountRequested&)
-                {
-                    lite.BeginMount();
-                    return FatMounting{};
-                }),
-            Machine::Row<FatFault, FatMountRequested, FatMounting>(nullptr, [](FatLite& lite, FatFault&, const FatMountRequested&)
-                {
-                    lite.BeginMount();
-                    return FatMounting{};
-                }),
-            Machine::Row<FatMounting, FatMountDone, FatMounted>([](FatLite&, const FatMounting&, const FatMountDone& done)
-                {
-                    return done.result == Result::success;
-                }),
-            Machine::Row<FatMounting, FatMountDone, FatFault>(nullptr, [](FatLite&, FatMounting&, const FatMountDone& done)
-                {
-                    return FatFault{ done.result };
-                }),
-            Machine::Row<FatMounted, FatUnmountRequested, FatUnmounting>(nullptr, [](FatLite& lite, FatMounted&, const FatUnmountRequested&)
-                {
-                    lite.BeginUnmount();
-                    return FatUnmounting{};
-                }),
-            Machine::Row<FatMounted, FatMediaRemoved, FatFault>(nullptr, [](FatLite&, FatMounted&, const FatMediaRemoved&)
-                {
-                    return FatFault{ Result::mediaRemoved };
-                }),
-            Machine::Row<FatUnmounting, FatUnmountDone, FatUnmounted>(nullptr, [](FatLite& lite, FatUnmounting&, const FatUnmountDone& done)
-                {
-                    lite.lifecycleResult = done.result;
-                    return FatUnmounted{};
-                }),
-        };
-    }
-
-    constexpr FatLite::Machine::Rules FatLite::Rules()
-    {
-        return Machine::Rules{}
-            .Allow<FatUnmounted, FatMounting>()
-            .Allow<FatMounting, FatMounted, FatFault>()
-            .Allow<FatMounted, FatUnmounting, FatFault>()
-            .Allow<FatUnmounting, FatUnmounted>()
-            .Allow<FatFault, FatMounting>();
-    }
 }
 
 #endif

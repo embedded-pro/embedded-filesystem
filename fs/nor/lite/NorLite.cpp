@@ -9,25 +9,8 @@ namespace fs
         , leveling(volume)
         , lifecycleClaimer(volume.Queue())
         , pathClaimer(volume.Queue())
-        , lifecycle(*this, services::Validated<NorLite>())
     {
         volume.AttachBackground(leveling);
-        lifecycle.OnEntered<NorMounted>([](NorLite& lite, NorMounted&)
-            {
-                lite.volume.MarkMounted();
-                lite.Entered(Result::success);
-            });
-        lifecycle.OnEntered<NorFault>([](NorLite& lite, const NorFault& fault)
-            {
-                lite.volume.MarkUnmounted();
-                lite.Entered(fault.result);
-            });
-        lifecycle.OnEntered<NorUnmounted>([](NorLite& lite, NorUnmounted&)
-            {
-                lite.volume.MarkUnmounted();
-                lite.Entered(lite.lifecycleResult);
-            });
-        lifecycle.Start<NorUnmounted>();
     }
 
     NorLite::~NorLite() = default;
@@ -39,20 +22,24 @@ namespace fs
 
     void NorLite::Mount(const infra::Function<void(Result result)>& onDone)
     {
-        if (lifecycle.Dispatch(NorMountRequested{}) == services::DispatchResult::transitioned)
-            onMountDone = onDone;
-        else
+        if (!lifecycle.StartMount())
             volume.Defer(onDone, Result::busy);
+        else
+        {
+            onMountDone = onDone;
+            BeginMount();
+        }
     }
 
     void NorLite::Unmount(const infra::Function<void(Result result)>& onDone)
     {
-        if (lifecycle.Dispatch(NorUnmountRequested{}) == services::DispatchResult::transitioned)
+        if (lifecycle.StartUnmount())
+        {
             onUnmountDone = onDone;
-        else if (std::holds_alternative<NorUnmounted>(lifecycle.CurrentState()) || std::holds_alternative<NorFault>(lifecycle.CurrentState()))
-            volume.Defer(onDone, Result::notMounted);
+            BeginUnmount();
+        }
         else
-            volume.Defer(onDone, Result::busy);
+            volume.Defer(onDone, lifecycle.Changing() ? Result::busy : Result::notMounted);
     }
 
     void NorLite::Open(infra::BoundedConstString path, OpenMode mode, const infra::Function<void(Result result, infra::SharedPtr<File> file)>& onDone)
@@ -106,19 +93,14 @@ namespace fs
         return volume;
     }
 
-    bool NorLite::IsMounted() const
-    {
-        return std::holds_alternative<NorMounted>(lifecycle.CurrentState());
-    }
-
     Result NorLite::Unsupported() const
     {
-        return IsMounted() ? Result::unsupported : Result::notMounted;
+        return lifecycle.IsMounted() ? Result::unsupported : Result::notMounted;
     }
 
     Result NorLite::Refusal(infra::BoundedConstString path) const
     {
-        if (!IsMounted())
+        if (!lifecycle.IsMounted())
             return Result::notMounted;
 
         if (auto validation = ValidatePath(path, volume.Limits()); validation != Result::success)
@@ -168,7 +150,14 @@ namespace fs
     void NorLite::Mounted(Result result)
     {
         lifecycleClaimer.Release();
-        lifecycle.Dispatch(NorMountDone{ result });
+        lifecycle.Mounted(result);
+
+        if (result == Result::success)
+            volume.MarkMounted();
+        else
+            volume.MarkUnmounted();
+
+        Entered(result);
     }
 
     void NorLite::BeginUnmount()
@@ -178,7 +167,9 @@ namespace fs
                 volume.Operation().emplace<NorUnmount>(volume, [this](Result result)
                                       {
                                           lifecycleClaimer.Release();
-                                          lifecycle.Dispatch(NorUnmountDone{ result });
+                                          lifecycle.Unmounted();
+                                          volume.MarkUnmounted();
+                                          Entered(result);
                                       })
                     .Start();
             });
