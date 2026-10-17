@@ -84,4 +84,6 @@ namespace fs
         if (result == Result::mediaRemoved)
             onMediaRemoved();
     }
+
+    template void FatReaderVolume::Defer(const infra::Function<void(Result result)>& onDone, Result result);
 }

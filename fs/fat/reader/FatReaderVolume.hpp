@@ -69,6 +69,8 @@ namespace fs
                 detail::Deliver(onDone, result);
             });
     }
+
+    extern template void FatReaderVolume::Defer(const infra::Function<void(Result result)>& onDone, Result result);
 }
 
 #endif

@@ -92,7 +92,6 @@ namespace fs
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<File> file)> onOpen;
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<Directory> directory)> onOpenDirectory;
         Machine::WithStorage<2> lifecycle;
-        infra::Function<void(Result result)> mountDone;
         infra::Function<void(Result result)> onMountDone;
         infra::Function<void(Result result)> onUnmountDone;
     };

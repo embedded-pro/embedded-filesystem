@@ -232,10 +232,6 @@ namespace fs
     {
         lifecycleClaimer.Claim([this]
             {
-                mountDone = lifecycle.CompletionWith<void(Result result)>([](Result result)
-                    {
-                        return FatMountDone{ result };
-                    });
                 window.Forget();
                 mount.Start([this](Result result)
                     {
@@ -247,7 +243,7 @@ namespace fs
     void FatReader::Mounted(Result result)
     {
         lifecycleClaimer.Release();
-        std::exchange(mountDone, nullptr)(result);
+        lifecycle.Dispatch(FatMountDone{ result });
     }
 
     void FatReader::BeginUnmount()
