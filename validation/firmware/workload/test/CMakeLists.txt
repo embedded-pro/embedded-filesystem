@@ -16,6 +16,7 @@ target_link_libraries(validation.workload_test PUBLIC
 target_sources(validation.workload_test PRIVATE
     TestAppendWindows.cpp
     TestPhaseTotals.cpp
+    TestWorkloadCommands.cpp
     TestWorkloadFailures.cpp
     TestWorkloadRunner.cpp
     TestWorkloads.cpp

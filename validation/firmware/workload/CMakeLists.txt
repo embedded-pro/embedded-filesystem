@@ -8,7 +8,9 @@ target_link_libraries(validation.workload PUBLIC
     fs.interfaces
     fs.nor
     infra.timer
+    services.hil.commands
     validation.devices
+    validation.hil
     validation.results
     validation.timing
 )
@@ -41,6 +43,8 @@ target_sources(validation.workload PRIVATE
     VolumeFiller.hpp
     Workload.cpp
     Workload.hpp
+    WorkloadCommands.cpp
+    WorkloadCommands.hpp
     WorkloadOperation.cpp
     WorkloadOperation.hpp
     WorkloadRunner.cpp

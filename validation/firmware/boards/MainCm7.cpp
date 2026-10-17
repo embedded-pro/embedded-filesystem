@@ -8,6 +8,7 @@
 #include "hal_st/stm32fxxx/SdRamStm.hpp"
 #include "hal_st/stm32fxxx/UartStm.hpp"
 #include "infra/stream/StringOutputStream.hpp"
+#include "metrics/nor/NorConfigurations.hpp"
 #include "services/flash/FlashGeometryQuadSfdp.hpp"
 #include "services/hil/HilCommand.hpp"
 #include "services/hil/HilPinNaming.hpp"
@@ -38,6 +39,15 @@
 #include "validation/firmware/hil/FirmwareCommands.hpp"
 #include "validation/firmware/hil/NoPins.hpp"
 #include "validation/firmware/results/ResultLines.hpp"
+#include "validation/firmware/workload/DataLogger.hpp"
+#include "validation/firmware/workload/MountScaling.hpp"
+#include "validation/firmware/workload/NorWorkloadVolume.hpp"
+#include "validation/firmware/workload/RandomOverwrite.hpp"
+#include "validation/firmware/workload/ReadPatterns.hpp"
+#include "validation/firmware/workload/SequentialWrite.hpp"
+#include "validation/firmware/workload/SmallFiles.hpp"
+#include "validation/firmware/workload/WorkloadCommands.hpp"
+#include "validation/firmware/workload/WorkloadRunner.hpp"
 #include <array>
 #include <chrono>
 #include DEVICE_HEADER
@@ -90,6 +100,31 @@ namespace
                 HAL_RCC_GetHCLKFreq() / (validation::board::QuadSpiConfig().prescaler + 1), "" };
     }
 
+    template<bool present>
+    constexpr fs::NorConfig ParallelNorVolumeConfig()
+    {
+        constexpr auto chip = validation::board::ParallelNorConfig().value_or(hal::NorFlashStm::Config{});
+        return { .maxBlocks = chip.numberOfSectors, .programUnit = 2, .pageSize = chip.writeBufferBytes };
+    }
+
+    // A template, so that the volume of the parallel NOR is not instantiated for a board without one
+    template<bool hasParallelNor = validation::board::ParallelNorConfig().has_value()>
+    infra::MemoryRange<const validation::WorkloadTarget> WorkloadTargets(validation::CountingFlash& quadSpi, [[maybe_unused]] validation::CountingFlash& parallelNor)
+    {
+        static validation::NorWorkloadVolume<metrics::norQspi16mConfig> quadSpiVolume{ quadSpi };
+        if constexpr (hasParallelNor)
+        {
+            static validation::NorWorkloadVolume<ParallelNorVolumeConfig<hasParallelNor>()> parallelNorVolume{ parallelNor };
+            static const std::array<validation::WorkloadTarget, 2> targets{ { { devices[quadSpiDevice], quadSpi, quadSpiVolume }, { devices[parallelNorDevice], parallelNor, parallelNorVolume } } };
+            return infra::MakeRange(targets);
+        }
+        else
+        {
+            static const std::array<validation::WorkloadTarget, 1> targets{ { { devices[quadSpiDevice], quadSpi, quadSpiVolume } } };
+            return infra::MakeRange(targets);
+        }
+    }
+
     hal::Flash& ParallelNor(hal::FmcStm& fmc)
     {
         constexpr auto config = validation::board::ParallelNorConfig();
@@ -130,7 +165,8 @@ int main()
     static hal::GpioPinStm terminalTx{ validation::board::terminalPort, validation::board::terminalTx };
     static hal::GpioPinStm terminalRx{ validation::board::terminalPort, validation::board::terminalRx };
     static hal::UartStm uart{ validation::board::terminalUart, terminalTx, terminalRx, hal::UartStm::Config{ validation::board::terminalBaudRate } };
-    static services::StreamWriterOnSerialCommunication::WithStorage<2048> writer{ uart };
+    // The phases of a workload can end in quick succession, and their records are kilobytes each
+    static services::StreamWriterOnSerialCommunication::WithStorage<16384> writer{ uart };
     static infra::TextOutputStream::WithErrorPolicy stream{ writer };
     static services::TracerToStream tracer{ stream };
     static services::HilResponse response{ tracer };
@@ -169,6 +205,17 @@ int main()
     static const std::array<validation::NorBenchTarget, 2> benchTargets{ { { devices[quadSpiDevice], quadSpiCounting }, { devices[parallelNorDevice], parallelNorCounting } } };
     static validation::NorBench bench{ results, SystemCoreClock };
     static validation::BenchCommands benchCommands{ context, bench, infra::MakeRange(benchTargets) };
+
+    static validation::WorkloadRunner workloadRunner{ results, eventInfrastructure.cycles, SystemCoreClock };
+    static validation::WorkloadTools workloadTools{ workloadRunner };
+    static validation::SequentialWrite sequentialWrite{ workloadTools };
+    static validation::DataLogger dataLogger{ workloadTools };
+    static validation::RandomOverwrite randomOverwrite{ workloadTools };
+    static validation::SmallFiles smallFiles{ workloadTools };
+    static validation::ReadPatterns readPatterns{ workloadTools };
+    static validation::MountScaling mountScaling{ workloadTools };
+    static const std::array<validation::Workload*, 6> workloads{ { &sequentialWrite, &dataLogger, &randomOverwrite, &smallFiles, &readPatterns, &mountScaling } };
+    static validation::WorkloadCommands workloadCommands{ context, workloadRunner, infra::MakeRange(workloads), WorkloadTargets(quadSpiCounting, parallelNorCounting) };
 
     // The baselines block, so they use views of the RAM devices that complete within the call
     auto flashMemory = infra::Head(sdram.Memory(), ramFlashBytes);
