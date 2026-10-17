@@ -3,8 +3,12 @@
 #include "hal_st/stm32fxxx/DualCoreHandshakeStm.hpp"
 #include "hal_st/stm32fxxx/FmcStm.hpp"
 #include "hal_st/stm32fxxx/GpioStm.hpp"
+#include "hal_st/stm32fxxx/NorFlashStm.hpp"
+#include "hal_st/stm32fxxx/QuadSpiStm.hpp"
 #include "hal_st/stm32fxxx/SdRamStm.hpp"
 #include "hal_st/stm32fxxx/UartStm.hpp"
+#include "infra/stream/StringOutputStream.hpp"
+#include "services/flash/FlashGeometryQuadSfdp.hpp"
 #include "services/hil/HilCommand.hpp"
 #include "services/hil/HilPinNaming.hpp"
 #include "services/hil/HilPinPool.hpp"
@@ -13,6 +17,8 @@
 #include "services/hil/HilTerminal.hpp"
 #include "services/tracer/StreamWriterOnSerialCommunication.hpp"
 #include "services/tracer/Tracer.hpp"
+#include "validation/firmware/bench/BenchCommands.hpp"
+#include "validation/firmware/bench/NorBench.hpp"
 #include "validation/firmware/boards/BoardInfoStm.hpp"
 #include "validation/firmware/boards/Clocks.hpp"
 #include "validation/firmware/boards/EventInfrastructure.hpp"
@@ -23,12 +29,17 @@
 #include "validation/firmware/cycles/subjects/FatFsSubject.hpp"
 #include "validation/firmware/cycles/subjects/FileSystemSubject.hpp"
 #include "validation/firmware/cycles/subjects/LittleFsSubject.hpp"
+#include "validation/firmware/devices/CountingFlash.hpp"
+#include "validation/firmware/devices/NullFlash.hpp"
+#include "validation/firmware/devices/QuadSpiNor.hpp"
 #include "validation/firmware/devices/RamBlockDevice.hpp"
 #include "validation/firmware/devices/RamFlash.hpp"
+#include "validation/firmware/hil/DeviceCommands.hpp"
 #include "validation/firmware/hil/FirmwareCommands.hpp"
 #include "validation/firmware/hil/NoPins.hpp"
 #include "validation/firmware/results/ResultLines.hpp"
 #include <array>
+#include <chrono>
 #include DEVICE_HEADER
 
 unsigned int hse_value = validation::board::hseValue;
@@ -40,8 +51,65 @@ namespace
 
     static_assert(ramFlashBytes + ramBlockBytes <= validation::board::sdRamSize);
 
-    const validation::CycleDevice ramFlash{ "ramflash", validation::CycleDeviceKind::nor, validation::cycles::ramFlashSectors, validation::cycles::ramFlashSectorSize };
-    const validation::CycleDevice ramBlock{ "ramblock", validation::CycleDeviceKind::block, validation::cycles::ramBlockDeviceBlocks, validation::RamBlockDevice::blockSize };
+    const validation::DeviceDescription ramFlash{ "ramflash", validation::DeviceKind::nor, validation::cycles::ramFlashSectors, validation::cycles::ramFlashSectorSize, 0, "", 0, "sdram" };
+    const validation::DeviceDescription ramBlock{ "ramblock", validation::DeviceKind::block, validation::cycles::ramBlockDeviceBlocks, validation::RamBlockDevice::blockSize, 0, "", 0, "sdram" };
+
+    using namespace std::chrono_literals;
+
+    constexpr uint32_t quadSpiRegionSectors = 4096;
+    constexpr uint32_t quadSpiPageSize = 256;
+    constexpr uint32_t parallelNorPageSize = validation::board::ParallelNorConfig().value_or(hal::NorFlashStm::Config{}).writeBufferBytes;
+    constexpr validation::FlashGuard quadSpiGuard{ 100ms, 20ms, 2s };
+    constexpr validation::FlashGuard parallelNorGuard{ 100ms, 20ms, 8s };
+    constexpr std::size_t quadSpiDevice = 0;
+    constexpr std::size_t parallelNorDevice = 1;
+
+    std::array<validation::DeviceEntry, 4> devices{ {
+        { { "qspi", validation::DeviceKind::nor, 0, 0, 0, "", 0, "" }, false },
+        { { "fmc", validation::DeviceKind::nor, 0, 0, 0, "", 0, "" }, false },
+        { ramFlash, true },
+        { ramBlock, true },
+    } };
+
+    infra::BoundedConstString Hex(infra::BoundedString& text, uint32_t value, std::size_t digits)
+    {
+        text.clear();
+        infra::StringOutputStream stream{ text };
+        stream << infra::hex << infra::Width(digits, '0') << value;
+        return text;
+    }
+
+    void DescribeQuadSpiNor(const validation::QuadSpiNor& nor, const services::FlashGeometryQuad& geometry, bool present)
+    {
+        static infra::BoundedString::WithStorage<8> chip;
+        auto& entry = devices[quadSpiDevice];
+        entry.present = present && geometry.SizePage() == quadSpiPageSize;
+
+        if (entry.present)
+            entry.description = { "qspi", validation::DeviceKind::nor, nor.NumberOfSectors(), nor.SizeOfSector(0), quadSpiPageSize, Hex(chip, nor.JedecId(), 6),
+                HAL_RCC_GetHCLKFreq() / (validation::board::QuadSpiConfig().prescaler + 1), "" };
+    }
+
+    hal::Flash& ParallelNor(hal::FmcStm& fmc)
+    {
+        constexpr auto config = validation::board::ParallelNorConfig();
+        if constexpr (config.has_value())
+        {
+            static hal::NorFlashStm nor{ fmc, *config };
+            static infra::BoundedString::WithStorage<8> chip;
+            const auto identification = nor.ReadIdentification();
+            auto& entry = devices[parallelNorDevice];
+            entry.description = { "fmc", validation::DeviceKind::nor, nor.NumberOfSectors(), nor.SizeOfSector(0), parallelNorPageSize,
+                Hex(chip, static_cast<uint32_t>(identification.manufacturer) << 16 | identification.device1, 8), HAL_RCC_GetHCLKFreq(), "" };
+            entry.present = identification.manufacturer != 0x0000 && identification.manufacturer != 0xffff;
+            return nor;
+        }
+        else
+        {
+            static validation::NullFlash absent{ 1, parallelNorPageSize };
+            return absent;
+        }
+    }
 }
 
 int main()
@@ -78,6 +146,30 @@ int main()
     static services::HilSystemCommands system{ context, boardInfo, reset };
     static validation::FirmwareCommands firmware{ context, validation::FirmwareInfo{ EMFS_VALIDATION_COMMIT, cortexM4Stopped } };
 
+    static validation::ResultLines results{ response };
+    static validation::DeviceCommands deviceCommands{ context, results, infra::MakeRange(devices) };
+
+    static hal::GpioPinStm quadSpiClock{ validation::board::quadSpiPins[0].first, validation::board::quadSpiPins[0].second };
+    static hal::GpioPinStm quadSpiSelect{ validation::board::quadSpiPins[1].first, validation::board::quadSpiPins[1].second };
+    static hal::GpioPinStm quadSpiData0{ validation::board::quadSpiPins[2].first, validation::board::quadSpiPins[2].second };
+    static hal::GpioPinStm quadSpiData1{ validation::board::quadSpiPins[3].first, validation::board::quadSpiPins[3].second };
+    static hal::GpioPinStm quadSpiData2{ validation::board::quadSpiPins[4].first, validation::board::quadSpiPins[4].second };
+    static hal::GpioPinStm quadSpiData3{ validation::board::quadSpiPins[5].first, validation::board::quadSpiPins[5].second };
+    static hal::QuadSpiStm quadSpi{ quadSpiClock, quadSpiSelect, quadSpiData0, quadSpiData1, quadSpiData2, quadSpiData3, validation::board::QuadSpiConfig() };
+    static validation::QuadSpiNor quadSpiNor{ quadSpi, quadSpiRegionSectors };
+    static services::FlashGeometryQuadSfdp quadSpiGeometry{ quadSpi, []
+        {
+            quadSpiNor.Start(quadSpiGeometry, [](bool present)
+                {
+                    DescribeQuadSpiNor(quadSpiNor, quadSpiGeometry, present);
+                });
+        } };
+    static validation::CountingFlash quadSpiCounting{ quadSpiNor, quadSpiPageSize, eventInfrastructure.cycles, SystemCoreClock, quadSpiGuard };
+    static validation::CountingFlash parallelNorCounting{ ParallelNor(fmc), parallelNorPageSize, eventInfrastructure.cycles, SystemCoreClock, parallelNorGuard };
+    static const std::array<validation::NorBenchTarget, 2> benchTargets{ { { devices[quadSpiDevice], quadSpiCounting }, { devices[parallelNorDevice], parallelNorCounting } } };
+    static validation::NorBench bench{ results, SystemCoreClock };
+    static validation::BenchCommands benchCommands{ context, bench, infra::MakeRange(benchTargets) };
+
     // The baselines block, so they use views of the RAM devices that complete within the call
     auto flashMemory = infra::Head(sdram.Memory(), ramFlashBytes);
     auto blockMemory = infra::Head(infra::DiscardHead(sdram.Memory(), ramFlashBytes), ramBlockBytes);
@@ -90,7 +182,6 @@ int main()
     static validation::FatFsSubject fatFs{ blockingBlockDevice };
     static validation::LittleFsSubject littleFs{ blockingFlash };
     static const std::array<validation::CycleTarget, 4> targets{ { { emfsFat, ramBlock }, { emfsNor, ramFlash }, { fatFs, ramBlock }, { littleFs, ramFlash } } };
-    static validation::ResultLines results{ response };
     static validation::CycleRun cycleRun{ results, eventInfrastructure.cycles, eventInfrastructure.idle };
     static validation::CyclesCommands cycles{ context, results, cycleRun, infra::MakeRange(targets) };
 

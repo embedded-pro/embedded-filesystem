@@ -73,7 +73,7 @@ def test_answers_delay_within_its_range(terminal, line, reason):
         assert error.value.reason == reason
 
 
-@pytest.mark.parametrize("line", ["ping 1", "dev.list", "delay"])
+@pytest.mark.parametrize("line", ["ping 1", "dev.list qspi", "delay"])
 def test_answers_usage_to_what_it_does_not_know(terminal, line):
     with pytest.raises(FirmwareError) as error:
         terminal.command(line)
@@ -154,6 +154,120 @@ def test_cycles_run_describes_the_ram_devices(terminal):
     ],
 )
 def test_cycles_run_rejects_what_the_firmware_rejects(terminal, line, reason):
+    with pytest.raises(FirmwareError) as error:
+        terminal.command(line)
+
+    assert error.value.reason == reason
+
+
+def test_dev_list_names_the_nor_devices_of_the_board_and_the_ram_devices(terminal):
+    assert terminal.command("dev.list").values == {"devices": "qspi,fmc,ramflash,ramblock"}
+
+
+def test_dev_list_leaves_out_what_the_board_does_not_have():
+    terminal = FirmwareTerminal(serial=FakeFirmware(load_board("stm32h745i_disco")), timeout=0.5)
+    terminal.sync()
+
+    assert terminal.command("dev.list").values == {"devices": "qspi,ramflash,ramblock"}
+
+
+def test_dev_info_describes_a_nor_device(terminal):
+    assert terminal.command("dev.info fmc").ok
+
+    (record,) = terminal.drain_events("device")
+    assert {key: value for key, value in record.values.items() if key != "id"} == {
+        "device": "fmc",
+        "kind": "nor",
+        "sectors": "128",
+        "sectorSize": "131072",
+        "pageSize": "64",
+        "chip": "0089227e",
+        "clockHz": "200000000",
+    }
+
+
+def test_dev_info_describes_a_ram_device(terminal):
+    assert terminal.command("dev.info ramblock").ok
+
+    assert terminal.drain_events("device")[0].values["memory"] == "sdram"
+
+
+@pytest.mark.parametrize(("line", "reason"), [("dev.info", "usage"), ("dev.info qspi fmc", "usage"), ("dev.info sd", "unsupported")])
+def test_dev_info_takes_one_device_of_the_board(terminal, line, reason):
+    with pytest.raises(FirmwareError) as error:
+        terminal.command(line)
+
+    assert error.value.reason == reason
+
+
+@pytest.mark.parametrize(
+    ("line", "op", "size"),
+    [
+        ("bench.program qspi size=16 n=4", "program", "16"),
+        ("bench.erase fmc n=2", "erase", "131072"),
+        ("bench.read qspi size=4096 n=8", "read", "4096"),
+    ],
+)
+def test_bench_prints_a_bench_record(terminal, line, op, size):
+    assert terminal.command(line).ok
+
+    (record,) = terminal.drain_events("bench")
+    values = record.values
+    assert (values["op"], values["size"]) == (op, size)
+    assert int(values["minNs"]) <= int(values["medianNs"]) <= int(values["p99Ns"]) <= int(values["maxNs"])
+
+
+@pytest.mark.parametrize(
+    ("line", "reason"),
+    [
+        ("bench.program qspi size=16", "usage"),
+        ("bench.program qspi n=1", "usage"),
+        ("bench.erase qspi n=1 size=4", "usage"),
+        ("bench.read qspi fmc size=4 n=1", "usage"),
+        ("bench.read qspi size=x n=1", "usage"),
+        ("bench.read qspi size=4 n=0", "range"),
+        ("bench.read qspi size=4 n=1025", "range"),
+        ("bench.read sd size=4 n=1", "unsupported"),
+        ("bench.read ramflash size=4 n=1", "unsupported"),
+        ("bench.program qspi size=4097 n=1", "range"),
+        ("bench.read qspi size=x n=0", "range"),
+        ("bench.read qspi size=0x100 n=1", None),
+        ("bench.read qspi size=99999999999 n=1", "usage"),
+        ("bench.read qspi size=4 n=1 n=2000", None),
+        ("bench.program qspi size=256 n=1024", None),
+        ("bench.erase fmc n=129", "range"),
+        ("bench.read qspi size=65537 n=1", "range"),
+        ("bench.read qspi size=0 n=1", "range"),
+    ],
+)
+def test_bench_checks_its_arguments_as_the_firmware_does(terminal, line, reason):
+    if reason is None:
+        assert terminal.command(line).ok
+        return
+    with pytest.raises(FirmwareError) as error:
+        terminal.command(line)
+
+    assert error.value.reason == reason
+
+
+def test_bench_on_a_device_the_board_does_not_have_is_unsupported():
+    terminal = FirmwareTerminal(serial=FakeFirmware(load_board("stm32h745i_disco")), timeout=0.5)
+    terminal.sync()
+
+    with pytest.raises(FirmwareError) as error:
+        terminal.command("bench.erase fmc n=1")
+
+    assert error.value.reason == "unsupported"
+
+
+@pytest.mark.parametrize(
+    ("line", "reason"),
+    [("dev.check qspi", None), ("dev.check", "usage"), ("dev.check qspi fmc", "usage"), ("dev.check ramflash", "unsupported")],
+)
+def test_dev_check_checks_a_nor_device_of_the_board(terminal, line, reason):
+    if reason is None:
+        assert terminal.command(line).ok
+        return
     with pytest.raises(FirmwareError) as error:
         terminal.command(line)
 

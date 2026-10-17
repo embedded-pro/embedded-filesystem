@@ -4,11 +4,11 @@
 #include "infra/timer/Timer.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/BoundedString.hpp"
-#include "validation/firmware/cycles/CycleCounter.hpp"
-#include "validation/firmware/cycles/CycleSamples.hpp"
 #include "validation/firmware/cycles/CycleSubject.hpp"
 #include "validation/firmware/cycles/IdleCycleCounter.hpp"
 #include "validation/firmware/results/ResultLines.hpp"
+#include "validation/firmware/timing/CycleCounter.hpp"
+#include "validation/firmware/timing/Samples.hpp"
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -32,6 +32,7 @@ namespace validation
     {
     public:
         static constexpr std::size_t writeBytes = 4096;
+        static constexpr uint32_t maximumRuns = 200;
 
         CycleRun(ResultLines& results, const CycleCounter& cycles, const IdleCycleSource& idle, const CyclePlan& plan = CyclePlan());
         CycleRun(const CycleRun& other) = delete;
@@ -139,8 +140,8 @@ namespace validation
         uint64_t startIdle{ 0 };
         uint32_t callCycles{ 0 };
         uint64_t callIdle{ 0 };
-        CycleSamples callSamples;
-        CycleSamples settledSamples;
+        Samples::WithCapacity<maximumRuns> callSamples;
+        Samples::WithCapacity<maximumRuns> settledSamples;
 
         infra::BoundedString::WithStorage<16> path;
         infra::BoundedString::WithStorage<16> target;

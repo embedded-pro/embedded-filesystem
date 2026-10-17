@@ -28,6 +28,7 @@ if (TARGET_CORTEX STREQUAL m7)
         hal_st.stm32fxxx
         services.hil
         services.tracer
+        validation.bench
         validation.cycles
         validation.cycles_subjects
         validation.devices

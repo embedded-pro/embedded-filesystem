@@ -7,9 +7,12 @@ target_include_directories(validation.hil PUBLIC
 target_link_libraries(validation.hil PUBLIC
     hal.interfaces
     services.hil
+    validation.results
 )
 
 target_sources(validation.hil PRIVATE
+    DeviceCommands.cpp
+    DeviceCommands.hpp
     FirmwareCommands.cpp
     FirmwareCommands.hpp
     NoPins.cpp

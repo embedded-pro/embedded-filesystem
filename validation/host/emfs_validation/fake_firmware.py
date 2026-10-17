@@ -15,6 +15,14 @@ MAXIMUM_DELAY_MS = 600000
 DEFAULT_CYCLE_RUNS = 100
 MAXIMUM_CYCLE_RUNS = 200
 CYCLE_OPERATIONS = ("format", "mount", "open", "list", "read", "overwrite", "create", "append", "write", "rename", "remove", "unmount")
+NOR_DEVICES = {
+    "qspi": {"sectors": 4096, "sectorSize": 4096, "pageSize": 256, "chip": "20ba20", "clockHz": 50000000},
+    "fmc": {"sectors": 128, "sectorSize": 131072, "pageSize": 64, "chip": "0089227e", "clockHz": 200000000},
+}
+MAXIMUM_BENCH_REPETITIONS = 1024
+MAXIMUM_PROGRAM_BYTES = 4096
+MAXIMUM_READ_BYTES = 65536
+BENCH_KEYS = {"bench.program": {"size", "n"}, "bench.erase": {"n"}, "bench.read": {"size", "n"}}
 RAM_DEVICES = {
     "ramflash": "kind=nor sectors=1024 sectorSize=4096 memory=sdram",
     "ramblock": "kind=block blocks=4096 blockSize=512 memory=sdram",
@@ -25,6 +33,16 @@ CYCLE_SUBJECTS = {
     "fatfs/tuned": ("ramblock", 1888, 1),
     "littlefs/ram-matched": ("ramflash", 12628, 2),
 }
+
+
+def parse_number(text: str) -> int | None:
+    """A number as the firmware parses it: decimal, or hexadecimal after 0x, of at most 32 bits."""
+    base, digits = (16, text[2:]) if len(text) > 2 and text[:2] in ("0x", "0X") else (10, text)
+    allowed = "0123456789abcdefABCDEF"[: 22 if base == 16 else 10]
+    if not digits or any(digit not in allowed for digit in digits):
+        return None
+    value = int(digits, base)
+    return value if value <= 0xFFFFFFFF else None
 
 
 class FakeFirmware:
@@ -88,6 +106,14 @@ class FakeFirmware:
             return self._delay(arguments[0])
         if name == "cycles.run":
             return self._cycles(arguments)
+        if name == "dev.list" and not arguments:
+            return f"OK devices={','.join(self._present_devices())}"
+        if name == "dev.info":
+            return self._device_info(arguments)
+        if name in BENCH_KEYS:
+            return self._bench(name, arguments)
+        if name == "dev.check":
+            return self._check(arguments)
         return "ERR usage"
 
     @staticmethod
@@ -118,6 +144,75 @@ class FakeFirmware:
                 f"minCycles={median - 50} medianCycles={median} maxCycles={median + 400} settledCycles={median * background}",
             )
         return "OK"
+
+    def _present_devices(self) -> list[str]:
+        return [device for device in NOR_DEVICES if device in self.board.devices] + list(RAM_DEVICES)
+
+    def _device_info(self, arguments: list[str]) -> str:
+        if len(arguments) != 1 or "=" in arguments[0]:
+            return "ERR usage"
+        device = arguments[0]
+        if device not in self._present_devices():
+            return "ERR unsupported"
+        if device in RAM_DEVICES:
+            self._record("device", f"device={device} {RAM_DEVICES[device]}")
+        else:
+            geometry = " ".join(f"{key}={value}" for key, value in NOR_DEVICES[device].items())
+            self._record("device", f"device={device} kind=nor {geometry}")
+        return "OK"
+
+    def _bench(self, name: str, arguments: list[str]) -> str:
+        positional = [argument for argument in arguments if "=" not in argument]
+        keys: dict[str, str] = {}
+        for argument in arguments:
+            if "=" in argument:
+                key, value = argument.split("=", 1)
+                keys.setdefault(key, value)
+        if len(positional) != 1 or keys.keys() != BENCH_KEYS[name]:
+            return "ERR usage"
+        repetitions = parse_number(keys["n"])
+        if repetitions is None:
+            return "ERR usage"
+        if not 1 <= repetitions <= MAXIMUM_BENCH_REPETITIONS:
+            return "ERR range"
+        size = parse_number(keys.get("size", "0"))
+        if size is None:
+            return "ERR usage"
+        device = positional[0]
+        if device not in NOR_DEVICES or device not in self.board.devices:
+            return "ERR unsupported"
+        geometry = NOR_DEVICES[device]
+        operation = name.split(".")[1]
+        if not self._bench_fits(operation, geometry, size, repetitions):
+            return "ERR range"
+        if operation == "erase":
+            size = geometry["sectorSize"]
+        median = {"program": 100000 + 100 * size, "erase": 50000000, "read": 2000 + 20 * size}[operation]
+        self._record(
+            "bench",
+            f"device={device} op={operation} size={size} n={repetitions} minNs={median - 1000} medianNs={median} "
+            f"p99Ns={median + 5000} maxNs={median + 10000} meanNs={median + 500}",
+        )
+        return "OK"
+
+    def _check(self, arguments: list[str]) -> str:
+        if len(arguments) != 1 or "=" in arguments[0]:
+            return "ERR usage"
+        if arguments[0] not in NOR_DEVICES or arguments[0] not in self.board.devices:
+            return "ERR unsupported"
+        return "OK"
+
+    @staticmethod
+    def _bench_fits(operation: str, geometry: dict[str, int | str], size: int, repetitions: int) -> bool:
+        sectors, sector_size, page_size = int(geometry["sectors"]), int(geometry["sectorSize"]), int(geometry["pageSize"])
+        if operation == "program":
+            if not 1 <= size <= min(MAXIMUM_PROGRAM_BYTES, sector_size):
+                return False
+            slots_per_sector = sector_size // (-(-size // page_size) * page_size)
+            return -(-repetitions // slots_per_sector) <= sectors
+        if operation == "erase":
+            return repetitions <= sectors
+        return 1 <= size <= min(MAXIMUM_READ_BYTES, sectors * sector_size)
 
     def _record(self, kind: str, pairs: str) -> None:
         self._print(f"EVT {kind} id={self._next_record} {pairs}\r\n")

@@ -38,7 +38,7 @@ namespace validation
         really_assert(plan.smallFiles >= 1 && plan.smallFileBytes <= writeBytes && plan.appendBytes <= writeBytes);
         really_assert(plan.transferBytes >= 1 && plan.transferBytes <= writeBytes && plan.bigFileBytes % writeBytes == 0 && plan.bigFileBytes >= plan.transferBytes);
         really_assert(plan.truncateEvery >= 1 && plan.pollInterval > infra::Duration::zero() && plan.calibration >= plan.pollInterval);
-        really_assert(plan.calibration / plan.pollInterval <= CycleSamples::capacity);
+        really_assert(plan.calibration / plan.pollInterval <= maximumRuns);
 
         for (std::size_t position = 0; position != data.size(); ++position)
             data[position] = static_cast<uint8_t>(position * 7 + 1);
@@ -47,7 +47,7 @@ namespace validation
     void CycleRun::Start(CycleSubject& subject, infra::BoundedConstString device, uint32_t runs, const infra::Function<void(bool success)>& onDone)
     {
         really_assert(!Running());
-        really_assert(runs >= 1 && runs <= CycleSamples::capacity);
+        really_assert(runs >= 1 && runs <= maximumRuns);
 
         this->subject = &subject;
         this->device = device;
@@ -127,11 +127,9 @@ namespace validation
     {
         static_cast<void>(subject->Idle());
 
-        auto now = cycles.Cycles();
-        auto idleNow = idle.IdleCycles();
-        callSamples.Add(BusyCycles(now - startCycles, idleNow - startIdle));
-        startCycles = now;
-        startIdle = idleNow;
+        callSamples.Add(BusyCycles(cycles.Cycles() - startCycles, idle.IdleCycles() - startIdle));
+        startCycles = cycles.Cycles();
+        startIdle = idle.IdleCycles();
 
         if (callSamples.Size() == plan.calibration / plan.pollInterval)
         {

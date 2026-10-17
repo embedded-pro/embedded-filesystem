@@ -10,6 +10,7 @@ target_link_libraries(validation.hil_test PUBLIC
 )
 
 target_sources(validation.hil_test PRIVATE
+    TestDeviceCommands.cpp
     TestFirmwareCommands.cpp
     TestNoPins.cpp
 )

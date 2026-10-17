@@ -8,8 +8,8 @@
 #include "hal_st/instantiations/StmEventInfrastructure.hpp"
 #include "hal_st/stm32fxxx/GpioStm.hpp"
 #include "infra/event/LowPowerEventDispatcher.hpp"
-#include "validation/firmware/cycles/CycleCounter.hpp"
 #include "validation/firmware/cycles/IdleCycleCounter.hpp"
+#include "validation/firmware/timing/CycleCounter.hpp"
 
 namespace validation
 {

@@ -8,6 +8,7 @@
 #include "services/util/Terminal.hpp"
 #include "validation/firmware/cycles/CycleRun.hpp"
 #include "validation/firmware/cycles/CycleSubject.hpp"
+#include "validation/firmware/results/DeviceRecord.hpp"
 #include "validation/firmware/results/ResultLines.hpp"
 #include <array>
 #include <chrono>
@@ -15,24 +16,10 @@
 
 namespace validation
 {
-    enum class CycleDeviceKind : uint8_t
-    {
-        nor,
-        block
-    };
-
-    struct CycleDevice
-    {
-        const char* name;
-        CycleDeviceKind kind;
-        uint32_t units;
-        uint32_t unitBytes;
-    };
-
     struct CycleTarget
     {
         CycleSubject& subject;
-        const CycleDevice& device;
+        const DeviceDescription& device;
     };
 
     class CyclesCommands
@@ -49,7 +36,6 @@ namespace validation
     private:
         services::HilStatus Run(const services::HilArguments& arguments);
         const CycleTarget* Find(infra::BoundedConstString name) const;
-        void PrintDevice(const CycleDevice& device) const;
         void Completed(uint32_t operation, bool success);
 
     private:

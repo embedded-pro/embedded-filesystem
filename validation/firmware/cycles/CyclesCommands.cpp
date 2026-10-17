@@ -26,7 +26,7 @@ namespace validation
 
         uint32_t runs = defaultRuns;
         auto status = services::HilStatus::done;
-        arguments.Number("n", runs, 1, static_cast<uint32_t>(CycleSamples::capacity), status);
+        arguments.Number("n", runs, 1, CycleRun::maximumRuns, status);
         if (status != services::HilStatus::done)
             return status;
 
@@ -38,7 +38,7 @@ namespace validation
             return services::HilStatus::busy;
 
         auto operation = pending.Start(timeout);
-        PrintDevice(target->device);
+        PrintDevice(results, target->device);
         run.Start(target->subject, target->device.name, runs, [this, operation](bool success)
             {
                 Completed(operation, success);
@@ -53,17 +53,6 @@ namespace validation
                 return &target;
 
         return nullptr;
-    }
-
-    void CyclesCommands::PrintDevice(const CycleDevice& device) const
-    {
-        const bool nor = device.kind == CycleDeviceKind::nor;
-        results.Record("device")
-            .Add("device", device.name)
-            .Add("kind", nor ? "nor" : "block")
-            .Add(nor ? "sectors" : "blocks", device.units)
-            .Add(nor ? "sectorSize" : "blockSize", device.unitBytes)
-            .Add("memory", "sdram");
     }
 
     void CyclesCommands::Completed(uint32_t operation, bool success)

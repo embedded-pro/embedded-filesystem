@@ -10,5 +10,6 @@ target_link_libraries(validation.results_test PUBLIC
 )
 
 target_sources(validation.results_test PRIVATE
+    TestDeviceRecord.cpp
     TestResultLines.cpp
 )
