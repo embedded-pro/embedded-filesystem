@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from ad3_waveforms_bench.terminal import FirmwareError, FirmwareTerminal
 
+from emfs_validation import convert
 from emfs_validation.board import load_board
 from emfs_validation.fake_firmware import FakeFirmware
 
@@ -272,3 +273,92 @@ def test_dev_check_checks_a_nor_device_of_the_board(terminal, line, reason):
         terminal.command(line)
 
     assert error.value.reason == reason
+
+
+@pytest.mark.parametrize(
+    ("line", "reason"),
+    [("fs.format qspi", None), ("fs.format", "usage"), ("fs.format qspi fmc", "usage"), ("fs.format ramflash", "unsupported")],
+)
+def test_fs_format_formats_a_nor_device_of_the_board(terminal, line, reason):
+    if reason is None:
+        assert terminal.command(line).ok
+        return
+    with pytest.raises(FirmwareError) as error:
+        terminal.command(line)
+
+    assert error.value.reason == reason
+
+
+@pytest.mark.parametrize(
+    ("line", "reason"),
+    [
+        ("wl.run qspi", "usage"),
+        ("wl.run qspi L2 other", "usage"),
+        ("wl.run qspi L2 n=1", "usage"),
+        ("wl.run qspi L2 fill=x", "usage"),
+        ("wl.run qspi L2 fill=100", "range"),
+        ("wl.run qspi L2 scale=0", "range"),
+        ("wl.run qspi L2 scale=1025", "range"),
+        ("wl.run qspi L1 fill=10", "range"),
+        ("wl.run ramflash L2", "unsupported"),
+        ("wl.run qspi L5", "unsupported"),
+    ],
+)
+def test_wl_run_rejects_what_the_firmware_rejects(terminal, line, reason):
+    with pytest.raises(FirmwareError) as error:
+        terminal.command(line)
+
+    assert error.value.reason == reason
+
+
+@pytest.mark.parametrize("workload", ["L1", "L2", "L3", "L4", "L6", "L7"])
+def test_wl_run_announces_the_workload_and_prints_its_phases(terminal, workload):
+    terminal.drain_events("workload")
+    terminal.drain_events("phase")
+
+    assert terminal.command(f"wl.run qspi {workload} scale=16").ok
+
+    (start,) = terminal.drain_events("workload")
+    assert start.values["workload"] == workload
+    assert start.values["scale"] == "16"
+    phases = [event.values["phase"] for event in terminal.drain_events("phase")]
+    assert phases[0] == f"{workload},prepare"
+    assert len(phases) > 1
+
+
+def test_wl_run_at_a_fill_level_fills_the_volume_and_the_data_logger_prints_its_windows(terminal):
+    terminal.drain_events("phase")
+
+    assert terminal.command("wl.run qspi L2 fill=50").ok
+
+    assert [event.values["phase"] for event in terminal.drain_events("phase")] == ["L2,prepare", "fill", "L2", "L2,second,log"]
+    assert [event.values["log"] for event in terminal.drain_events("window")] == ["first", "second"]
+
+
+def test_the_records_of_wl_run_convert_into_the_metrics_of_the_workloads(board, tmp_path):
+    firmware = FakeFirmware(board)
+    terminal = FirmwareTerminal(serial=firmware, timeout=0.5)
+    terminal.sync()
+    terminal.command("dev.info qspi")
+    for workload in ("L1", "L2 fill=10", "L2 fill=50", "L2 fill=90", "L3 fill=50", "L6", "L7"):
+        terminal.command(f"wl.run qspi {workload}")
+    events = [event.raw for kind in ("device", "workload", "phase", "window") for event in terminal.drain_events(kind)]
+    run = tmp_path / "2026_10_20"
+    run.mkdir()
+    (run / "transcript.log").write_text("\n".join(events) + "\n", encoding="utf-8")
+    (run / "run.json").write_text('{"board": "stm32h757i-eval"}', encoding="utf-8")
+
+    fragment = convert.convert_run(
+        run,
+        {
+            "stm32h757i-eval/qspi": {
+                "typical.pageProgramNs": "400000",
+                "typical.sectorEraseNs": "45000000",
+                "typical.readBytesPerSecond": "50000000",
+                "w6BoundMs": "974",
+            }
+        },
+    )
+
+    metrics = {entry["metric"] for entry in fragment["results"]}
+    assert metrics == {"W-1", "W-2", "W-3", "W-4", "W-5", "W-6", "R-1", "R-2", "R-3", "R-4", "R-5", "C-1", "C-2"}

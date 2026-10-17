@@ -1,4 +1,4 @@
-"""The NOR devices of the board and their benchmarks. Scenarios: features/nor.feature."""
+"""The NOR devices of the board, their benchmarks and the workloads on them. Scenarios: features/nor.feature."""
 
 from __future__ import annotations
 
@@ -12,6 +12,23 @@ PROGRAM_REPETITIONS = 256
 ERASE_REPETITIONS = 16
 READ_SIZES = (256, 1024, 4096, 16384, 65536)
 READ_REPETITIONS = 64
+# Above the timeout of 2 hours of the firmware for a workload
+WORKLOAD_TIMEOUT = 7260.0
+WORKLOAD_RUNS = (
+    ("L1", 0),
+    ("L2", 10),
+    ("L2", 50),
+    ("L2", 90),
+    ("L3", 10),
+    ("L3", 50),
+    ("L3", 90),
+    ("L4", 10),
+    ("L4", 50),
+    ("L4", 90),
+    ("L6", 0),
+    ("L7", 0),
+)
+WORKLOAD_EVENTS = ("workload", "phase", "window", "workload.failed")
 
 scenarios("nor.feature")
 
@@ -81,3 +98,32 @@ def prints_bench(context, device):
         assert values["device"] == device
         assert 0 < int(values["minNs"]) <= int(values["medianNs"]) <= int(values["p99Ns"]) <= int(values["maxNs"])
         assert int(values["minNs"]) <= int(values["meanNs"]) <= int(values["maxNs"])
+
+
+@when(parsers.parse("the workloads run on {device} at the fill levels of the host"))
+def run_workloads(terminal, board, context, device):
+    for kind in ("device", *WORKLOAD_EVENTS):
+        terminal.drain_events(kind)
+    assert terminal.command(f"dev.info {device}").ok
+    context["runs"] = []
+    for workload, fill in WORKLOAD_RUNS:
+        command = f"wl.run {device} {workload} scale={board.scale}" + (f" fill={fill}" if fill else "")
+        response = terminal.command(command, timeout=WORKLOAD_TIMEOUT, check=False)
+        events = {kind: terminal.drain_events(kind) for kind in WORKLOAD_EVENTS}
+        context["runs"].append((workload, fill, response, events))
+
+
+@then("every workload prints its phases and no failure")
+def prints_phases(context):
+    for workload, fill, response, events in context["runs"]:
+        assert response.ok, f"{workload} at {fill} %: {response.raw}"
+        assert [(event.values["workload"], int(event.values["fill"])) for event in events["workload"]] == [(workload, fill)]
+        assert any("phase" in event.values for event in events["phase"]), f"{workload} at {fill} %"
+        assert events["workload.failed"] == []
+
+
+@then("the data logger prints the windows of both logs")
+def prints_windows(context):
+    for workload, fill, _, events in context["runs"]:
+        if workload == "L2":
+            assert sorted(event.values["log"] for event in events["window"] if "log" in event.values) == ["first", "second"], f"{fill} %"
