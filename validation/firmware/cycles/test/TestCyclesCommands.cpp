@@ -21,8 +21,8 @@ namespace
         : public services::HilFixture
     {
     public:
-        const validation::CycleDevice ramFlash{ "ramflash", validation::CycleDeviceKind::nor, 512, 4096 };
-        const validation::CycleDevice ramBlock{ "ramblock", validation::CycleDeviceKind::block, 4096, 512 };
+        const validation::DeviceDescription ramFlash{ "ramflash", validation::DeviceKind::nor, 512, 4096, 0, "", 0, "sdram" };
+        const validation::DeviceDescription ramBlock{ "ramblock", validation::DeviceKind::block, 4096, 512, 0, "", 0, "sdram" };
         validation::FakeCycleCounter counter;
         validation::FakeIdleCycles idle;
         validation::FakeCycleSubject subject{ counter };

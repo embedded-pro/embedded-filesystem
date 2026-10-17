@@ -40,8 +40,8 @@ namespace
 
     static_assert(ramFlashBytes + ramBlockBytes <= validation::board::sdRamSize);
 
-    const validation::CycleDevice ramFlash{ "ramflash", validation::CycleDeviceKind::nor, validation::cycles::ramFlashSectors, validation::cycles::ramFlashSectorSize };
-    const validation::CycleDevice ramBlock{ "ramblock", validation::CycleDeviceKind::block, validation::cycles::ramBlockDeviceBlocks, validation::RamBlockDevice::blockSize };
+    const validation::DeviceDescription ramFlash{ "ramflash", validation::DeviceKind::nor, validation::cycles::ramFlashSectors, validation::cycles::ramFlashSectorSize, 0, "", 0, "sdram" };
+    const validation::DeviceDescription ramBlock{ "ramblock", validation::DeviceKind::block, validation::cycles::ramBlockDeviceBlocks, validation::RamBlockDevice::blockSize, 0, "", 0, "sdram" };
 }
 
 int main()

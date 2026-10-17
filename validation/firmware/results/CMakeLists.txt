@@ -10,6 +10,8 @@ target_link_libraries(validation.results PUBLIC
 )
 
 target_sources(validation.results PRIVATE
+    DeviceRecord.cpp
+    DeviceRecord.hpp
     ResultLines.cpp
     ResultLines.hpp
 )
