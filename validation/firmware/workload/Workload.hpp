@@ -38,7 +38,7 @@ namespace validation
     class Workload
     {
     protected:
-        Workload() = default;
+        Workload();
         Workload(const Workload& other) = delete;
         Workload& operator=(const Workload& other) = delete;
         ~Workload() = default;

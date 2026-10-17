@@ -101,8 +101,8 @@ namespace validation
         void Interrupt();
         void PrintPhase();
         void PrintWindow(const char* log, const std::optional<WindowTotals>& window);
-        void PrintStart();
-        void PrintFailure();
+        void PrintStart() const;
+        void PrintFailure() const;
         std::optional<VolumeCounts> VolumeNow() const;
 
     private:

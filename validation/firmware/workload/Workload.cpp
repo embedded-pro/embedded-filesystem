@@ -26,4 +26,6 @@ namespace validation
         stream << directory << "/" << index;
         return path;
     }
+
+    Workload::Workload() = default;
 }

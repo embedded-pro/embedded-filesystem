@@ -373,7 +373,7 @@ namespace validation
         onInterrupted();
     }
 
-    void WorkloadRunner::PrintStart()
+    void WorkloadRunner::PrintStart() const
     {
         results.Record("workload")
             .Add("device", context.device)
@@ -406,7 +406,7 @@ namespace validation
         AddCounts(record, totals->volume);
     }
 
-    void WorkloadRunner::PrintFailure()
+    void WorkloadRunner::PrintFailure() const
     {
         if (!failure)
             return;
