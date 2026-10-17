@@ -1,7 +1,7 @@
 #include "fs/nor/NorNode.hpp"
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorLayout.hpp"
-#include "infra/util/Crc.hpp"
+#include "fs/common/Crc32.hpp"
 #include "infra/util/ReallyAssert.hpp"
 
 namespace fs
@@ -10,9 +10,7 @@ namespace fs
     {
         uint32_t Crc(infra::ConstByteRange node)
         {
-            infra::Crc32 crc;
-            crc.Update(infra::Head(node, node.size() - norNodeCrcBytes));
-            return crc.Result();
+            return Crc32Of(infra::Head(node, node.size() - norNodeCrcBytes));
         }
 
         bool IsKnownMap(uint8_t map)

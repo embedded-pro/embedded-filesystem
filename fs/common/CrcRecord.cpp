@@ -1,21 +1,11 @@
 #include "fs/common/CrcRecord.hpp"
 #include "fs/common/LittleEndian.hpp"
-#include "infra/util/Crc.hpp"
+#include "fs/common/Crc32.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 
 namespace fs
 {
-    namespace
-    {
-        uint32_t Crc(infra::ConstByteRange bytes)
-        {
-            infra::Crc32 crc;
-            crc.Update(bytes);
-            return crc.Result();
-        }
-    }
-
     CrcRecord::CrcRecord(infra::ByteRange buffer)
         : buffer(buffer)
     {}
@@ -41,7 +31,7 @@ namespace fs
         StoreLittle16(buffer, 0, static_cast<uint16_t>(size));
         buffer[2] = entries;
         buffer[3] = 0;
-        StoreLittle32(buffer, size - 4, Crc(infra::Head(buffer, size - 4)));
+        StoreLittle32(buffer, size - 4, Crc32Of(infra::Head(buffer, size - 4)));
         return infra::Head(buffer, size);
     }
 
@@ -57,7 +47,7 @@ namespace fs
     std::optional<OpenedRecord> OpenRecord(infra::ConstByteRange bytes)
     {
         auto length = RecordLength(bytes);
-        if (!length.has_value() || bytes.size() < *length || LoadLittle32(bytes, *length - 4) != Crc(infra::Head(bytes, *length - 4)))
+        if (!length.has_value() || bytes.size() < *length || LoadLittle32(bytes, *length - 4) != Crc32Of(infra::Head(bytes, *length - 4)))
             return std::nullopt;
 
         return OpenedRecord{ bytes[2], infra::Head(infra::DiscardHead(bytes, CrcRecord::headerSize), *length - CrcRecord::overhead), *length };

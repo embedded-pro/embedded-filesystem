@@ -1,7 +1,7 @@
 #include "fs/nor/NorBlockHeader.hpp"
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorLayout.hpp"
-#include "infra/util/Crc.hpp"
+#include "fs/common/Crc32.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 
@@ -13,21 +13,14 @@ namespace fs
         constexpr std::size_t partACrcOffset = 8;
         constexpr std::size_t partBCrcOffset = 20;
 
-        uint32_t Crc(infra::ConstByteRange bytes)
-        {
-            infra::Crc32 crc;
-            crc.Update(bytes);
-            return crc.Result();
-        }
-
         bool IsSealed(infra::ConstByteRange bytes, std::size_t crcOffset)
         {
-            return LoadLittle32(bytes, crcOffset) == Crc(infra::Head(bytes, crcOffset));
+            return LoadLittle32(bytes, crcOffset) == Crc32Of(infra::Head(bytes, crcOffset));
         }
 
         void Seal(infra::ByteRange bytes, std::size_t crcOffset)
         {
-            StoreLittle32(bytes, crcOffset, Crc(infra::Head(bytes, crcOffset)));
+            StoreLittle32(bytes, crcOffset, Crc32Of(infra::Head(bytes, crcOffset)));
         }
 
         bool IsKnownType(uint8_t type)

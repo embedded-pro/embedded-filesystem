@@ -13,6 +13,7 @@ target_link_libraries(fs.common_test PUBLIC
 
 target_sources(fs.common_test PRIVATE
     TestBlockDeviceResult.cpp
+    TestCrc32.cpp
     TestCrcRecord.cpp
     TestDeferredCompletions.cpp
     TestDirectTransfers.cpp

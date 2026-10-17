@@ -1,6 +1,7 @@
 #ifndef FS_NOR_NOR_CHECKPOINT_WRITER_HPP
 #define FS_NOR_NOR_CHECKPOINT_WRITER_HPP
 
+#include "fs/common/Crc32.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorBlockAllocator.hpp"
 #include "fs/nor/NorCheckpoint.hpp"
@@ -8,7 +9,6 @@
 #include "fs/nor/NorNodeWriteBack.hpp"
 #include "fs/nor/NorVolumeState.hpp"
 #include "infra/util/AutoResetFunction.hpp"
-#include "infra/util/Crc.hpp"
 #include "infra/util/Function.hpp"
 #include <array>
 #include <cstddef>
@@ -54,7 +54,7 @@ namespace fs
         bool collectionDue{ false };
         bool collect{ false };
         NorWear wear{ NorWear::least };
-        infra::Crc32 crc;
+        Crc32 crc;
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }

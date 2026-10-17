@@ -46,7 +46,7 @@ The device is divided into blocks of `sectorsPerBlock` sectors, and sectors afte
 Except for the superblocks, every block can hold any type, and the type of a block changes every time it is erased and reused.
 This is what allows wear to be spread over the whole device.
 
-Integers are stored in little-endian order, and every CRC is `infra::Crc32`.
+Integers are stored in little-endian order, and every CRC is the CRC-32 of `infra::Crc32`, computed with `infra::Crc32Nibblewise`, whose table has 16 entries instead of 256.
 In this document, rounding a size up to the program unit is written as `Round(size)`.
 
 ## Superblocks

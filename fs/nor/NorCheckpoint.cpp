@@ -1,6 +1,6 @@
 #include "fs/nor/NorCheckpoint.hpp"
 #include "fs/common/LittleEndian.hpp"
-#include "infra/util/Crc.hpp"
+#include "fs/common/Crc32.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 
@@ -22,9 +22,7 @@ namespace fs
 
         uint32_t Crc(infra::ConstByteRange checkpoint, uint32_t blocks)
         {
-            infra::Crc32 crc;
-            crc.Update(infra::Head(checkpoint, CrcOffset(blocks)));
-            return crc.Result();
+            return Crc32Of(infra::Head(checkpoint, CrcOffset(blocks)));
         }
 
         uint8_t Bit(uint32_t block)

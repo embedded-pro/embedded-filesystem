@@ -1,7 +1,7 @@
 #include "fs/nor/NorSuperblock.hpp"
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorLayout.hpp"
-#include "infra/util/Crc.hpp"
+#include "fs/common/Crc32.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 
@@ -15,9 +15,7 @@ namespace fs
 
         uint32_t Crc(infra::ConstByteRange bytes)
         {
-            infra::Crc32 crc;
-            crc.Update(infra::Head(bytes, crcOffset));
-            return crc.Result();
+            return Crc32Of(infra::Head(bytes, crcOffset));
         }
     }
 

@@ -54,7 +54,7 @@ The validation on boards uses the drivers of hal-st, which it fetches only when 
 | `infra::SharedPtr`, `infra::SharedObjectAllocatorFixedSize`               | Handles to open files and directories, from fixed-size pools |
 | `infra::BoundedVector`, `infra::BoundedDeque`, `infra::BoundedString`     | Bounded storage for queues, caches, names and paths          |
 | `services::TableStateMachine`                                             | Lifecycle of volumes and of background work                  |
-| `infra::Crc32`                                                            | Protecting on-flash records                                  |
+| `infra::Crc32Nibblewise`, `infra::Crc16CcittFalseBitwise`                 | Protecting NOR records, and the hash of FAT short names      |
 | `hal::FlashStub`, `hal::BlockDeviceStub`, `infra::EventDispatcherFixture` | Tests                                                        |
 
 `hal::BlockDevice` needs one extension before the FAT volume can give its durability guarantees: a `Flush` operation that writes back the device's own cache, for eMMC cache flush and similar commands.
