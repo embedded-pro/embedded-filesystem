@@ -20,7 +20,7 @@ The canonical rules are in `AGENTS.md`; this is the summary that applies to ever
 - Every device operation takes an `infra::Function` callback and returns immediately
 - Completions are delivered through `infra::EventDispatcher`, never synchronously
 - Never block, sleep or busy-wait; no mutexes
-- Multi-step operations are named-step classes; lifecycles are `services::TableStateMachine`; never `infra::Sequencer`
+- Multi-step operations are named-step classes; lifecycles are `services::TableStateMachine`, except in the lite volumes and `fs::NorForegroundLeveling`, which use enumerations; never `infra::Sequencer`
 
 ## Storage
 
