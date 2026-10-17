@@ -138,6 +138,19 @@ TEST_F(NorBenchTest, a_request_that_outlasts_its_guard_ends_the_benchmark_once_i
     EXPECT_EQ("", Output());
 }
 
+TEST_F(NorBenchTest, a_request_outlasting_its_guard_before_the_measured_requests_ends_the_benchmark_too)
+{
+    validation::CountingFlash guarded{ timed, 64, cycles, validation::FakeCycleCounter::clockHz, { 1s, 1s, 50us } };
+    bench.Program(guarded, "ram", 16, 2, Done());
+
+    EXPECT_CALL(done, callback(validation::BenchOutcome::timeout));
+    ForwardTime(50us);
+
+    ForwardTime(1s);
+    EXPECT_FALSE(bench.Running());
+    EXPECT_EQ("E0,1 ", Log());
+}
+
 TEST_F(NorBenchTest, tells_whether_a_benchmark_fits_on_the_device)
 {
     EXPECT_TRUE(validation::NorBench::ProgramFits(flash, 16, 32));

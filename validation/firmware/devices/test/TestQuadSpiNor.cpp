@@ -215,3 +215,33 @@ TEST_F(QuadSpiNorTest, a_present_flash_forwards_its_requests)
 
     EXPECT_EQ((std::array<uint8_t, 2>{ { 0x12, 0x34 } }), buffer);
 }
+
+TEST_F(QuadSpiNorTest, a_present_flash_forwards_its_programs_and_erases)
+{
+    ExpectIdentification({ 0xef, 0x40, 0x19 });
+    Start(true);
+
+    EXPECT_CALL(spi, SendDataMock(testing::_, testing::_, testing::_)).Times(testing::AnyNumber());
+    EXPECT_CALL(spi, PollStatusMock(testing::_, testing::_, testing::_, testing::_, testing::_)).WillRepeatedly([this]
+        {
+            infra::EventDispatcher::Instance().Schedule([this]
+                {
+                    spi.onDone();
+                });
+        });
+
+    std::array<uint8_t, 2> data{ { 0x12, 0x34 } };
+    nor.WriteBuffer(infra::MakeConstRange(data), 0x100, [this]
+        {
+            done.callback(true);
+        });
+    EXPECT_CALL(done, callback(true));
+    ExecuteAllActions();
+
+    nor.EraseSectors(1, 2, [this]
+        {
+            done.callback(false);
+        });
+    EXPECT_CALL(done, callback(false));
+    ExecuteAllActions();
+}
