@@ -57,6 +57,58 @@ EVT <kind> id=<number> <key>=<value> ...
 `emfs_validation.convert` joins the lines of every record and ignores kinds and keys it does not know, so that a later firmware can add them; only a `device` record keeps every key, as a parameter of the device, except `run`, `model` and `model.<parameter>`, which the conversion adds.
 The kinds are described with the commands that print them.
 
+## Devices
+
+| Command             | Answer                                                                                                      |
+|---------------------|-------------------------------------------------------------------------------------------------------------|
+| `dev.list`          | `OK devices=<device>,...`, the devices that are present, in the order `qspi`, `fmc`, `ramflash`, `ramblock` |
+| `dev.info <device>` | `EVT device` for the device, then `OK`; a device that is not present answers `ERR unsupported`              |
+
+`qspi` is the first 16 MiB of the QSPI flash on bank 1, present once the firmware has read its SFDP geometry after the reset and aligned its read dummy cycles, which takes milliseconds; `fmc` is the parallel NOR of the STM32H757I-EVAL, present when it answers its identification.
+
+```text
+EVT device id=<number> device=qspi kind=nor sectors=4096 sectorSize=4096 pageSize=256 chip=<JEDEC identifier> clockHz=<clock of the QSPI bus>
+EVT device id=<number> device=fmc kind=nor sectors=128 sectorSize=131072 pageSize=64 chip=<manufacturer><device> clockHz=<kernel clock of the FMC>
+```
+
+| Key                                              | Value                                                                                                                       |
+|--------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
+| `kind`                                           | `nor` or `block`                                                                                                            |
+| `sectors`, `sectorSize` or `blocks`, `blockSize` | The geometry of the device                                                                                                  |
+| `pageSize`                                       | The page of NOR flash that the counting of programs takes: the page of the QSPI flash, the write buffer of the parallel NOR |
+| `chip`                                           | The identifier of the chip in hexadecimal: the JEDEC identifier, or the manufacturer and device codes of the parallel NOR   |
+| `clockHz`                                        | The clock of the bus of the device                                                                                          |
+| `memory`                                         | `sdram`, for the RAM devices of F-2                                                                                         |
+
+## Benchmarks of NOR flash
+
+| Command                                         | Answer                 |
+|-------------------------------------------------|------------------------|
+| `bench.program <device> size=<bytes> n=<count>` | `EVT bench`, then `OK` |
+| `bench.erase <device> n=<count>`                | `EVT bench`, then `OK` |
+| `bench.read <device> size=<bytes> n=<count>`    | `EVT bench`, then `OK` |
+
+The benchmarks run on `qspi` and `fmc`, `n` times, from 1 to 1024, and measure every request on its own, from the request to its completion:
+
+* `bench.program` programs `size` bytes, from 1 to 4096 and at most a sector, at the start of `n` page-aligned slots of whole pages, in sectors it erases before; it erases them again at the end;
+* `bench.erase` erases, fills with data and then erases again each of the first `n` sectors, and measures the last erase;
+* `bench.read` reads `size` bytes, from 1 to 65536, at consecutive addresses from the start of the device, and from the start again where the next read would not fit.
+
+What they program is erased when they end, and they erase what the device held before.
+A device that is not present answers `ERR unsupported`, a count or a size out of range, or programs that do not fit on the device, `ERR range`, and a benchmark while one runs `ERR busy`.
+A request that does not complete within its guard answers `ERR timeout`, and the device stays busy until the request completes: a read 100 ms, a program 20 ms per page, and an erase 2 s per sector on `qspi` and 8 s on `fmc`.
+A benchmark that does not end within 30 minutes answers `ERR timeout` too.
+
+```text
+EVT bench id=<number> device=<device> op=<program|erase|read> size=<bytes> n=<count> minNs=<ns> medianNs=<ns> p99Ns=<ns> maxNs=<ns> meanNs=<ns>
+```
+
+| Key                                             | Value                                                                                  |
+|-------------------------------------------------|----------------------------------------------------------------------------------------|
+| `op`                                            | The benchmark                                                                          |
+| `size`                                          | The bytes of a program or a read, and the size of a sector for an erase                |
+| `minNs`, `medianNs`, `p99Ns`, `maxNs`, `meanNs` | Of the measured requests, with the nearest rank for the median and the 99th percentile |
+
 ## Processor cycles
 
 | Command                            | Answer                                                                                                                            |

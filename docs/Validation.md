@@ -17,12 +17,14 @@ validation/
     PROTOCOL.md             the commands of the firmware and its result lines
     firmware/               C++ for the boards
         baselines/          the glue of FatFs and littlefs
+        bench/              the benchmarks of NOR flash and their commands
         boards/stm32h757/BoardProfile.hpp
         boards/stm32h745/BoardProfile.hpp
         cycles/             F-2: the cycle counting, its run and command, and the subjects
         devices/            the null, RAM and counting devices
         hil/                the command groups
-        results/            the result lines
+        results/            the result lines and the device record
+        timing/             the cycle counter and the samples of durations
     footprint/              the reference images of F-1
     host/                   the Python package emfs_validation
         boards/stm32h757i_eval.yaml
@@ -119,7 +121,7 @@ At 400 MHz the counter wraps after 10.7 s, so a duration is the difference of tw
 | Device in commands | Board | Driver                                                                                                | Volume                                               | Configuration                                                                                                                |
 |--------------------|-------|-------------------------------------------------------------------------------------------------------|------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
 | `qspi`             | Both  | `hal::QuadSpiStm`, with `services::FlashGeometryQuadSfdp` and `services::FlashQuadSpiGeneric` of EmIL | `services::FlashRegion` of the first 16 MiB          | The `fs::NorConfig` of the NOR subject on `nor-qspi-16m`: 4096 blocks of one 4 KiB sector, program unit 1, page of 256 bytes |
-| `fmc`              | EVAL  | `hal::NorFlashStm`                                                                                    | The whole 16 MiB                                     | 128 blocks of one 128 KiB sector, program unit 2, and the write buffer of the chip as the page                               |
+| `fmc`              | EVAL  | `hal::NorFlashStm`                                                                                    | The whole 16 MiB                                     | 128 blocks of one 128 KiB sector, program unit 2, and the write buffer of the chip, 64 bytes, as the page                    |
 | `sd`               | EVAL  | `hal::SdCardStm`                                                                                      | `validation::BlockDeviceRegion` of the first 256 MiB | The FAT subject of `sd-card-256m`: `fs::FatFileSystem::WithStorage<2, 8>`, with the allocation unit of the card              |
 | `emmc`             | DISCO | The eMMC driver of hal-st                                                                             | `validation::BlockDeviceRegion` of the first 256 MiB | As `sd`, with the high-capacity erase group of the eMMC as the allocation unit                                               |
 | `ramflash`         | Both  | `validation::RamFlash`, NOR semantics in SDRAM                                                        | 4 MiB                                                | For F-2: as `qspi`, with 1024 blocks                                                                                         |
@@ -226,6 +228,8 @@ The benchmarks measure each parameter of a model on its own, on the volume of th
 | Block  | Flushes, and discards of one allocation unit                                       | The cost of a flush and of a discard                                                  |
 
 Each benchmark keeps the duration of every repetition, at most 1024, in a fixed array, and reports their minimum, median, 99th percentile, maximum and mean.
+A program is measured at the start of a slot of whole pages in a sector erased before, and an erase on a sector filled with data, as the volume leaves it; `PROTOCOL.md` describes the commands.
+Every request goes through the counting device of the device, whose guard ends a benchmark that a request outlasts with `ERR timeout`: 100 ms for a read, 20 ms per page programmed, and per sector erased 2 s on `qspi` and 8 s on `fmc`, below the 10.7 s after which the cycle counter wraps.
 
 ### Workloads
 
@@ -312,7 +316,7 @@ The layouts of every card and the result of the check on the PC are recorded in 
 `emfs_validation.convert` turns the transcript of a run into fragments of the report described in [Metrics.md](Metrics.md#reports), which `merge_report.py` takes like any other fragment:
 
 * a `device` record becomes a device of the fragment, named `<board>/<device>`, such as `stm32h757i-eval/qspi`, with the geometry, the chip, the clock, the run and the parameters of the model the run is converted with as its parameters;
-* `bench` records become the measured parameters of the device, and the parameters a model would take from them;
+* `bench` records become the measured parameters of the device, `bench.<op>.<size>.<statistic>`, and the parameters a model would take from them, `measured.pageProgramNs`, `measured.sectorEraseNs`, `measured.readBytesPerSecond` and `measured.readFixedNs`, from the medians of the program of a page, of the erase of a sector, and of the smallest and the largest read;
 * `phase` and `window` records become the metrics of the phases, computed as the host computes them, and C-1 and C-2, from the device models;
 * `cycles` records become F-2, with the operation as the workload, and the cycles until the volume is idle again as `<operation> settled`; the last run of a subject in a transcript replaces its earlier runs, and a run that ends with `cycles.failed` leaves no F-2 for its subject;
 * every result carries `ramBytes`, as the merge needs: the size of the state of the subject on the board.
