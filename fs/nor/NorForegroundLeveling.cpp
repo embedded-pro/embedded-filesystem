@@ -2,31 +2,33 @@
 #include "fs/nor/NorVolume.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <utility>
-#include <variant>
 
 namespace fs
 {
     NorForegroundLeveling::NorForegroundLeveling(NorVolume& volume)
         : volume(volume)
         , claimer(volume.Queue())
-        , machine(*this, services::Validated<NorForegroundLeveling>())
-    {
-        machine.Start<NorLevelingStopped>();
-    }
+    {}
 
     NorForegroundLeveling::~NorForegroundLeveling() = default;
 
     void NorForegroundLeveling::Start()
     {
         armed = true;
-        machine.Dispatch(NorLevelingStart{});
+
+        if (phase == Phase::stopped)
+            phase = Phase::waiting;
     }
 
     void NorForegroundLeveling::Stop()
     {
-        really_assert(!std::holds_alternative<NorLevelingMoving>(machine.CurrentState()));
+        really_assert(phase != Phase::moving);
         armed = false;
-        machine.Dispatch(NorLevelingStop{});
+
+        if (phase == Phase::claiming)
+            claimer.Release();
+
+        phase = Phase::stopped;
     }
 
     void NorForegroundLeveling::Urge()
@@ -39,8 +41,8 @@ namespace fs
 
     void NorForegroundLeveling::ForegroundReleased()
     {
-        if (std::exchange(armed, false) && MoveDue())
-            machine.Dispatch(NorLevelingDue{});
+        if (std::exchange(armed, false) && phase == Phase::waiting && MoveDue())
+            ClaimAhead();
     }
 
     bool NorForegroundLeveling::Scheduled() const
@@ -57,22 +59,25 @@ namespace fs
 
     void NorForegroundLeveling::ClaimAhead()
     {
+        phase = Phase::claiming;
         claimer.ClaimUrgent([this]
             {
-                machine.Dispatch(NorLevelingGranted{});
+                Move();
             });
     }
 
     void NorForegroundLeveling::Move()
     {
+        phase = Phase::moving;
         volume.Leveler().Move([this]
             {
-                machine.Dispatch(NorLevelingMoved{});
+                Moved();
             });
     }
 
-    void NorForegroundLeveling::Release()
+    void NorForegroundLeveling::Moved()
     {
+        phase = Phase::waiting;
         claimer.Release();
     }
 }

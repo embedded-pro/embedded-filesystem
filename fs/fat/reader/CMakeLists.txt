@@ -7,7 +7,6 @@ target_link_libraries(fs.fat_reader PUBLIC
     hal.interfaces
     infra.event
     infra.util
-    services.fsm
 )
 
 target_sources(fs.fat_reader PRIVATE

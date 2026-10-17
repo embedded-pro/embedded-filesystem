@@ -29,7 +29,7 @@ Exception: `metrics/` is host-only benchmark code and may use the standard libra
 - Completions are always delivered through `infra::EventDispatcher`, never from inside the call that started the operation
 - Never block, sleep or busy-wait; no mutexes; all calls come from the event dispatcher context
 - One operation at a time per volume, at most one device request in flight; further operations wait in a bounded queue and complete with `Result::busy` when it is full
-- Lifecycles (volume, background work, media presence) are `services::TableStateMachine` instances from EMIL; device completions go through `Completion<Ev>()`
+- Lifecycles (volume, background work, media presence) are `services::TableStateMachine` instances from EMIL; device completions go through `Completion<Ev>()`. To save flash, the lite volumes `fs::FatReader`, `fs::FatLite` and `fs::NorLite` track their lifecycle with `fs::LiteLifecycle`, and `fs::NorForegroundLeveling` its phase with an enumeration
 - Multi-step operations are explicit state machines: small classes whose steps are named member functions chained through device callbacks. Do **not** use `infra::Sequencer`
 - Buffers passed to `Read`/`Write` stay valid until the completion is called
 

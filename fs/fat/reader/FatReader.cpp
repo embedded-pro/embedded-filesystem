@@ -7,48 +7,35 @@ namespace fs
         : window(device, sector)
         , volume(device, window, nameBuffer, reading, deferred, [this]
               {
-                  lifecycle.Dispatch(FatMediaRemoved{});
+                  if (lifecycle.RemoveMedia())
+                      volume.MarkUnmounted(Result::mediaRemoved);
               })
         , mount(device, window, volume.Geometry())
         , limits(limits)
         , lifecycleClaimer(volume.Queue())
         , pathClaimer(volume.Queue())
-        , lifecycle(*this, services::Validated<FatReader>())
-    {
-        lifecycle.OnEntered<FatMounted>([](FatReader& reader, FatMounted&)
-            {
-                reader.volume.MarkMounted();
-                reader.Entered(Result::success);
-            });
-        lifecycle.OnEntered<FatFault>([](FatReader& reader, const FatFault& fault)
-            {
-                reader.volume.MarkUnmounted(fault.result);
-                reader.Entered(fault.result);
-            });
-        lifecycle.OnEntered<FatUnmounted>([](FatReader& reader, FatUnmounted&)
-            {
-                reader.volume.MarkUnmounted(Result::notMounted);
-                reader.Entered(Result::success);
-            });
-        lifecycle.Start<FatUnmounted>();
-    }
+    {}
 
     void FatReader::Mount(const infra::Function<void(Result result)>& onDone)
     {
-        if (lifecycle.Dispatch(FatMountRequested{}) == services::DispatchResult::transitioned)
-            onMountDone = onDone;
-        else
+        if (!lifecycle.StartMount())
             volume.Defer(onDone, Result::busy);
+        else
+        {
+            onMountDone = onDone;
+            BeginMount();
+        }
     }
 
     void FatReader::Unmount(const infra::Function<void(Result result)>& onDone)
     {
-        if (lifecycle.Dispatch(FatUnmountRequested{}) == services::DispatchResult::transitioned)
+        if (lifecycle.StartUnmount())
+        {
             onUnmountDone = onDone;
-        else if (std::holds_alternative<FatMounting>(lifecycle.CurrentState()) || std::holds_alternative<FatUnmounting>(lifecycle.CurrentState()))
-            volume.Defer(onDone, Result::busy);
+            BeginUnmount();
+        }
         else
-            volume.Defer(onDone, Unavailable());
+            volume.Defer(onDone, lifecycle.Changing() ? Result::busy : lifecycle.Unavailable());
     }
 
     void FatReader::Open(infra::BoundedConstString path, OpenMode mode, const infra::Function<void(Result result, infra::SharedPtr<File> file)>& onDone)
@@ -101,7 +88,7 @@ namespace fs
 
     void FatReader::Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone)
     {
-        volume.Defer(onDone, IsMounted() ? Result::unsupported : Unavailable());
+        volume.Defer(onDone, lifecycle.IsMounted() ? Result::unsupported : lifecycle.Unavailable());
     }
 
     bool FatReader::Idle() const
@@ -114,23 +101,10 @@ namespace fs
         return volume;
     }
 
-    bool FatReader::IsMounted() const
-    {
-        return std::holds_alternative<FatMounted>(lifecycle.CurrentState());
-    }
-
-    Result FatReader::Unavailable() const
-    {
-        if (const auto* fault = std::get_if<FatFault>(&lifecycle.CurrentState()); fault != nullptr && fault->result == Result::mediaRemoved)
-            return Result::mediaRemoved;
-
-        return Result::notMounted;
-    }
-
     Result FatReader::Refusal(infra::BoundedConstString path) const
     {
-        if (!IsMounted())
-            return Unavailable();
+        if (!lifecycle.IsMounted())
+            return lifecycle.Unavailable();
 
         if (auto validation = ValidatePath(path, limits); validation != Result::success)
             return validation;
@@ -140,7 +114,7 @@ namespace fs
 
     Result FatReader::ReadOnly() const
     {
-        return IsMounted() ? Result::readOnly : Unavailable();
+        return lifecycle.IsMounted() ? Result::readOnly : lifecycle.Unavailable();
     }
 
     bool FatReader::PathCallPending() const
@@ -165,7 +139,7 @@ namespace fs
                     Found(result);
                 });
         else
-            Found(Unavailable());
+            Found(lifecycle.Unavailable());
     }
 
     void FatReader::Found(Result result)
@@ -248,7 +222,14 @@ namespace fs
     void FatReader::Mounted(Result result)
     {
         lifecycleClaimer.Release();
-        lifecycle.Dispatch(FatMountDone{ result });
+        lifecycle.Mounted(result);
+
+        if (result == Result::success)
+            volume.MarkMounted();
+        else
+            volume.MarkUnmounted(result);
+
+        Entered(result);
     }
 
     void FatReader::BeginUnmount()
@@ -256,7 +237,9 @@ namespace fs
         lifecycleClaimer.Claim([this]
             {
                 lifecycleClaimer.Release();
-                lifecycle.Dispatch(FatUnmountDone{});
+                lifecycle.Unmounted();
+                volume.MarkUnmounted(Result::notMounted);
+                Entered(Result::success);
             });
     }
 

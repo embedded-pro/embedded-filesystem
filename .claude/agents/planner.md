@@ -16,7 +16,7 @@ You are the planner agent for embedded-filesystem. You produce detailed, actiona
 ## Plan Structure
 
 1. **Context** — the problem and the intended outcome.
-2. **Design** — classes and their single responsibility, interfaces (EmIL pattern: protected non-virtual destructor), state machines (named-step operation classes; lifecycles as `services::TableStateMachine`; no `infra::Sequencer`), and the compile-time sizing of every pool, cache and queue.
+2. **Design** — classes and their single responsibility, interfaces (EmIL pattern: protected non-virtual destructor), state machines (named-step operation classes; lifecycles as `services::TableStateMachine`, or enumerations in the lite volumes and `fs::NorForegroundLeveling`; no `infra::Sequencer`), and the compile-time sizing of every pool, cache and queue.
 3. **Test-first steps** — an ordered list of red → green → refactor increments, each naming the failing test to write first, the test doubles used and the expected device requests.
 4. **Power-cut and metrics** — which write paths join the power-cut sweep, and which metric tests are added or tightened, with their targets from `docs/Metrics.md`.
 5. **Files** — files to create or modify, following `fs/<module>/`, `fs/<module>/test/Test<Component>.cpp` and `fs/<module>/test_doubles/`.

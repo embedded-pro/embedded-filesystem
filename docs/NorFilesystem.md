@@ -476,7 +476,7 @@ The machine starts when the volume is mounted and stops when it is unmounted; a 
 
 A volume built with `NorFeatures::background` left out does no work while it is idle, and links neither this machine nor a timer.
 A free block is then erased by the call that needs it, or by the refill of a call that leaves the pool below the watermark, and a checkpoint is written when the journal or the cache is full and at `Unmount`.
-Static wear leveling makes its moves in `fs::NorForegroundLeveling` instead, a `services::TableStateMachine` with the states `Stopped`, `Waiting`, `Claiming` and `Moving`.
+Static wear leveling makes its moves in `fs::NorForegroundLeveling` instead, which keeps its phase, stopped, waiting, claiming or moving, in an enumeration rather than a `services::TableStateMachine`, for 1.2 KB less flash.
 After the first call of a mount and after every call that allocated a block, when a move is due and the free blocks can hold twice the node blocks of a checkpoint, it claims the queue ahead of every waiting call and makes one move, as the fallback does.
 So the moves keep the rate of the background, the first one after a mount included, and the next call waits for the move.
 
@@ -609,7 +609,7 @@ fs::NorLite::WithStorage<norConfig, 2> lite{ norFlash };
 ```
 
 The template arguments of `fs::NorLite::WithStorage<Config, Files>` are the configuration and the number of open files; `directories` and `pathOperations` of `fs::NorConfig` are not used.
-On a Cortex-M4, F-1 measures 60.9 KB of flash and 17.4 KB of RAM for `fs::NorLite::WithStorage` with the configuration of `nor-qspi-16m` and one file, against 63.3 KB and 17.6 KB for `fs::NorFileSystem` with every `fs::NorFeatures` left out and 15.7 KB and 0.4 KB for `littlefs/default`, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+On a Cortex-M4, F-1 measures 58.2 KB of flash and 17.2 KB of RAM for `fs::NorLite::WithStorage` with the configuration of `nor-qspi-16m` and one file, against 62.1 KB and 17.5 KB for `fs::NorFileSystem` with every `fs::NorFeatures` left out and 15.7 KB and 0.4 KB for `littlefs/default`, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 Most of what is left is the code that every write needs, the journal, the checkpoints, the maps and the garbage collection, and most of the RAM is the tables and the node cache of [RAM use](#ram-use).
 
 ## Counters
