@@ -7,11 +7,11 @@ namespace fs
 {
     FatDirectoryVisitor::FatDirectoryVisitor() = default;
 
-    FatDirectoryReader::FatDirectoryReader(SectorCache& cache, const FatGeometry& geometry, FatEntryAssembler& assembler)
-        : cache(cache)
+    FatDirectoryReader::FatDirectoryReader(SectorSource& sectors, const FatGeometry& geometry, FatEntryAssembler& assembler)
+        : sectors(sectors)
         , geometry(geometry)
         , assembler(assembler)
-        , table(cache, geometry)
+        , table(sectors, geometry)
     {}
 
     FatDirectoryReader::~FatDirectoryReader() = default;
@@ -62,7 +62,7 @@ namespace fs
 
     void FatDirectoryReader::ReadSector()
     {
-        cache.Read(SectorOf(FatEntryPosition{ cursor->cluster, cursor->index }), [this](Result result, infra::ConstByteRange contents)
+        sectors.Read(SectorOf(FatEntryPosition{ cursor->cluster, cursor->index }), [this](Result result, infra::ConstByteRange contents)
             {
                 OnSector(result, contents);
             });
@@ -164,7 +164,7 @@ namespace fs
 
     uint32_t FatDirectoryReader::EntriesPerSector() const
     {
-        return cache.SectorSize() / directoryEntryBytes;
+        return sectors.SectorSize() / directoryEntryBytes;
     }
 
     uint32_t FatDirectoryReader::EntriesPerCluster() const

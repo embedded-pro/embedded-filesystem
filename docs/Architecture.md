@@ -15,8 +15,9 @@ The on-disk designs are described in [Fat.md](Fat.md) and [NorFilesystem.md](Nor
             fs::FileSystem / fs::File / fs::Directory
                      (fs/interfaces)
                  /                          \
-        fs::FatFileSystem               fs::NorFileSystem
-           (fs/fat)                         (fs/nor)
+ fs::FatFileSystem, fs::FatReader,     fs::NorFileSystem, fs::NorLite
+ fs::FatLite                           (fs/nor, fs/nor/lite)
+ (fs/fat, fs/fat/reader, fs/fat/lite)
                  \                          /
              shared building blocks (fs/common)
          path parsing, sector cache, operation queue,
@@ -32,7 +33,10 @@ The on-disk designs are described in [Fat.md](Fat.md) and [NorFilesystem.md](Nor
 | `fs/interfaces` | `fs.interfaces` | `fs::Result`, `fs::OpenMode`, `fs::File`, `fs::Directory`, `fs::EntryInfo`, `fs::VolumeUsage`, `fs::FileSystem`                |
 | `fs/common`     | `fs.common`     | Path parsing, sector cache, per-volume operation queue, handle pools, CRC-protected records                                    |
 | `fs/fat`        | `fs.fat`        | FAT12, FAT16 and FAT32 with long file names, and the formatter                                                                 |
+| `fs/fat/reader` | `fs.fat_reader` | `fs::FatReader`, a FAT volume that only reads, built from the parts of `fs.fat` that read                                      |
+| `fs/fat/lite`   | `fs.fat_lite`   | `fs::FatLite`, a FAT volume that writes files with one sector buffer, built from the parts of `fs.fat_reader` and `fs.fat`     |
 | `fs/nor`        | `fs.nor`        | The log-structured NOR filesystem, its garbage collection and its wear leveling                                                |
+| `fs/nor/lite`   | `fs.nor_lite`   | `fs::NorLite`, a NOR volume that creates, appends to and reads files, built from the parts of `fs.nor`                         |
 | `metrics`       | `metrics.*`     | Host-only device models, metered devices, workloads and baselines, see [Metrics.md](Metrics.md)                                |
 | `validation`    | `validation.*`  | Firmware for boards, the reference images of F-1 and the host package that runs the boards, see [Validation.md](Validation.md) |
 
@@ -51,7 +55,7 @@ The validation on boards uses the drivers of hal-st, which it fetches only when 
 | `infra::SharedPtr`, `infra::SharedObjectAllocatorFixedSize`               | Handles to open files and directories, from fixed-size pools |
 | `infra::BoundedVector`, `infra::BoundedDeque`, `infra::BoundedString`     | Bounded storage for queues, caches, names and paths          |
 | `services::TableStateMachine`                                             | Lifecycle of volumes and of background work                  |
-| `infra::Crc32`                                                            | Protecting on-flash records                                  |
+| `infra::Crc32Nibblewise`, `infra::Crc16CcittFalseBitwise`                 | Protecting NOR records, and the hash of FAT short names      |
 | `hal::FlashStub`, `hal::BlockDeviceStub`, `infra::EventDispatcherFixture` | Tests                                                        |
 
 `hal::BlockDevice` needs one extension before the FAT volume can give its durability guarantees: a `Flush` operation that writes back the device's own cache, for eMMC cache flush and similar commands.
@@ -82,6 +86,7 @@ A queue must outlive the claims on it, so its claimers are declared after it; a 
 
 Background work, such as erasing obsolete NOR blocks or scanning the FAT for free clusters, runs only when the queue is empty and after a configurable idle delay.
 The idle delay starts when a foreground operation releases the queue and no other operation is waiting, so a volume without work never wakes the processor.
+The timer of the idle delay, `fs::IdleTimer`, belongs to the background work, so a volume built without background work links no timer.
 Background work claims the queue like an operation, and checks before every device request whether a foreground operation is waiting; if one is, it releases the queue and continues after the next idle delay.
 The queue notifies the volume of each release of a foreground operation, which the fallback of static wear leveling on NOR volumes uses to claim the queue ahead of waiting operations, as described in [NorFilesystem.md](NorFilesystem.md#static-wear-leveling).
 A foreground operation that arrives while background work is running therefore waits for at most one device request, for instance one sector erase, or on a NOR volume for one checkpoint or one block move, which run as one unit; W-6 in [Metrics.md](Metrics.md) measures this.
@@ -236,7 +241,8 @@ namespace fs
 }
 ```
 
-`Idle()` is true while no call is queued or running and no background work is scheduled, so the volume does nothing until it is called again: the queue holds no claim, granted or waiting, and its idle delay is not running.
+`Idle()` is true while no call is queued or running and no background work is scheduled, so the volume does nothing until it is called again: the queue holds no claim, granted or waiting, and the idle delay of the background work is not running.
+`fs::FatReader`, `fs::FatLite` and `fs::NorLite` schedule no background work, so they are idle as soon as their queue is.
 Completions that wait in `fs::DeferredCompletions`, such as those with `busy`, hold no claim, so they can still be pending while `Idle()` is true.
 A product can use it before it powers the device down or sleeps deeply, and F-2 in [Validation.md](Validation.md#processor-cycles) uses it to count the cycles of the background work that an operation leaves.
 
@@ -261,6 +267,7 @@ A `Write` that fails leaves `Position()` and `Size()` at the bytes that were act
 `Seek` beyond the end of the file moves the position to the end.
 `Truncate` cuts the file at the current position.
 `ExpectSize` announces the size the file will reach, so that the filesystem can reserve contiguous space; it never changes `Size()`, and it may complete with `unsupported`.
+A volume that is configured without a call, or without a use of one such as creating a long name or writing before the end of a file, with `fs::FatFeatures` or `fs::NorFeatures`, completes it with `unsupported`, so that its code is not linked.
 `Sync` makes everything written so far durable, including on power loss, before it completes.
 `Close` writes back pending data, commits it and releases the handle.
 Each handle runs one call at a time: a call made while another call on the same handle is pending completes with `busy`.
@@ -303,16 +310,20 @@ A handle returns to its pool once the last `infra::SharedPtr` and `infra::WeakPt
 The building blocks in `fs/common` are shared by both filesystems.
 Each one is sized at compile time:
 
-| Building block                                      | Sized by                                                                  | RAM                                                  |
-|-----------------------------------------------------|---------------------------------------------------------------------------|------------------------------------------------------|
-| `fs::PathLimits`                                    | The longest name and the longest path in UTF-8 bytes, 255 by default      | None: paths are not copied                           |
-| `fs::OperationQueue`                                | Claimed by the handles and the path-operation slots of the volume         | A claimable resource, an idle timer and its callback |
-| `fs::DeferredCompletions::WithMaxSize<N>`           | N completions with `busy` that wait for the event dispatcher              | N completions                                        |
-| `fs::HandlePool<Handle, N>`                         | N handles, constructed once with the volume                               | N handles                                            |
-| `fs::SectorCache::WithStorage<Sectors, SectorSize>` | Sectors buffers of SectorSize bytes, 512 by default; see [Fat.md](Fat.md) | Sectors buffers and their entries                    |
-| `fs::FlushBarrier`                                  | One per block device, in front of it                                      | The lowest rank written since the last flush         |
-| `fs::DirectTransfers`                               | One per volume, next to its sector cache                                  | One transfer in flight                               |
-| `fs::CrcRecord`                                     | The buffer of the caller                                                  | None: it frames and checks records in place          |
+| Building block                                      | Sized by                                                                  | RAM                                          |
+|-----------------------------------------------------|---------------------------------------------------------------------------|----------------------------------------------|
+| `fs::PathLimits`                                    | The longest name and the longest path in UTF-8 bytes, 255 by default      | None: paths are not copied                   |
+| `fs::OperationQueue`                                | Claimed by the handles and the path-operation slots of the volume         | A claimable resource and two callbacks       |
+| `fs::IdleTimer`                                     | One per background work, which starts it when the queue empties           | A timer and its callback                     |
+| `fs::DeferredCompletions::WithMaxSize<N>`           | N completions with `busy` that wait for the event dispatcher              | N completions                                |
+| `fs::HandlePool<Handle, N>`                         | N handles, constructed once with the volume                               | N handles                                    |
+| `fs::SectorCache::WithStorage<Sectors, SectorSize>` | Sectors buffers of SectorSize bytes, 512 by default; see [Fat.md](Fat.md) | Sectors buffers and their entries            |
+| `fs::FlushBarrier`                                  | One per block device, in front of it                                      | The lowest rank written since the last flush |
+| `fs::DirectTransfers`                               | One per volume, next to its sector cache                                  | One transfer in flight                       |
+| `fs::CrcRecord`                                     | The buffer of the caller                                                  | None: it frames and checks records in place  |
+
+The parts of `fs/fat` that only read sectors, the reader of the FAT and the reader of directories, read them through `fs::SectorSource`, which `fs::SectorCache` implements, so that `fs::FatReader` runs them on its one sector buffer.
+The writer of the FAT changes sectors through `fs::SectorStore`, which adds `Modify` to it, so that `fs::FatLite` runs it on its one sector buffer too.
 
 ### Paths
 
@@ -372,8 +383,10 @@ hal::Flash& norFlash = ...;
 fs::NorFileSystem::WithStorage<norConfig, 4> norVolume{ norFlash };
 ```
 
-For FAT, the template arguments are the number of open files and the number of sectors in the cache, followed by an optional `fs::FatLimits` with the other sizes; `fs::FatConfig` holds the settings that need no storage, such as the allocation unit of the card and the timer service that gives the time of timestamps, as described in [Fat.md](Fat.md#configuration).
-For NOR, they are the configuration and the number of open files; the constructor takes the device and an optional idle delay, as described in [NorFilesystem.md](NorFilesystem.md#configuration).
+For FAT, the template arguments are the number of open files and the number of sectors in the cache, followed by an optional `fs::FatLimits` with the other sizes and an optional `fs::FatFeatures` with the calls and the work the volume leaves out.
+`fs::FatConfig` holds the settings that need no storage, such as the allocation unit of the card and the timer service that gives the time of timestamps, as described in [Fat.md](Fat.md#configuration).
+`fs::FatReader::WithStorage<Files, Directories, Limits>` takes the number of open files and of open directory handles, and an optional `fs::PathLimits`, as described in [Fat.md](Fat.md#read-only-volume), and `fs::FatLite::WithStorage<Files, Directories, Limits>` the same, as described in [Fat.md](Fat.md#lite-volume).
+For NOR, they are the configuration, the number of open files and an optional `fs::NorFeatures`; the constructor takes the device and an optional idle delay, as described in [NorFilesystem.md](NorFilesystem.md#configuration), and `fs::NorLite::WithStorage<Config, Files>` takes the configuration and the number of open files, as described in [NorFilesystem.md](NorFilesystem.md#lite-volume).
 The block states and the erase-count table are sized by `maxBlocks`, the largest number of blocks the volume may span; mounting a device with more blocks fails with `Result::unsupported`.
 
 ## Testing

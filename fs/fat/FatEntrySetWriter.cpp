@@ -1,15 +1,17 @@
 #include "fs/fat/FatEntrySetWriter.hpp"
+#include "fs/fat/FatLongNames.hpp"
 #include "fs/fat/FatRanks.hpp"
 #include "infra/event/EventDispatcher.hpp"
 #include "infra/util/ReallyAssert.hpp"
 
 namespace fs
 {
-    FatEntrySetWriter::FatEntrySetWriter(SectorCache& cache, FatDirectoryReader& reader, FatAllocator& allocator, const FatGeometry& geometry)
+    FatEntrySetWriter::FatEntrySetWriter(SectorCache& cache, FatDirectoryReader& reader, FatAllocator& allocator, const FatGeometry& geometry, const FatLongNames* longNames)
         : cache(cache)
         , reader(reader)
         , allocator(allocator)
         , geometry(geometry)
+        , longNames(longNames)
         , table(cache, geometry)
     {}
 
@@ -21,7 +23,7 @@ namespace fs
         this->onDone = onDone;
         start = slots;
         capacity = reader.Capacity(start.first.cluster);
-        this->slots = static_cast<uint8_t>(set.longName.empty() ? 1 : LongEntriesFor(set.longName) + 1);
+        this->slots = static_cast<uint8_t>(set.longName.empty() ? 1 : longNames->entriesFor(set.longName) + 1);
         checksum = LongNameChecksum(set.entry.name.bytes);
         clusters = { start.first.cluster, 0, 0 };
         resolved = 1;
@@ -177,7 +179,7 @@ namespace fs
             if (index + 1u == slots)
                 EncodeShortEntry(set.entry, out);
             else
-                EncodeLongEntry(set.longName, static_cast<uint8_t>(slots - 1u - index), index == 0, checksum, out);
+                longNames->encode(set.longName, static_cast<uint8_t>(slots - 1u - index), index == 0, checksum, out);
         }
     }
 

@@ -1,4 +1,5 @@
 #include "fs/fat/FatFileSystem.hpp"
+#include "fs/fat/reader/FatReader.hpp"
 #include "infra/timer/test_helper/ClockFixture.hpp"
 #include "metrics/interop/InteropTools.hpp"
 #include "gtest/gtest.h"
@@ -6,6 +7,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <utility>
 
 namespace
 {
@@ -51,23 +53,36 @@ TEST_P(MountInterop, image_made_by_mkfs_mounts)
     device.LoadFrom(path);
     std::filesystem::remove(path);
     fs::FatFileSystem::WithStorage<1, 4> volume{ device };
+    fs::FatReader::WithStorage<1> fatReader{ device };
 
-    std::optional<fs::Result> mounted;
-    volume.Mount([&mounted](fs::Result result)
-        {
-            mounted = result;
-        });
-    ExecuteAllActions();
-    EXPECT_EQ(fs::Result::success, mounted);
+    for (auto [engine, fileSystem] : { std::pair<const char*, fs::FileSystem*>{ "FatFileSystem", &volume }, std::pair<const char*, fs::FileSystem*>{ "FatReader", &fatReader } })
+    {
+        SCOPED_TRACE(engine);
+        std::optional<fs::Result> mounted;
+        fileSystem->Mount([&mounted](fs::Result result)
+            {
+                mounted = result;
+            });
+        ExecuteAllActions();
+        EXPECT_EQ(fs::Result::success, mounted);
 
-    std::optional<fs::Result> stat;
-    volume.Stat("/", [&stat](fs::Result result, const fs::EntryInfo& info)
-        {
-            EXPECT_EQ(fs::EntryType::directory, info.type);
-            stat = result;
-        });
-    ExecuteAllActions();
-    EXPECT_EQ(fs::Result::success, stat);
+        std::optional<fs::Result> stat;
+        fileSystem->Stat("/", [&stat](fs::Result result, const fs::EntryInfo& info)
+            {
+                EXPECT_EQ(fs::EntryType::directory, info.type);
+                stat = result;
+            });
+        ExecuteAllActions();
+        EXPECT_EQ(fs::Result::success, stat);
+
+        std::optional<fs::Result> unmounted;
+        fileSystem->Unmount([&unmounted](fs::Result result)
+            {
+                unmounted = result;
+            });
+        ExecuteAllActions();
+        EXPECT_EQ(fs::Result::success, unmounted);
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(Images, MountInterop,

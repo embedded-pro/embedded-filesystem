@@ -8,8 +8,8 @@ embedded-filesystem provides asynchronous, heap-less C++20 filesystems for micro
 
 - `fs/interfaces/` — `fs::Result`, `fs::OpenMode`, `fs::FileSystem`, `fs::File`, `fs::Directory`, `fs::EntryInfo`, `fs::VolumeUsage` (target `fs.interfaces`)
 - `fs/common/` — path parsing, sector cache, per-volume operation queue, handle pools, CRC-protected records (target `fs.common`)
-- `fs/fat/` — FAT12/16/32 with long file names, and the formatter (target `fs.fat`); design in `docs/Fat.md`
-- `fs/nor/` — log-structured NOR filesystem, garbage collection, wear leveling (target `fs.nor`); design in `docs/NorFilesystem.md`
+- `fs/fat/` — FAT12/16/32 with long file names, and the formatter (target `fs.fat`); `fs/fat/reader/` — `fs::FatReader`, the read-only FAT volume built from the parts of `fs.fat` that read (target `fs.fat_reader`); `fs/fat/lite/` — `fs::FatLite`, the FAT volume that writes files with one sector buffer (target `fs.fat_lite`); design in `docs/Fat.md`
+- `fs/nor/` — log-structured NOR filesystem, garbage collection, wear leveling (target `fs.nor`); `fs/nor/lite/` — `fs::NorLite`, the NOR volume that creates, appends to and reads files with the parts of `fs.nor` (target `fs.nor_lite`); design in `docs/NorFilesystem.md`
 - `metrics/` — host-only device models, metered and power-cut devices, workloads, FatFs/littlefs baselines (targets `metrics.*`); definitions in `docs/Metrics.md`
 - `validation/` — firmware for ST boards on hal-st, F-1 reference images, the Python host package `validation/host` and the committed runs `validation/results` (targets `validation.*`); design in `docs/Validation.md`
 - `cmake/emfs_third_party.cmake` — the pins of FatFs and littlefs, built as `third_party.*` for `metrics/` and `validation/`
@@ -83,7 +83,7 @@ Validation (`docs/Validation.md`, `validation/README.md`):
 - Board presets `stm32h757-cm7`, `stm32h757-cm4`, `stm32h745-cm7`, `stm32h745-cm4`, built with `cmake --build --preset <preset>-RelWithDebInfo` (Arm GNU toolchain and `xsltproc`)
 - Host package: `cd validation/host && pip install ".[dev]" && ruff check . && python -m pytest tests/unit`
 - Scenarios on the fake firmware: `python -m pytest tests/hil --fake --no-ad3 --board <board>`
-- F-1 reference images: `cmake --build --preset cortex-<core>-MinSizeRel --target validation.footprint` for m4, m7 and m33, then `validation/footprint/measure.sh <directory>` with `cortex-memory-budget` on `PATH`
+- F-1 reference images: `cmake --build --preset <preset>-MinSizeRel --target validation.footprint` for `cortex-m4`, `cortex-m7`, `cortex-m33` and `cortex-m4-lto`, then `validation/footprint/measure.sh <directory>` with `cortex-memory-budget` on `PATH`
 
 Before pushing, run `tools/verify.sh`: the checks of CI that can run locally, and scans for what CI reported on earlier pull requests (`tools/README.md`).
 

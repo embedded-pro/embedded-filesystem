@@ -9,7 +9,7 @@
 #include "fs/common/Path.hpp"
 #include "fs/common/SectorCache.hpp"
 #include "fs/fat/FatAllocator.hpp"
-#include "fs/fat/FatBackgroundScan.hpp"
+#include "fs/fat/FatBackgroundWork.hpp"
 #include "fs/fat/FatChainFree.hpp"
 #include "fs/fat/FatChainWalk.hpp"
 #include "fs/fat/FatClosedFiles.hpp"
@@ -24,6 +24,7 @@
 #include "fs/fat/FatMount.hpp"
 #include "fs/fat/FatOpen.hpp"
 #include "fs/fat/FatOpenDirectory.hpp"
+#include "fs/fat/FatOperations.hpp"
 #include "fs/fat/FatPathWalk.hpp"
 #include "fs/fat/FatRead.hpp"
 #include "fs/fat/FatRemove.hpp"
@@ -66,6 +67,7 @@ namespace fs
         infra::MemoryRange<FatClosedFile> closedFiles;
         infra::MemoryRange<FatReservation> freeRuns;
         uint32_t cacheSectors;
+        const FatOperations& operations;
     };
 
     class FatVolume
@@ -90,15 +92,14 @@ namespace fs
         FatAllocator& Allocator();
         FatEntryUpdate& EntryUpdate();
         FatChainFree& ChainFree();
-        FatDirtyFlag& DirtyFlag();
         FatTableWriter& TableWriter();
         FatClosedFiles& ClosedFiles();
         FatFreeSpaceScan& FreeSpace();
         infra::IntrusiveList<FatFile>& OpenFiles();
         infra::IntrusiveList<FatDirectory>& OpenDirectories();
         OperationQueue& Queue();
-        const OperationQueue& Queue() const;
         FatOperation& Operation();
+        const FatOperations& Operations() const;
         const FatReservations& Reservations() const;
         FatDateTime Timestamp() const;
         Result Changeable(const FatScannedEntry& entry) const;
@@ -111,6 +112,10 @@ namespace fs
         void MarkMounted();
         void MarkUnmounted(Result reason);
         void Report(Result result) const;
+        void AttachBackground(FatBackgroundWork& work);
+        bool Idle() const;
+        void MarkDirty(const infra::Function<void(Result result)>& onDone);
+        void MarkClean(const infra::Function<void(Result result)>& onDone);
 
         template<class Callback>
         void Defer(const Callback& onDone, Result result);
@@ -126,6 +131,7 @@ namespace fs
         uint32_t timerServiceId;
         uint32_t blocksPerAllocationUnit;
         PathLimits limits;
+        const FatOperations& operations;
         infra::Function<void()> onMediaRemoved;
         DirectTransfers transfers;
         FatVolumeState state;
@@ -144,7 +150,7 @@ namespace fs
         infra::IntrusiveList<FatFile> openFiles;
         infra::IntrusiveList<FatDirectory> openDirectories;
         OperationQueue queue;
-        FatBackgroundScan background;
+        FatBackgroundWork* background{ nullptr };
         FatOperation operation;
         uint32_t generation{ 0 };
         bool mounted{ false };

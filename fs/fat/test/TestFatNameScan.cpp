@@ -1,3 +1,4 @@
+#include "fs/fat/FatLongNames.hpp"
 #include "fs/fat/FatNameScan.hpp"
 #include "fs/fat/FatShortNameGeneration.hpp"
 #include "fs/fat/test/FatVolumeFixture.hpp"
@@ -72,7 +73,7 @@ namespace
         std::array<uint8_t, 255> nameBuffer{};
         fs::FatEntryAssembler assembler{ infra::MakeRange(nameBuffer) };
         fs::FatDirectoryReader reader{ cache, geometry, assembler };
-        fs::FatNameScan scan{ reader };
+        fs::FatNameScan scan{ reader, &fs::fatLongNames };
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
     };
 

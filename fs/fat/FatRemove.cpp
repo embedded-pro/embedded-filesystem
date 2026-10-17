@@ -85,7 +85,7 @@ namespace fs
 
     void FatRemove::ClearEntry()
     {
-        volume.DirtyFlag().MarkDirty([this](Result result)
+        volume.MarkDirty([this](Result result)
             {
                 if (result != Result::success)
                     Finish(result);

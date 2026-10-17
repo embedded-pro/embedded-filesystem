@@ -20,6 +20,8 @@
 
 namespace fs
 {
+    struct FatLongNames;
+
     struct FatEntrySet
     {
         infra::BoundedConstString longName;
@@ -29,7 +31,7 @@ namespace fs
     class FatEntrySetWriter
     {
     public:
-        FatEntrySetWriter(SectorCache& cache, FatDirectoryReader& reader, FatAllocator& allocator, const FatGeometry& geometry);
+        FatEntrySetWriter(SectorCache& cache, FatDirectoryReader& reader, FatAllocator& allocator, const FatGeometry& geometry, const FatLongNames* longNames);
         FatEntrySetWriter(const FatEntrySetWriter& other) = delete;
         FatEntrySetWriter& operator=(const FatEntrySetWriter& other) = delete;
         ~FatEntrySetWriter();
@@ -59,6 +61,7 @@ namespace fs
         FatDirectoryReader& reader;
         FatAllocator& allocator;
         const FatGeometry& geometry;
+        const FatLongNames* longNames;
         FatTableReader table;
         FatEntrySet set;
         FatFreeSlots start{};

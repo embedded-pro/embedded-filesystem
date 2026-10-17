@@ -1,5 +1,5 @@
 #include "fs/nor/NorFileSystem.hpp"
-#include "infra/event/EventDispatcher.hpp"
+#include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 #include <utility>
 
@@ -10,8 +10,8 @@ namespace fs
         constexpr uint32_t superblocks = 2;
     }
 
-    NorFileSystem::NorFileSystem(const NorVolumeParts& parts, const NorConfig& config, infra::Duration idleDelay)
-        : volume(parts, config, idleDelay)
+    NorFileSystem::NorFileSystem(const NorVolumeParts& parts, const NorConfig& config)
+        : volume(parts, config)
         , lifecycleClaimer(volume.Queue())
         , lifecycle(*this, services::Validated<NorFileSystem>())
     {
@@ -37,7 +37,9 @@ namespace fs
 
     void NorFileSystem::Format(const infra::Function<void(Result result)>& onDone)
     {
-        if (lifecycle.Dispatch(NorFormatRequested{}) == services::DispatchResult::transitioned)
+        if (volume.Operations().format == nullptr)
+            volume.Defer(onDone, Result::unsupported);
+        else if (lifecycle.Dispatch(NorFormatRequested{}) == services::DispatchResult::transitioned)
             onFormatDone = onDone;
         else
             volume.Defer(onDone, Result::busy);
@@ -68,43 +70,65 @@ namespace fs
 
     void NorFileSystem::Open(infra::BoundedConstString path, OpenMode mode, const infra::Function<void(Result result, infra::SharedPtr<File> file)>& onDone)
     {
-        StartPathCall(path, NorOpenCall{ path, mode, onDone });
+        if (auto refusal = Refusal(path); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorOpenCall{ path, mode, onDone });
     }
 
     void NorFileSystem::OpenDirectory(infra::BoundedConstString path, const infra::Function<void(Result result, infra::SharedPtr<Directory> directory)>& onDone)
     {
-        StartPathCall(path, NorOpenDirectoryCall{ path, onDone });
+        if (auto refusal = Refusal(path, volume.Operations().openDirectory != nullptr); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorOpenDirectoryCall{ path, onDone });
     }
 
     void NorFileSystem::Stat(infra::BoundedConstString path, const infra::Function<void(Result result, const EntryInfo& info)>& onDone)
     {
-        StartPathCall(path, NorStatCall{ path, onDone });
+        if (auto refusal = Refusal(path); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorStatCall{ path, onDone });
     }
 
     void NorFileSystem::Remove(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        StartPathCall(path, NorRemoveCall{ path, onDone });
+        if (auto refusal = Refusal(path, volume.Operations().remove != nullptr); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorRemoveCall{ path, onDone });
     }
 
     void NorFileSystem::Rename(infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone)
     {
         auto validation = ValidatePath(from, volume.Limits());
-        StartPathCall(validation != Result::success ? validation : ValidatePath(to, volume.Limits()), NorRenameCall{ from, to, onDone });
+
+        if (auto refusal = Refusal(validation != Result::success ? validation : ValidatePath(to, volume.Limits()), volume.Operations().rename != nullptr); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorRenameCall{ from, to, onDone });
     }
 
     void NorFileSystem::MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone)
     {
-        StartPathCall(path, NorMakeDirectoryCall{ path, onDone });
+        if (auto refusal = Refusal(path, volume.Operations().makeDirectory != nullptr); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorMakeDirectoryCall{ path, onDone });
     }
 
     void NorFileSystem::Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone)
     {
-        StartCall(NorUsageCall{ onDone });
+        if (auto refusal = Refusal(Result::success); refusal != Result::success)
+            volume.Defer(onDone, refusal);
+        else
+            Start(NorUsageCall{ onDone });
     }
 
     bool NorFileSystem::Idle() const
     {
-        return volume.Queue().Idle();
+        return volume.Idle();
     }
 
     NorVolume& NorFileSystem::Volume()
@@ -122,38 +146,33 @@ namespace fs
         return std::holds_alternative<NorMounted>(lifecycle.CurrentState());
     }
 
-    template<class Call>
-    void NorFileSystem::StartPathCall(infra::BoundedConstString path, Call&& call)
+    Result NorFileSystem::Refusal(infra::BoundedConstString path, bool supported) const
     {
-        StartPathCall(ValidatePath(path, volume.Limits()), std::forward<Call>(call));
+        return Refusal(ValidatePath(path, volume.Limits()), supported);
     }
 
-    template<class Call>
-    void NorFileSystem::StartPathCall(Result validation, Call&& call)
+    Result NorFileSystem::Refusal(Result validation, bool supported) const
     {
-        if (IsMounted() && validation != Result::success)
-            volume.Defer(call.onDone.Clone(), validation);
-        else
-            StartCall(std::forward<Call>(call));
+        if (!IsMounted())
+            return Result::notMounted;
+        if (!supported)
+            return Result::unsupported;
+        if (validation != Result::success)
+            return validation;
+        if (FreePathSlot() == nullptr)
+            return Result::busy;
+        return Result::success;
     }
 
-    template<class Call>
-    void NorFileSystem::StartCall(Call&& call)
+    void NorFileSystem::Start(NorPathCall&& call)
     {
         auto* slot = FreePathSlot();
-
-        if (!IsMounted())
-            volume.Defer(call.onDone.Clone(), Result::notMounted);
-        else if (slot == nullptr)
-            volume.Defer(call.onDone.Clone(), Result::busy);
-        else
-        {
-            slot->call = std::forward<Call>(call);
-            slot->claimer.Claim([this, slot]
-                {
-                    RunPathCall(*slot);
-                });
-        }
+        really_assert(slot != nullptr);
+        slot->call = std::move(call);
+        slot->claimer.Claim([this, slot]
+            {
+                RunPathCall(*slot);
+            });
     }
 
     NorPathSlot* NorFileSystem::FreePathSlot() const
@@ -182,12 +201,11 @@ namespace fs
         if (auto* stat = std::get_if<NorStatCall>(&call))
             volume.Operation().emplace<NorStat>(volume, std::move(*stat), finished).Start();
         else if (auto* openDirectory = std::get_if<NorOpenDirectoryCall>(&call))
-            volume.Operation().emplace<NorOpenDirectory>(volume, std::move(*openDirectory), [this]
-                                  {
-                                      return AllocateDirectory();
-                                  },
-                                  finished)
-                .Start();
+            volume.Operations().openDirectory(volume, std::move(*openDirectory), [this]
+                {
+                    return AllocateDirectory();
+                },
+                finished);
         else if (auto* open = std::get_if<NorOpenCall>(&call))
             volume.Operation().emplace<NorOpen>(volume, std::move(*open), [this]
                                   {
@@ -196,11 +214,11 @@ namespace fs
                                   finished)
                 .Start();
         else if (auto* makeDirectory = std::get_if<NorMakeDirectoryCall>(&call))
-            volume.Operation().emplace<NorMakeDirectory>(volume, std::move(*makeDirectory), finished).Start();
+            volume.Operations().makeDirectory(volume, std::move(*makeDirectory), finished);
         else if (auto* remove = std::get_if<NorRemoveCall>(&call))
-            volume.Operation().emplace<NorRemove>(volume, std::move(*remove), finished).Start();
+            volume.Operations().remove(volume, std::move(*remove), finished);
         else if (auto* rename = std::get_if<NorRenameCall>(&call))
-            volume.Operation().emplace<NorRename>(volume, std::move(*rename), finished).Start();
+            volume.Operations().rename(volume, std::move(*rename), finished);
         else
             ReportUsage(slot, std::get<NorUsageCall>(call));
     }
@@ -232,7 +250,7 @@ namespace fs
             {
                 return NorFormatDone{ result };
             });
-        volume.Operation().emplace<NorFormatter>(volume.Flash(), volume.Config(), volume.NodeStorage()).Format([this](Result result)
+        volume.Operations().format(volume, [this](Result result)
             {
                 LifecycleOperationDone(result);
             });
@@ -242,44 +260,12 @@ namespace fs
     {
         lifecycleClaimer.Claim([this]
             {
-                replayCheckpointBefore = std::nullopt;
+                lifecycleDone = lifecycle.CompletionWith<void(Result result)>([](Result result)
+                    {
+                        return NorMountDone{ result };
+                    });
                 StartMount();
             });
-    }
-
-    void NorFileSystem::StartMount()
-    {
-        lifecycleDone = lifecycle.CompletionWith<void(Result result)>([](Result result)
-            {
-                return NorMountDone{ result };
-            });
-        volume.Cache().Clear();
-        volume.Operation().emplace<NorMount>(volume.Flash(), volume.Config(), volume.State(), volume.JournalBuffer(), [this](Result result)
-                              {
-                                  if (result == Result::success)
-                                      Replay();
-                                  else
-                                      LifecycleOperationDone(result);
-                              })
-            .Start();
-    }
-
-    void NorFileSystem::Replay()
-    {
-        volume.Operation().emplace<NorReplay>(volume, replayCheckpointBefore, [this](Result result, std::optional<NorRecordPosition> overflow)
-                              {
-                                  if (!overflow.has_value())
-                                      LifecycleOperationDone(result);
-                                  else
-                                  {
-                                      replayCheckpointBefore = overflow;
-                                      infra::EventDispatcher::Instance().Schedule([this]
-                                          {
-                                              StartMount();
-                                          });
-                                  }
-                              })
-            .Start();
     }
 
     void NorFileSystem::BeginUnmount()
@@ -296,6 +282,11 @@ namespace fs
                                       })
                     .Start();
             });
+    }
+
+    void NorFileSystem::Mounted(Result result)
+    {
+        LifecycleOperationDone(result);
     }
 
     void NorFileSystem::LifecycleOperationDone(Result result)
@@ -316,5 +307,38 @@ namespace fs
     {
         if (onDone)
             volume.Defer(std::exchange(onDone, nullptr), result);
+    }
+
+    namespace detail
+    {
+        template<class Operation, class Call>
+        void StartNorOperation(NorVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished)
+        {
+            volume.Operation().template emplace<Operation>(volume, std::forward<Call>(call), onFinished).Start();
+        }
+
+        template void StartNorOperation<NorMakeDirectory, NorMakeDirectoryCall>(NorVolume& volume, NorMakeDirectoryCall&& call, const infra::Function<void(Result result)>& onFinished);
+        template void StartNorOperation<NorRemove, NorRemoveCall>(NorVolume& volume, NorRemoveCall&& call, const infra::Function<void(Result result)>& onFinished);
+        template void StartNorOperation<NorRename, NorRenameCall>(NorVolume& volume, NorRenameCall&& call, const infra::Function<void(Result result)>& onFinished);
+
+        void StartNorTruncate(NorVolume& volume, NorOpenFile& file, uint32_t size, const infra::Function<void(Result result)>& onDone)
+        {
+            volume.FileTruncate().Truncate(file, size, onDone);
+        }
+
+        void StartNorFormat(NorVolume& volume, const infra::Function<void(Result result)>& onDone)
+        {
+            volume.Operation().emplace<NorFormatter>(volume.Flash(), volume.Config(), volume.NodeStorage()).Format(onDone);
+        }
+
+        void StartNorOverwrite(NorVolume& volume, NorOpenFile& file, infra::ConstByteRange data, const infra::Function<void(Result result)>& onDone)
+        {
+            volume.FileOverwrite().Overwrite(file, data, onDone);
+        }
+
+        void StartNorOpenDirectory(NorVolume& volume, NorOpenDirectoryCall&& call, const NorDirectoryAllocation& allocate, const infra::Function<void(Result result)>& onFinished)
+        {
+            volume.Operation().emplace<NorOpenDirectory>(volume, std::move(call), allocate, onFinished).Start();
+        }
     }
 }

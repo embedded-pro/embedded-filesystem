@@ -118,6 +118,55 @@ The drivers of hal-st and the cycle counter of EmIL need changes first, made as 
 12. The comparison of `fs::FatFormatter` with the SD Memory Card Formatter: `validation::FatLayout`, `layout.read` and `layout.format`.
 13. The runs, one pull request each: the run is committed and summarized in [Metrics.md](Metrics.md), the models are calibrated, `nor-parallel-16m` joins them from its datasheet with the parallel NOR among the devices of `metrics.device_models`, the layouts of the cards go to [Fat.md](Fat.md), and once the runs show their spread, C-1 and C-2 get their targets.
 
+## Footprint reduction
+
+F-1 measures embedded-filesystem at several times the flash of FatFs and littlefs.
+This plan records where the size comes from and the steps that reduce it, measured with Arm GCC 13.2.1 in `MinSizeRel` on the Cortex-M4.
+None of the steps is scheduled yet.
+
+### Where the size comes from
+
+Most of the gap comes from the asynchronous execution, not from the FAT or NOR logic.
+FatFs waits in `disk_read()` and keeps the progress of a call on the stack, at no cost: `move_window` and `sync_window`, which load and write back one sector, need 116 bytes.
+The same job in `fs::FatLite` needs 1,606 bytes in 36 functions, because every wait needs an object that keeps the state of the operation, a stored `infra::Function` with its invoker and table, and a separate function for the rest of the work.
+
+Six patterns repeat across both filesystems:
+
+1. Every wait splits a function: `fs::FatLite` has 588 functions against 56 in `fatfs/minimal`, with 91 callback invokers and 108 tables, 4.4 KB of plumbing or 15 % of its code.
+   Its file handle needs 4.7 KB in 89 functions, against about 2 KB in 9 for `f_read`, `f_write`, `f_lseek`, `f_sync` and `f_close`, and its volume 4.9 KB in 76 functions.
+2. Layered pipelines with visitors: a directory is read through a visitor, an assembler and the path walk or the name scan, 4.8 KB in 77 functions against 1.2 KB in 14 for FatFs.
+   Every layer keeps its own state, and the same 68-byte entry is copied four times.
+3. A `services::TableStateMachine` per lifecycle costs about 1 KB: 1.1 KB in `fs::FatLite`, and 1.9 KB in `fs::NorLite` for its lifecycle and its leveling.
+4. Defensive breadth: the handling of media removal costs 0.9 KB, the checks of the boot sector and the geometry 1.5 KB against 0.8 KB for the whole mount of FatFs, and handles check their generation and calls are deferred with `busy`.
+5. Features that `fatfs/minimal` leaves out: reading long names and converting them to UTF-8 cost 3.4 KB.
+6. The on-flash machinery of NOR makes up 81 % of the code of `fs::NorLite`: 3.0 KB for the B-tree, 1.8 KB for the radix tree, 6.4 KB for the journal and the replay of records, 3.7 KB for checkpoints, 2.9 KB for garbage collection and 2.4 KB for the wear leveler.
+
+### Sharing buffers and callbacks
+
+Buffers are shared already: one sector cache serves the files, the FAT and the directories, `fs::FatLite` uses a single sector for all of them, NOR shares its node cache and its journal buffer, and every operation reuses one scratch slot of its volume.
+The large items of NOR are the state of the volume, not scratch space: 4 KB of erase counts, 1 KB of block states and 8 KB of node cache, which shrink by configuration, with larger blocks or fewer cached nodes.
+The page buffer of a NOR file cannot go to a pool, because it holds a partial page that is not programmed yet, and NOR flash does not program a page twice.
+
+A pool of callbacks saves no RAM: every handle and path slot can have a call pending at the same time, so a pool for the worst case is as large as today, and a smaller pool would complete calls with `busy`.
+One completion slot per owner, instead of one per kind of call, saves 100 to 150 B on `fs::FatLite`, because every owner runs one call at a time: a file holds three slots, the volume five and the sector window three.
+Flash is spent per distinct continuation, wherever its callback is stored, so pooling saves no flash; one continuation per operation, with a step field and a `switch` instead of a lambda per wait, saves 15 to 20 B per continuation, 1.5 to 2 KB on `fs::FatLite`.
+Together with a single copy of the directory entry, this saves about 300 B of RAM, 11 %, and 1.5 to 2 KB of flash, 5 to 6 %, on `fs::FatLite`.
+
+### Steps
+
+| Step                                                                                                                                                                     | `fs::FatLite`, 31.2 KB today             | Effort           | Confidence           |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|------------------|----------------------|
+| A. Scope switches: names read in 8.3 only, no media removal for fixed media, an enumerated lifecycle in the lite volumes                                                 | about 27 KB                              | days             | high, parts measured |
+| B. One continuation per operation, one directory iterator instead of the visitor chain, one copy of the entry                                                            | about 23 to 24 KB                        | one to two weeks | medium               |
+| C. A straight-line core: operations written in sequence that suspend at device calls, as C++20 coroutines with a frame arena per volume, or on a small cooperative stack | about 13 to 18 KB, twice FatFs           | weeks            | low until a spike    |
+| D. NOR only: a simpler format profile, with one kind of index and compaction of the journal instead of checkpoints                                                       | `fs::NorLite`, 60.9 KB today, much lower | months           | low                  |
+
+* Only C reaches twice FatFs: it removes patterns 1 to 3 together, with no step functions, no callbacks per step and no operation objects, and local variables instead of stored state, while the event dispatcher still never blocks.
+* C and the enumerated lifecycle of A conflict with two rules of [AGENTS.md](../AGENTS.md), operations as classes with named steps and lifecycles as `services::TableStateMachine`, so the rules are decided first.
+* The coverage, the power-cut sweep and the interoperability tests check behaviour, not structure, so they carry over to a rewrite.
+* NOR needs both C and D to come near littlefs: C removes the 11 % of plumbing and the split steps of NOR, but not its format machinery.
+* The first move is a spike of one to two days that rewrites the read path of `fs::FatReader`, its mount, lookup and read, as coroutines, measured against its 19,116 bytes, to decide whether C is worth weeks of work.
+
 ## Later
 
 These are outside the first version, and may be added when a product needs them:

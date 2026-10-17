@@ -1,4 +1,5 @@
 #include "fs/fat/FatFileSystem.hpp"
+#include "fs/fat/reader/FatReader.hpp"
 #include "infra/timer/test_helper/ClockFixture.hpp"
 #include "metrics/fat/FatChecker.hpp"
 #include "metrics/interop/InteropTools.hpp"
@@ -11,6 +12,7 @@
 #include <ostream>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -89,6 +91,17 @@ public:
         expected.erase(name);
     }
 
+    std::optional<fs::Result> Lifecycle(fs::FileSystem& volume, void (fs::FileSystem::*call)(const infra::Function<void(fs::Result result)>& onDone))
+    {
+        std::optional<fs::Result> completed;
+        (volume.*call)([&completed](fs::Result result)
+            {
+                completed = result;
+            });
+        ExecuteAllActions();
+        return completed;
+    }
+
     std::optional<std::vector<uint8_t>> ReadBack(fs::FileSystem& volume, const std::string& name, std::size_t chunk)
     {
         auto path = "/" + name;
@@ -158,17 +171,19 @@ TEST_P(ReadInterop, files_written_by_mtools_read_back)
     metrics::ImageBlockDevice device{ metrics::BlocksInImage(image) };
     device.LoadFrom(image);
     fs::FatFileSystem::WithStorage<1, 4> volume{ device };
-    std::optional<fs::Result> mounted;
-    volume.Mount([&mounted](fs::Result result)
-        {
-            mounted = result;
-        });
-    ExecuteAllActions();
-    ASSERT_EQ(fs::Result::success, mounted);
+    fs::FatReader::WithStorage<1> fatReader{ device };
 
-    for (const auto& [name, contents] : expected)
-        for (std::size_t chunk : { std::size_t{ 1000 }, std::size_t{ 4 * cluster } })
-            EXPECT_EQ(contents, ReadBack(volume, name, chunk)) << name << " in chunks of " << chunk;
+    for (auto [engine, fileSystem] : { std::pair<const char*, fs::FileSystem*>{ "FatFileSystem", &volume }, std::pair<const char*, fs::FileSystem*>{ "FatReader", &fatReader } })
+    {
+        SCOPED_TRACE(engine);
+        ASSERT_EQ(fs::Result::success, Lifecycle(*fileSystem, &fs::FileSystem::Mount));
+
+        for (const auto& [name, contents] : expected)
+            for (std::size_t chunk : { std::size_t{ 1000 }, std::size_t{ 4 * cluster } })
+                EXPECT_EQ(contents, ReadBack(*fileSystem, name, chunk)) << name << " in chunks of " << chunk;
+
+        EXPECT_EQ(fs::Result::success, Lifecycle(*fileSystem, &fs::FileSystem::Unmount));
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(Images, ReadInterop,

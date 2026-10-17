@@ -11,6 +11,8 @@ target_link_libraries(fs.common PUBLIC
 target_sources(fs.common PRIVATE
     BlockDeviceResult.cpp
     BlockDeviceResult.hpp
+    Crc32.cpp
+    Crc32.hpp
     CrcRecord.cpp
     CrcRecord.hpp
     DeferredCompletions.cpp
@@ -22,6 +24,8 @@ target_sources(fs.common PRIVATE
     FlushBarrier.hpp
     HandlePool.cpp
     HandlePool.hpp
+    IdleTimer.cpp
+    IdleTimer.hpp
     LittleEndian.cpp
     LittleEndian.hpp
     OperationQueue.cpp
@@ -30,6 +34,8 @@ target_sources(fs.common PRIVATE
     Path.hpp
     SectorCache.cpp
     SectorCache.hpp
+    SectorSource.hpp
+    SectorStore.hpp
 )
 
 if (EMFS_BUILD_TESTS)

@@ -91,9 +91,14 @@ namespace metrics
             });
     }
 
-    SweepVolume::SweepVolume(SweepContext<hal::BlockDevice>& context)
+    const char* SubjectName(SweepSubject subject)
+    {
+        return subject == SweepSubject::fat ? "embedded-filesystem/fat" : "embedded-filesystem/fat-lite";
+    }
+
+    SweepVolume::SweepVolume(SweepContext<hal::BlockDevice>& context, SweepSubject subject)
         : context(context)
-        , fileSystem(context.device)
+        , fileSystem(subject == SweepSubject::fat ? static_cast<fs::FileSystem&>(full.emplace(context.device)) : lite.emplace(context.device))
     {}
 
     fs::Result SweepVolume::Mount()

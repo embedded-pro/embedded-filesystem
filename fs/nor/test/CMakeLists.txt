@@ -28,9 +28,11 @@ target_sources(fs.nor_test PRIVATE
     TestNorDirectories.cpp
     TestNorDirectoryKey.cpp
     TestNorEraseCounts.cpp
+    TestNorFeatures.cpp
     TestNorFiles.cpp
     TestNorFileSystem.cpp
     TestNorFileWrite.cpp
+    TestNorForegroundLeveling.cpp
     TestNorFormatter.cpp
     TestNorGeometry.cpp
     TestNorImageBuilder.cpp

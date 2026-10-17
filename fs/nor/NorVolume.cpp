@@ -5,22 +5,25 @@
 
 namespace fs
 {
-    NorVolume::NorVolume(const NorVolumeParts& parts, const NorConfig& config, infra::Duration idleDelay)
+    NorVolume::NorVolume(const NorVolumeParts& parts, const NorConfig& config)
         : flash(parts.flash)
         , deferred(parts.deferred)
+        , operations(parts.operations)
         , config(config)
         , state(parts.blockStates, parts.eraseCounts, parts.nodeBlocks)
         , journalBuffer(parts.journalBuffer)
         , nodeStorage(parts.nodeStorage)
         , cache(parts.flash, parts.nodeSlots, parts.nodeStorage)
         , queue(
-              idleDelay, [this]
+              [this]
               {
-                  background.Idle();
+                  if (background != nullptr)
+                      background->ForegroundClaiming();
               },
               [this]
               {
-                  background.CallReleased();
+                  if (background != nullptr)
+                      background->ForegroundReleased();
               })
     {}
 
@@ -132,11 +135,6 @@ namespace fs
         return leveler;
     }
 
-    NorBackground& NorVolume::Background()
-    {
-        return background;
-    }
-
     NorCheckpointWriter& NorVolume::Checkpoints()
     {
         return checkpoints;
@@ -182,14 +180,14 @@ namespace fs
         return queue;
     }
 
-    const OperationQueue& NorVolume::Queue() const
-    {
-        return queue;
-    }
-
     NorOperation& NorVolume::Operation()
     {
         return operation;
+    }
+
+    const NorOperations& NorVolume::Operations() const
+    {
+        return operations;
     }
 
     uint32_t NorVolume::Generation() const
@@ -209,13 +207,15 @@ namespace fs
         counters = NorCounters{};
         collector.Reset();
         leveler.Reset();
-        background.Start();
+        if (background != nullptr)
+            background->Start();
     }
 
     void NorVolume::MarkUnmounted()
     {
         mounted = false;
-        background.Stop();
+        if (background != nullptr)
+            background->Stop();
         eraser.Reset();
 
         while (!openFiles.empty())
@@ -223,5 +223,21 @@ namespace fs
 
         while (!openDirectories.empty())
             openDirectories.front().Detach();
+    }
+
+    void NorVolume::AttachBackground(NorBackgroundWork& work)
+    {
+        background = &work;
+    }
+
+    bool NorVolume::Idle() const
+    {
+        return queue.Idle() && (background == nullptr || !background->Scheduled());
+    }
+
+    void NorVolume::UrgeBackground()
+    {
+        if (background != nullptr)
+            background->Urge();
     }
 }

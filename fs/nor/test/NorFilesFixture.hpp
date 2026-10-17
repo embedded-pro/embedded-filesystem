@@ -31,9 +31,9 @@ namespace fs
         return pattern;
     }
 
-    template<NorConfig Config, uint32_t Sectors, uint32_t SectorSize>
+    template<NorConfig Config, uint32_t Sectors, uint32_t SectorSize, NorFeatures Features = NorFeatures{}>
     class NorFilesFixture
-        : public NorRecordsFixture<Config, Sectors, SectorSize, 2>
+        : public NorRecordsFixture<Config, Sectors, SectorSize, 2, Features>
     {
     public:
         infra::SharedPtr<File> Open(infra::BoundedConstString path, OpenMode mode, Result expected = Result::success)

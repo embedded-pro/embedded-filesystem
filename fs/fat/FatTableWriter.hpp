@@ -1,7 +1,7 @@
 #ifndef FS_FAT_FAT_TABLE_WRITER_HPP
 #define FS_FAT_FAT_TABLE_WRITER_HPP
 
-#include "fs/common/SectorCache.hpp"
+#include "fs/common/SectorStore.hpp"
 #include "fs/fat/FatGeometry.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -13,7 +13,7 @@ namespace fs
     class FatTableWriter
     {
     public:
-        FatTableWriter(SectorCache& cache, const FatGeometry& geometry);
+        FatTableWriter(SectorStore& sectors, const FatGeometry& geometry);
         FatTableWriter(const FatTableWriter& other) = delete;
         FatTableWriter& operator=(const FatTableWriter& other) = delete;
         ~FatTableWriter();
@@ -25,7 +25,7 @@ namespace fs
         void WriteSecondPart();
 
     private:
-        SectorCache& cache;
+        SectorStore& sectors;
         const FatGeometry& geometry;
         uint32_t cluster{ 0 };
         uint32_t value{ 0 };

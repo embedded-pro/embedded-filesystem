@@ -98,7 +98,7 @@ namespace fs
             geometry.rootSector = geometry.firstFatSector + parameters.fatCopies * parameters.sectorsPerFat;
             geometry.rootSectors = layout.rootSectors;
             geometry.firstDataSector = geometry.rootSector + layout.rootSectors;
-            geometry.clusterCount = static_cast<uint32_t>((parameters.totalSectors - layout.systemSectors) / parameters.sectorsPerCluster);
+            geometry.clusterCount = static_cast<uint32_t>(parameters.totalSectors - layout.systemSectors) / parameters.sectorsPerCluster;
             geometry.type = TypeOfClusterCount(geometry.clusterCount);
 
             if (geometry.type == FatType::fat32)

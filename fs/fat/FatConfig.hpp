@@ -18,6 +18,20 @@ namespace fs
         std::size_t maxNameBytes{ 255 };
     };
 
+    struct FatFeatures
+    {
+        bool makeDirectory{ true };
+        bool remove{ true };
+        bool rename{ true };
+        bool expectSize{ true };
+        bool usage{ true };
+        bool openDirectory{ true };
+        bool backgroundScan{ true };
+        bool timestamps{ true };
+        bool cleanShutdown{ true };
+        bool longNames{ true };
+    };
+
     struct FatConfig
     {
         std::size_t maxPathBytes{ 255 };

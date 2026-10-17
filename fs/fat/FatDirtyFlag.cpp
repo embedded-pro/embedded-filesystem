@@ -49,6 +49,12 @@ namespace fs
                 });
     }
 
+    void FatDirtyFlag::Skip(const infra::Function<void(Result result)>& onDone)
+    {
+        this->onDone = onDone;
+        CompleteLater();
+    }
+
     void FatDirtyFlag::OnFirstSector(Result result, infra::ConstByteRange contents)
     {
         if (result != Result::success)

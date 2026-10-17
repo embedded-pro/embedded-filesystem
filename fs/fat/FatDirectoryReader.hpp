@@ -1,7 +1,7 @@
 #ifndef FS_FAT_FAT_DIRECTORY_READER_HPP
 #define FS_FAT_FAT_DIRECTORY_READER_HPP
 
-#include "fs/common/SectorCache.hpp"
+#include "fs/common/SectorSource.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatGeometry.hpp"
 #include "fs/fat/FatTableReader.hpp"
@@ -41,7 +41,7 @@ namespace fs
     public:
         static constexpr uint32_t maxEntries = 65536;
 
-        FatDirectoryReader(SectorCache& cache, const FatGeometry& geometry, FatEntryAssembler& assembler);
+        FatDirectoryReader(SectorSource& sectors, const FatGeometry& geometry, FatEntryAssembler& assembler);
         FatDirectoryReader(const FatDirectoryReader& other) = delete;
         FatDirectoryReader& operator=(const FatDirectoryReader& other) = delete;
         ~FatDirectoryReader();
@@ -65,7 +65,7 @@ namespace fs
         bool IsFixedRoot() const;
 
     private:
-        SectorCache& cache;
+        SectorSource& sectors;
         const FatGeometry& geometry;
         FatEntryAssembler& assembler;
         FatTableReader table;

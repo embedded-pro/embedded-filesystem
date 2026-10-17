@@ -1,4 +1,5 @@
 #include "fs/fat/FatEntrySetWriter.hpp"
+#include "fs/fat/FatLongNames.hpp"
 #include "fs/fat/FatTable.hpp"
 #include "fs/fat/test/FatVolumeFixture.hpp"
 #include "infra/util/BoundedString.hpp"
@@ -125,7 +126,7 @@ namespace
         std::array<uint8_t, 255> nameBuffer{};
         fs::FatEntryAssembler assembler{ infra::MakeRange(nameBuffer) };
         fs::FatDirectoryReader reader{ cache, state.geometry, assembler };
-        fs::FatEntrySetWriter setWriter{ cache, reader, allocator, state.geometry };
+        fs::FatEntrySetWriter setWriter{ cache, reader, allocator, state.geometry, &fs::fatLongNames };
         NameCollector collector;
         infra::BoundedVector<std::pair<fs::SparseBlockDevice::Request, uint32_t>>::WithMaxSize<32> requests;
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;

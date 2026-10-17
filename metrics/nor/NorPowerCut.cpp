@@ -43,10 +43,10 @@ namespace
         return std::to_string(result.failures.size()) + " failures, the first at step " + (first.step.has_value() ? std::to_string(*first.step) : std::string("uncut")) + ": " + first.reason;
     }
 
-    void SweepEveryMode(const metrics::NorModel& model, const std::string& caseName, std::size_t ramBytes, const metrics::NorPowerCutSweep::Phase& setUp, const metrics::NorPowerCutSweep::Phase& operate, const Verifier& verify)
+    void SweepEveryMode(const metrics::NorModel& model, const std::string& caseName, metrics::NorSweepSubject subject, const metrics::NorPowerCutSweep::Phase& setUp, const metrics::NorPowerCutSweep::Phase& operate, const Verifier& verify)
     {
         metrics::NorTargets targets{ model, metrics::SweepConfig(model), 1 };
-        metrics::MetricRecorder recorder{ metrics::GlobalReport(), "embedded-filesystem/nor", model.name, ramBytes, &targets };
+        metrics::MetricRecorder recorder{ metrics::GlobalReport(), metrics::SubjectName(subject), model.name, metrics::SweepRamBytes(model, subject), &targets };
 
         for (const auto& mode : modes)
         {
@@ -191,7 +191,7 @@ public:
 TEST_P(NorFormatPowerCut, every_cut_leaves_the_previous_volume_no_volume_or_the_new_empty_volume)
 {
     SweepEveryMode(
-        model, "format", metrics::SweepRamBytes(model), [this](Context& context)
+        model, "format", metrics::NorSweepSubject::nor, [this](Context& context)
         {
             SetUpVolume(context);
         },
@@ -318,7 +318,7 @@ public:
 TEST_P(NorMakeDirectoryPowerCut, every_cut_keeps_the_directories_made_before_it_and_the_volume_takes_new_ones)
 {
     SweepEveryMode(
-        model, "make directory", metrics::SweepRamBytes(model), [this](Context& context)
+        model, "make directory", metrics::NorSweepSubject::nor, [this](Context& context)
         {
             SetUpVolume(context);
         },
@@ -427,6 +427,7 @@ public:
 
     fs::NorConfig longJournal{ WithJournalBlocks(config, 4) };
     fs::NorConfig leveling{ WithLeveling(config) };
+    metrics::NorSweepSubject subject{ metrics::NorSweepSubject::nor };
     uint32_t releasedTail{ 0 };
     std::vector<std::pair<uint32_t, std::optional<fs::NorAllocation>>> setUpNodeBlocks;
     std::map<uint32_t, uint32_t> setUpDataBlocks;
@@ -478,15 +479,24 @@ public:
         WearFreeBlocks(context, 0, std::nullopt, wornEraseCount);
     }
 
+    fs::Result Make(metrics::NorSweepVolume& volume, const std::string& path) const
+    {
+        if (subject == metrics::NorSweepSubject::nor)
+            return volume.MakeDirectory(path);
+
+        auto opened = volume.OpenFile(path, fs::OpenMode::write);
+        return opened != fs::Result::success ? opened : volume.Close();
+    }
+
     void ReplayWithTheSmallerCache(Context& context)
     {
         replayCheckpointed = false;
-        metrics::NorSweepVolume volume{ context, longJournal };
+        metrics::NorSweepVolume volume{ context, longJournal, subject };
         if (volume.Mount() != fs::Result::success)
             return;
 
         replayCheckpointed = volume.RecordsStartOutsideTheCheckpointBlock();
-        if (volume.MakeDirectory("/m") != fs::Result::success)
+        if (Make(volume, "/m") != fs::Result::success)
             return;
 
         volume.Unmount();
@@ -724,7 +734,7 @@ public:
 
     void CreateIntoTheReleasedTail(Context& context) const
     {
-        metrics::NorSweepVolume volume{ context, longJournal };
+        metrics::NorSweepVolume volume{ context, longJournal, subject };
         auto committed = SizeAfter(1);
         if (volume.Mount() != fs::Result::success || volume.OpenFile("/new", fs::OpenMode::write) != fs::Result::success || volume.Write(FileBytes(0, 50)) != fs::Result::success || volume.Close() != fs::Result::success)
             return;
@@ -776,7 +786,7 @@ public:
 
     void AppendToLog(Context& context) const
     {
-        metrics::NorSweepVolume volume{ context, config };
+        metrics::NorSweepVolume volume{ context, config, subject };
         if (volume.Mount() != fs::Result::success || volume.OpenFile("/log", fs::OpenMode::append) != fs::Result::success)
             return;
 
@@ -792,7 +802,7 @@ public:
 
     void AppendAfterLoss(Context& context, std::size_t committed) const
     {
-        metrics::NorSweepVolume volume{ context, config };
+        metrics::NorSweepVolume volume{ context, config, subject };
         if (volume.Mount() != fs::Result::success || volume.OpenFile("/log", fs::OpenMode::append) != fs::Result::success || volume.Write(FileBytes(committed, appendAfterLoss)) != fs::Result::success || volume.Sync() != fs::Result::success || volume.Write(FileBytes(committed + appendAfterLoss, 10)) != fs::Result::success || volume.Close() != fs::Result::success)
             return;
 
@@ -801,7 +811,7 @@ public:
 
     void AppendAndUnmountWithTheFileOpen(Context& context) const
     {
-        metrics::NorSweepVolume volume{ context, config };
+        metrics::NorSweepVolume volume{ context, config, subject };
         if (volume.Mount() != fs::Result::success || volume.OpenFile("/log", fs::OpenMode::append) != fs::Result::success)
             return;
 
@@ -888,7 +898,7 @@ public:
 
     void WriteBig(Context& context) const
     {
-        metrics::NorSweepVolume volume{ context, config };
+        metrics::NorSweepVolume volume{ context, config, subject };
         if (volume.Mount() != fs::Result::success || volume.OpenFile("/big", fs::OpenMode::write) != fs::Result::success || volume.Write(FileBytes(0, BigSize())) != fs::Result::success || volume.Close() != fs::Result::success)
             return;
 
@@ -1553,7 +1563,7 @@ public:
 
     void AppendWhenSpaceRunsLow(Context& context) const
     {
-        metrics::NorSweepVolume volume{ context, config };
+        metrics::NorSweepVolume volume{ context, config, subject };
         if (volume.Mount() != fs::Result::success || volume.OpenFile("/f", fs::OpenMode::append) != fs::Result::success)
             return;
 
@@ -1741,7 +1751,7 @@ public:
 
     void LevelInTheForeground(Context& context)
     {
-        metrics::NorSweepVolume volume{ context, leveling };
+        metrics::NorSweepVolume volume{ context, leveling, subject };
         if (volume.Mount() != fs::Result::success || volume.OpenFile("/g", fs::OpenMode::write) != fs::Result::success)
             return;
 
@@ -1871,7 +1881,7 @@ public:
     {
         mostMoves = 0;
         SweepEveryMode(
-            model, caseName, metrics::SweepRamBytes(model), [this, withFile](Context& context)
+            model, caseName, subject, [this, withFile](Context& context)
             {
                 SetUpLeveling(context, withFile, withFile ? std::optional<std::size_t>(youngFreeBlocks) : std::nullopt);
             },
@@ -1889,7 +1899,7 @@ public:
     {
         mostMoves = 0;
         SweepEveryMode(
-            model, caseName, metrics::SweepRamBytes(model), [this, withFile](Context& context)
+            model, caseName, subject, [this, withFile](Context& context)
             {
                 SetUpLeveling(context, withFile);
             },
@@ -1971,7 +1981,7 @@ public:
     {
         auto committed = SizeAfter(writes - 1);
         SweepEveryMode(
-            model, caseName, metrics::SweepRamBytes(model), [this, writes](Context& context)
+            model, caseName, subject, [this, writes](Context& context)
             {
                 SetUpLossDuringAppend(context, writes);
             },
@@ -1984,23 +1994,160 @@ public:
                 return VerifyLogAfterLoss(context, uncut, committed);
             });
     }
+
+    void SweepAppend()
+    {
+        SweepEveryMode(
+            model, "append", subject, [this](Context& context)
+            {
+                SetUpLog(context);
+            },
+            [this](Context& context)
+            {
+                AppendToLog(context);
+            },
+            [this](Context& context, bool uncut)
+            {
+                return VerifyLog(context, uncut);
+            });
+    }
+
+    void SweepReleasedTail()
+    {
+        SweepEveryMode(
+            model, "journal in a released block", subject, [this](Context& context)
+            {
+                SetUpReleasedTail(context);
+            },
+            [this](Context& context)
+            {
+                CreateIntoTheReleasedTail(context);
+            },
+            [this](Context& context, bool uncut)
+            {
+                return VerifyReleasedTail(context, uncut);
+            });
+    }
+
+    void SweepBig()
+    {
+        SweepEveryMode(
+            model, "write nine blocks", subject, [this](Context& context)
+            {
+                SetUpEmpty(context);
+            },
+            [this](Context& context)
+            {
+                WriteBig(context);
+            },
+            [this](Context& context, bool uncut)
+            {
+                return VerifyBig(context, uncut);
+            });
+    }
+
+    void SweepWriteWhenSpaceRunsLow()
+    {
+        SweepEveryMode(
+            model, "write when space runs low", subject, [this](Context& context)
+            {
+                SetUpLowSpace(context);
+            },
+            [this](Context& context)
+            {
+                AppendWhenSpaceRunsLow(context);
+            },
+            [this](Context& context, bool uncut)
+            {
+                return VerifyLowSpace(context, uncut, payload);
+            });
+    }
+
+    void SweepUnmountWithTheFileOpen()
+    {
+        SweepEveryMode(
+            model, "unmount with an open file", subject, [this](Context& context)
+            {
+                SetUpLog(context);
+            },
+            [this](Context& context)
+            {
+                AppendAndUnmountWithTheFileOpen(context);
+            },
+            [this](Context& context, bool uncut)
+            {
+                return VerifyUnmountedWithTheFileOpen(context, uncut);
+            });
+    }
+
+    void SweepReplay()
+    {
+        SweepEveryMode(
+            model, "replay with a smaller cache", subject, [this](Context& context)
+            {
+                SetUpReplay(context);
+            },
+            [this](Context& context)
+            {
+                ReplayWithTheSmallerCache(context);
+            },
+            [this](Context& context, bool uncut)
+            {
+                return VerifyReplayed(context, uncut);
+            });
+    }
+
+    void RewriteOld(Context& context) const
+    {
+        metrics::NorSweepVolume volume{ context, config, subject };
+        if (volume.Mount() != fs::Result::success || volume.OpenFile("/old", fs::OpenMode::write) != fs::Result::success || volume.Write(FileBytes(0, 10)) != fs::Result::success || volume.Close() != fs::Result::success)
+            return;
+
+        volume.Unmount();
+    }
+
+    std::optional<std::string> VerifyRewritten(Context& context, bool uncut) const
+    {
+        auto image = metrics::ReadImage(context);
+        auto check = metrics::CheckNorImage(image, model.sectorSize, model.pageSize);
+        if (check.problem.has_value())
+            return check.problem;
+
+        const auto* old = check.Find("/old");
+        if (old == nullptr)
+            return "/old is gone";
+
+        auto contents = metrics::ReadContents(image, check, *old);
+        if (auto problem = ExpectCommitted(contents, { OldSize(), 0, 10 }, "/old"))
+            return problem;
+
+        if (uncut && contents.size() != 10)
+            return "the run without a cut did not write everything";
+
+        return VerifyAfterMount(context, "/old", contents);
+    }
+
+    void SweepRewrite()
+    {
+        SweepEveryMode(
+            model, "open for writing", subject, [this](Context& context)
+            {
+                SetUpFiles(context, { { "/old", OldSize() } });
+            },
+            [this](Context& context)
+            {
+                RewriteOld(context);
+            },
+            [this](Context& context, bool uncut)
+            {
+                return VerifyRewritten(context, uncut);
+            });
+    }
 };
 
 TEST_P(NorAppendPowerCut, appends_after_a_mount_keep_the_last_commit_and_the_file_takes_appends_after_the_next_mount)
 {
-    SweepEveryMode(
-        model, "append", metrics::SweepRamBytes(model), [this](Context& context)
-        {
-            SetUpLog(context);
-        },
-        [this](Context& context)
-        {
-            AppendToLog(context);
-        },
-        [this](Context& context, bool uncut)
-        {
-            return VerifyLog(context, uncut);
-        });
+    SweepAppend();
 }
 
 TEST_P(NorAppendPowerCut, an_append_after_a_power_loss_with_programmed_pages_beyond_the_commit_keeps_the_last_commit)
@@ -2015,42 +2162,18 @@ TEST_P(NorAppendPowerCut, an_append_after_a_power_loss_with_an_uncommitted_block
 
 TEST_P(NorAppendPowerCut, records_in_a_released_block_that_became_a_journal_block_survive_a_cut)
 {
-    SweepEveryMode(
-        model, "journal in a released block", metrics::SweepRamBytes(model), [this](Context& context)
-        {
-            SetUpReleasedTail(context);
-        },
-        [this](Context& context)
-        {
-            CreateIntoTheReleasedTail(context);
-        },
-        [this](Context& context, bool uncut)
-        {
-            return VerifyReleasedTail(context, uncut);
-        });
+    SweepReleasedTail();
 }
 
 TEST_P(NorAppendPowerCut, a_file_of_more_blocks_than_a_handle_keeps_uncommitted_keeps_its_last_commit)
 {
-    SweepEveryMode(
-        model, "write nine blocks", metrics::SweepRamBytes(model), [this](Context& context)
-        {
-            SetUpEmpty(context);
-        },
-        [this](Context& context)
-        {
-            WriteBig(context);
-        },
-        [this](Context& context, bool uncut)
-        {
-            return VerifyBig(context, uncut);
-        });
+    SweepBig();
 }
 
 TEST_P(NorAppendPowerCut, overwrites_keep_the_contents_of_the_last_commit)
 {
     SweepEveryMode(
-        model, "overwrite", metrics::SweepRamBytes(model), [this](Context& context)
+        model, "overwrite", subject, [this](Context& context)
         {
             SetUpFiles(context, { { "/log", LogSize() } });
         },
@@ -2067,7 +2190,7 @@ TEST_P(NorAppendPowerCut, overwrites_keep_the_contents_of_the_last_commit)
 TEST_P(NorAppendPowerCut, an_overwrite_after_a_power_loss_with_an_uncommitted_copy_keeps_the_last_commit)
 {
     SweepEveryMode(
-        model, "overwrite after a cut with an uncommitted copy", metrics::SweepRamBytes(model), [this](Context& context)
+        model, "overwrite after a cut with an uncommitted copy", subject, [this](Context& context)
         {
             SetUpLossDuringOverwrite(context);
         },
@@ -2084,7 +2207,7 @@ TEST_P(NorAppendPowerCut, an_overwrite_after_a_power_loss_with_an_uncommitted_co
 TEST_P(NorAppendPowerCut, truncations_keep_the_last_commit)
 {
     SweepEveryMode(
-        model, "truncate", metrics::SweepRamBytes(model), [this](Context& context)
+        model, "truncate", subject, [this](Context& context)
         {
             SetUpFiles(context, { { "/log", LogSize() }, { "/old", OldSize() } });
         },
@@ -2101,7 +2224,7 @@ TEST_P(NorAppendPowerCut, truncations_keep_the_last_commit)
 TEST_P(NorAppendPowerCut, a_block_that_a_record_mapped_and_a_remove_released_can_become_a_journal_block_of_the_epoch)
 {
     SweepEveryMode(
-        model, "journal in a removed block", metrics::SweepRamBytes(model), [this](Context& context)
+        model, "journal in a removed block", subject, [this](Context& context)
         {
             SetUpRemovedBlock(context);
         },
@@ -2118,7 +2241,7 @@ TEST_P(NorAppendPowerCut, a_block_that_a_record_mapped_and_a_remove_released_can
 TEST_P(NorAppendPowerCut, removes_happen_in_order_and_each_completely_or_not_at_all)
 {
     SweepEveryMode(
-        model, "remove", metrics::SweepRamBytes(model), [this](Context& context)
+        model, "remove", subject, [this](Context& context)
         {
             SetUpFiles(context, { { "/a", 2 * std::size_t{ payload } + 100 }, { "/f", 10 } }, { "/d", "/d/e" });
         },
@@ -2135,7 +2258,7 @@ TEST_P(NorAppendPowerCut, removes_happen_in_order_and_each_completely_or_not_at_
 TEST_P(NorAppendPowerCut, renames_happen_in_order_and_leave_each_entry_under_exactly_one_name)
 {
     SweepEveryMode(
-        model, "rename", metrics::SweepRamBytes(model), [this](Context& context)
+        model, "rename", subject, [this](Context& context)
         {
             SetUpFiles(context, { { "/a", RenamedSize() } }, { "/d", "/d/e", "/g" });
         },
@@ -2152,7 +2275,7 @@ TEST_P(NorAppendPowerCut, renames_happen_in_order_and_leave_each_entry_under_exa
 TEST_P(NorAppendPowerCut, the_background_erases_free_blocks_and_writes_a_checkpoint_that_a_cut_leaves_consistent)
 {
     SweepEveryMode(
-        model, "background", metrics::SweepRamBytes(model), [this](Context& context)
+        model, "background", subject, [this](Context& context)
         {
             SetUpFiles(context, { { "/f", 2 * std::size_t{ payload } + 100 } });
         },
@@ -2169,7 +2292,7 @@ TEST_P(NorAppendPowerCut, the_background_erases_free_blocks_and_writes_a_checkpo
 TEST_P(NorAppendPowerCut, the_collection_of_node_blocks_moves_the_used_nodes_and_a_cut_leaves_consistent)
 {
     SweepEveryMode(
-        model, "collection", metrics::SweepRamBytes(model), [this](Context& context)
+        model, "collection", subject, [this](Context& context)
         {
             SetUpCollection(context);
         },
@@ -2185,25 +2308,13 @@ TEST_P(NorAppendPowerCut, the_collection_of_node_blocks_moves_the_used_nodes_and
 
 TEST_P(NorAppendPowerCut, a_write_that_finds_the_free_blocks_at_the_reserve_collects_node_blocks_and_a_cut_leaves_consistent)
 {
-    SweepEveryMode(
-        model, "write when space runs low", metrics::SweepRamBytes(model), [this](Context& context)
-        {
-            SetUpLowSpace(context);
-        },
-        [this](Context& context)
-        {
-            AppendWhenSpaceRunsLow(context);
-        },
-        [this](Context& context, bool uncut)
-        {
-            return VerifyLowSpace(context, uncut, payload);
-        });
+    SweepWriteWhenSpaceRunsLow();
 }
 
 TEST_P(NorAppendPowerCut, an_overwrite_that_finds_the_free_blocks_at_the_reserve_collects_node_blocks_and_a_cut_leaves_consistent)
 {
     SweepEveryMode(
-        model, "overwrite when space runs low", metrics::SweepRamBytes(model), [this](Context& context)
+        model, "overwrite when space runs low", subject, [this](Context& context)
         {
             SetUpLowSpace(context);
         },
@@ -2220,7 +2331,7 @@ TEST_P(NorAppendPowerCut, an_overwrite_that_finds_the_free_blocks_at_the_reserve
 TEST_P(NorAppendPowerCut, the_background_collects_node_blocks_when_space_runs_low_and_a_cut_leaves_consistent)
 {
     SweepEveryMode(
-        model, "collection when space runs low", metrics::SweepRamBytes(model), [this](Context& context)
+        model, "collection when space runs low", subject, [this](Context& context)
         {
             SetUpLowSpace(context);
         },
@@ -2264,36 +2375,83 @@ TEST_P(NorAppendPowerCut, the_fallback_of_static_wear_leveling_moves_node_blocks
 
 TEST_P(NorAppendPowerCut, an_unmount_commits_a_file_left_open_completely_or_not_at_all)
 {
-    SweepEveryMode(
-        model, "unmount with an open file", metrics::SweepRamBytes(model), [this](Context& context)
-        {
-            SetUpLog(context);
-        },
-        [this](Context& context)
-        {
-            AppendAndUnmountWithTheFileOpen(context);
-        },
-        [this](Context& context, bool uncut)
-        {
-            return VerifyUnmountedWithTheFileOpen(context, uncut);
-        });
+    SweepUnmountWithTheFileOpen();
 }
 
 TEST_P(NorAppendPowerCut, a_mount_with_a_smaller_cache_than_the_writer_checkpoints_during_replay_and_a_cut_leaves_consistent)
 {
-    SweepEveryMode(
-        model, "replay with a smaller cache", metrics::SweepRamBytes(model), [this](Context& context)
-        {
-            SetUpReplay(context);
-        },
-        [this](Context& context)
-        {
-            ReplayWithTheSmallerCache(context);
-        },
-        [this](Context& context, bool uncut)
-        {
-            return VerifyReplayed(context, uncut);
-        });
+    SweepReplay();
 }
 
 INSTANTIATE_TEST_SUITE_P(Nor, NorAppendPowerCut, testing::Values(&metrics::norSweep128k, &metrics::internalSweep96k, &metrics::norSweep128kTwoSectors), ParameterName);
+
+class NorLitePowerCut
+    : public NorAppendPowerCut
+{
+public:
+    NorLitePowerCut()
+    {
+        subject = metrics::NorSweepSubject::norLite;
+    }
+};
+
+TEST_P(NorLitePowerCut, appends_after_a_mount_keep_the_last_commit_and_the_file_takes_appends_after_the_next_mount)
+{
+    SweepAppend();
+}
+
+TEST_P(NorLitePowerCut, an_append_after_a_power_loss_with_programmed_pages_beyond_the_commit_keeps_the_last_commit)
+{
+    SweepAppendAfterLoss("append after a cut with uncommitted pages", 2);
+}
+
+TEST_P(NorLitePowerCut, an_append_after_a_power_loss_with_an_uncommitted_block_keeps_the_last_commit)
+{
+    SweepAppendAfterLoss("append after a cut with an uncommitted block", 3);
+}
+
+TEST_P(NorLitePowerCut, records_in_a_released_block_that_became_a_journal_block_survive_a_cut)
+{
+    SweepReleasedTail();
+}
+
+TEST_P(NorLitePowerCut, a_file_of_more_blocks_than_a_handle_keeps_uncommitted_keeps_its_last_commit)
+{
+    SweepBig();
+}
+
+TEST_P(NorLitePowerCut, opening_a_file_for_writing_empties_it_completely_or_not_at_all)
+{
+    SweepRewrite();
+}
+
+TEST_P(NorLitePowerCut, a_write_that_finds_the_free_blocks_at_the_reserve_collects_node_blocks_and_a_cut_leaves_consistent)
+{
+    SweepWriteWhenSpaceRunsLow();
+}
+
+TEST_P(NorLitePowerCut, wear_leveling_after_the_calls_of_a_mount_moves_data_blocks_and_a_cut_leaves_consistent)
+{
+    SweepLevelingFallback("leveling-foreground", true);
+
+    EXPECT_LE(1, mostMoves);
+}
+
+TEST_P(NorLitePowerCut, wear_leveling_after_the_calls_of_a_mount_moves_node_blocks_and_a_cut_leaves_consistent)
+{
+    SweepLevelingFallback("leveling-foreground-nodes", false);
+
+    EXPECT_LE(1, mostMoves);
+}
+
+TEST_P(NorLitePowerCut, an_unmount_commits_a_file_left_open_completely_or_not_at_all)
+{
+    SweepUnmountWithTheFileOpen();
+}
+
+TEST_P(NorLitePowerCut, a_mount_with_a_smaller_cache_than_the_writer_checkpoints_during_replay_and_a_cut_leaves_consistent)
+{
+    SweepReplay();
+}
+
+INSTANTIATE_TEST_SUITE_P(NorLite, NorLitePowerCut, testing::Values(&metrics::norSweep128k, &metrics::internalSweep96k, &metrics::norSweep128kTwoSectors), ParameterName);

@@ -21,6 +21,7 @@ target_sources(fs.nor PRIVATE
     NorBTree.hpp
     NorBackground.cpp
     NorBackground.hpp
+    NorBackgroundWork.hpp
     NorBlockStates.cpp
     NorBlockStates.hpp
     NorCheckpoint.cpp
@@ -57,6 +58,8 @@ target_sources(fs.nor PRIVATE
     NorFile.hpp
     NorFileSystem.cpp
     NorFileSystem.hpp
+    NorForegroundLeveling.cpp
+    NorForegroundLeveling.hpp
     NorFormatter.cpp
     NorFormatter.hpp
     NorGeometry.cpp
@@ -99,6 +102,7 @@ target_sources(fs.nor PRIVATE
     NorOpen.hpp
     NorOpenDirectory.cpp
     NorOpenDirectory.hpp
+    NorOperations.hpp
     NorOpenFile.cpp
     NorOpenFile.hpp
     NorPathSlot.cpp
@@ -125,6 +129,7 @@ target_sources(fs.nor PRIVATE
     NorUnmount.hpp
     NorVolume.cpp
     NorVolume.hpp
+    NorVolumeMount.hpp
     NorVolumeState.cpp
     NorVolumeState.hpp
     NorWear.cpp
@@ -135,6 +140,7 @@ target_sources(fs.nor PRIVATE
     NorWrite.hpp
 )
 
+add_subdirectory(lite)
 add_subdirectory(test_doubles)
 
 if (EMFS_BUILD_TESTS)
