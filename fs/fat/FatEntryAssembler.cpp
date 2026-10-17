@@ -41,8 +41,19 @@ namespace fs
         constexpr char16_t padding = 0xffff;
     }
 
-    FatEntryAssembler::FatEntryAssembler(infra::ByteRange nameBuffer)
+    FatEntryAssembler::Outcome FatEntryAssembler::ReadLongNames(FatEntryAssembler& assembler, infra::ConstByteRange entry, FatEntryPosition position)
+    {
+        return assembler.Assemble<true>(entry, position);
+    }
+
+    FatEntryAssembler::Outcome FatEntryAssembler::ReadShortNames(FatEntryAssembler& assembler, infra::ConstByteRange entry, FatEntryPosition position)
+    {
+        return assembler.Assemble<false>(entry, position);
+    }
+
+    FatEntryAssembler::FatEntryAssembler(infra::ByteRange nameBuffer, Reading reading)
         : nameBuffer(nameBuffer)
+        , reading(reading)
         , nameBegin(nameBuffer.size())
     {
         really_assert(nameBuffer.size() >= ShortName::maxUtf8Bytes);
@@ -50,22 +61,7 @@ namespace fs
 
     FatEntryAssembler::Outcome FatEntryAssembler::Feed(infra::ConstByteRange entry, FatEntryPosition position)
     {
-        switch (KindOf(entry))
-        {
-            case EntryKind::end:
-                Reset();
-                return Outcome::end;
-            case EntryKind::longName:
-                FeedLongEntry(DecodeLongEntry(entry), position);
-                return Outcome::none;
-            case EntryKind::file:
-            case EntryKind::directory:
-                FeedShortEntry(entry, position);
-                return Outcome::entry;
-            default:
-                Reset();
-                return Outcome::none;
-        }
+        return reading(*this, entry, position);
     }
 
     const FatScannedEntry& FatEntryAssembler::Entry() const
@@ -79,6 +75,28 @@ namespace fs
         expectedOrdinal = std::nullopt;
         pendingLowSurrogate = std::nullopt;
         invalid = false;
+    }
+
+    template<bool LongNames>
+    FatEntryAssembler::Outcome FatEntryAssembler::Assemble(infra::ConstByteRange entry, FatEntryPosition position)
+    {
+        switch (KindOf(entry))
+        {
+            case EntryKind::end:
+                Reset();
+                return Outcome::end;
+            case EntryKind::longName:
+                if constexpr (LongNames)
+                    FeedLongEntry(DecodeLongEntry(entry), position);
+                return Outcome::none;
+            case EntryKind::file:
+            case EntryKind::directory:
+                FeedShortEntry<LongNames>(entry, position);
+                return Outcome::entry;
+            default:
+                Reset();
+                return Outcome::none;
+        }
     }
 
     void FatEntryAssembler::FeedLongEntry(const std::optional<LongEntry>& entry, FatEntryPosition position)
@@ -147,11 +165,12 @@ namespace fs
         EncodeUtf8(codePoint, infra::DiscardHead(nameBuffer, nameBegin));
     }
 
+    template<bool LongNames>
     void FatEntryAssembler::FeedShortEntry(infra::ConstByteRange entry, FatEntryPosition position)
     {
         scanned.entry = DecodeShortEntry(entry);
         scanned.shortEntry = position;
-        auto complete = SetCompletes(scanned.entry);
+        auto complete = LongNames && SetCompletes(scanned.entry);
         scanned.longName = complete && NameIsValid();
 
         if (complete)

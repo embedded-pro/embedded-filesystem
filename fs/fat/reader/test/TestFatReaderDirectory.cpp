@@ -58,7 +58,7 @@ TEST_F(FatReaderDirectoryFat16Test, a_directory_is_listed_across_its_clusters)
     for (char index = 0; index != 20; ++index)
     {
         name[4] = static_cast<char>('A' + index);
-        builder->AddFile(sub, "", reinterpret_cast<const char (&)[12]>(*name.data()), infra::ConstByteRange());
+        builder->AddFile(sub, "", reinterpret_cast<const char(&)[12]>(*name.data()), infra::ConstByteRange());
     }
     ExpectMount();
     auto directory = ExpectOpenDirectory("/sub");
@@ -105,6 +105,18 @@ TEST_F(FatReaderDirectoryFat16Test, short_names_are_read_with_their_lower_case_f
     ExpectNext(*directory, fs::Result::success, fs::EntryInfo{ "read.ME", fs::EntryType::file, 0 });
     ExpectNext(*directory, fs::Result::success, fs::EntryInfo{ "CAF\xc3\xa9.TXT", fs::EntryType::file, 0 });
     ExpectStat("/read.me", fs::Result::success, fs::EntryInfo{ "read.ME", fs::EntryType::file, 0 });
+}
+
+TEST_F(FatReaderDirectoryFat16Test, without_long_names_entries_are_listed_by_their_short_names)
+{
+    fs::FatReader::WithStorage<1, 1, fs::PathLimits{}, fs::FatReaderFeatures{ .longNames = false }> shortNames{ device };
+    builder->AddFile(0, "Meeting notes.txt", "MEETIN~1TXT", infra::ConstByteRange());
+    shortNames.Mount(Done());
+    ExpectDone(fs::Result::success);
+    auto directory = ExpectOpenDirectory(shortNames, "/");
+
+    ExpectNext(*directory, fs::Result::success, fs::EntryInfo{ "MEETIN~1.TXT", fs::EntryType::file, 0 });
+    ExpectNext(*directory, fs::Result::success);
 }
 
 TEST_F(FatReaderDirectoryFat16Test, a_second_next_on_a_handle_is_busy)

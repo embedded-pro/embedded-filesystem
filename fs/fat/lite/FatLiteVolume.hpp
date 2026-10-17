@@ -20,7 +20,7 @@ namespace fs
         : public FatReaderVolume
     {
     public:
-        FatLiteVolume(FlushBarrier& barrier, FatLiteWindow& window, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved);
+        FatLiteVolume(FlushBarrier& barrier, FatLiteWindow& window, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved);
         FatLiteVolume(const FatLiteVolume& other) = delete;
         FatLiteVolume& operator=(const FatLiteVolume& other) = delete;
         ~FatLiteVolume();
