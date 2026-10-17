@@ -15,5 +15,6 @@ target_link_libraries(validation.devices_test PUBLIC
 target_sources(validation.devices_test PRIVATE
     TestCountingFlash.cpp
     TestNullDevices.cpp
+    TestQuadSpiNor.cpp
     TestRamDevices.cpp
 )

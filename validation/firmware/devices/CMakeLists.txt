@@ -8,6 +8,7 @@ target_link_libraries(validation.devices PUBLIC
     hal.interfaces
     infra.event
     infra.timer
+    services.flash
     validation.timing
 )
 
@@ -18,6 +19,8 @@ target_sources(validation.devices PRIVATE
     NullBlockDevice.hpp
     NullFlash.cpp
     NullFlash.hpp
+    QuadSpiNor.cpp
+    QuadSpiNor.hpp
     RamBlockDevice.cpp
     RamBlockDevice.hpp
     RamCompletion.hpp
