@@ -24,6 +24,8 @@ target_sources(validation.workload PRIVATE
     DataLogger.hpp
     FileWriter.cpp
     FileWriter.hpp
+    IdleWait.cpp
+    IdleWait.hpp
     LogAppender.cpp
     LogAppender.hpp
     MountScaling.cpp
@@ -47,6 +49,8 @@ target_sources(validation.workload PRIVATE
     WorkloadCommands.hpp
     WorkloadOperation.cpp
     WorkloadOperation.hpp
+    WorkloadReport.cpp
+    WorkloadReport.hpp
     WorkloadRunner.cpp
     WorkloadRunner.hpp
     WorkloadVolume.hpp

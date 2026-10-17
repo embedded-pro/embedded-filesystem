@@ -1,19 +1,16 @@
 #include "validation/firmware/workload/WorkloadRunner.hpp"
-#include "infra/stream/StringOutputStream.hpp"
 #include "infra/util/ReallyAssert.hpp"
-#include "validation/firmware/workload/CountRecords.hpp"
 
 namespace validation
 {
     WorkloadRunner::WorkloadRunner(ResultLines& results, const CycleCounter& cycles, uint32_t clockHz)
-        : results(results)
+        : report(results, cycles, clockHz)
         , callStopwatch(cycles, clockHz)
-        , phaseStopwatch(cycles, clockHz)
     {}
 
     void WorkloadRunner::Release(const infra::Function<void()>& onReleased)
     {
-        really_assert(!running);
+        really_assert(state != State::running);
         file = nullptr;
         directory = nullptr;
 
@@ -33,42 +30,29 @@ namespace validation
 
     void WorkloadRunner::Begin(WorkloadVolume& volume, CountingFlash& flash, const WorkloadContext& context, const infra::Function<void()>& onInterrupted)
     {
-        really_assert(!running && !interrupted);
+        really_assert(state == State::idle);
         this->volume = &volume;
         this->flash = &flash;
-        this->context = context;
         this->onInterrupted = onInterrupted;
-        running = true;
-        failure.reset();
+        state = State::running;
         earlierMounts = VolumeCounts{};
-        window = PhaseWindow::none;
-        firstLog.Clear();
-        secondLog.Clear();
-        phase.Start("", flash.Counts(), VolumeNow());
+        report.Start(context, flash.Counts(), VolumeNow());
         flash.OnTimeout([this]
             {
                 Interrupt();
             });
-        PrintStart();
     }
 
     void WorkloadRunner::End()
     {
-        PrintPhase();
-        PrintWindow("first", firstLog.Window());
-        PrintWindow("second", secondLog.Window());
-        PrintFailure();
-        PrintDone();
+        report.End(flash->Counts(), VolumeNow());
         flash->OnTimeout(nullptr);
-        running = false;
+        state = State::idle;
     }
 
     void WorkloadRunner::SetPhase(infra::BoundedConstString name, PhaseWindow window)
     {
-        PrintPhase();
-        this->window = window;
-        phase.Start(name, flash->Counts(), VolumeNow());
-        phaseStopwatch.Start();
+        report.StartPhase(name, window, flash->Counts(), VolumeNow());
     }
 
     void WorkloadRunner::Format(const Done& onDone)
@@ -128,7 +112,7 @@ namespace validation
         StartCall(WorkloadOperation::read);
         file->Read(buffer, [this](fs::Result result, std::size_t bytesRead)
             {
-                if (interrupted)
+                if (state == State::interrupted)
                     return;
 
                 EndCall(result, bytesRead);
@@ -224,7 +208,7 @@ namespace validation
         StartCall(WorkloadOperation::usage);
         volume->FileSystem().Usage([this](fs::Result result, fs::VolumeUsage usage)
             {
-                if (interrupted)
+                if (state == State::interrupted)
                     return;
 
                 EndCall(result, 0);
@@ -236,21 +220,14 @@ namespace validation
     {
         onIdle = onDone;
         StartCall(WorkloadOperation::idle, 0, false);
-        idleTimer.Start(duration, [this]
-            {
-                IdleDone();
-            });
+        idle.Wait(duration);
     }
 
     void WorkloadRunner::Settle(infra::Duration limit, const infra::Function<void()>& onDone)
     {
         onIdle = onDone;
         StartCall(WorkloadOperation::idle, 0, false);
-        settleDeadline = infra::Now() + limit;
-        pollTimer.Start(pollInterval, [this]
-            {
-                PollIdle();
-            });
+        idle.Settle(volume->FileSystem(), limit);
     }
 
     uint32_t WorkloadRunner::FileSize() const
@@ -260,17 +237,17 @@ namespace validation
 
     bool WorkloadRunner::Running() const
     {
-        return running;
+        return state == State::running;
     }
 
     bool WorkloadRunner::Interrupted() const
     {
-        return interrupted;
+        return state == State::interrupted;
     }
 
     bool WorkloadRunner::Failed() const
     {
-        return failure.has_value();
+        return report.Failed();
     }
 
     void WorkloadRunner::StartCall(WorkloadOperation operation, uint64_t userBytes, bool limited)
@@ -288,14 +265,12 @@ namespace validation
     {
         auto latencyNs = callStopwatch.ElapsedNs();
         callTimer.Cancel();
-        phase.Add(call.operation, userBytes, latencyNs);
-        AddToWindow();
-        Check(result);
+        report.Add(call, { result, userBytes, latencyNs, flash->Counts(), VolumeNow() });
     }
 
     void WorkloadRunner::Completed(fs::Result result)
     {
-        if (interrupted)
+        if (state == State::interrupted)
             return;
 
         EndCall(result, call.userBytes);
@@ -304,9 +279,9 @@ namespace validation
 
     void WorkloadRunner::NextEntry()
     {
-        directory->Next([this](fs::Result result, std::optional<fs::EntryInfo> entry)
+        directory->Next([this](fs::Result result, const std::optional<fs::EntryInfo>& entry)
             {
-                if (result == fs::Result::success && entry && !interrupted)
+                if (result == fs::Result::success && entry && state != State::interrupted)
                     NextEntry();
                 else
                 {
@@ -316,121 +291,23 @@ namespace validation
             });
     }
 
-    void WorkloadRunner::PollIdle()
-    {
-        if (volume->FileSystem().Idle() || infra::Now() >= settleDeadline)
-        {
-            pollTimer.Cancel();
-            IdleDone();
-        }
-    }
-
     void WorkloadRunner::IdleDone()
     {
         EndCall(fs::Result::success, 0);
         onIdle();
     }
 
-    void WorkloadRunner::AddToWindow()
-    {
-        auto volumeNow = VolumeNow();
-        if (window == PhaseWindow::none || !IsPartOfAppend(call.operation) || !volumeNow || !call.volume)
-            return;
-
-        AppendCall append{ call.operation, call.fileSizeBefore, flash->Counts() - call.device, *volumeNow - *call.volume };
-        if (window == PhaseWindow::firstLog)
-            firstLog.Add(append);
-        else
-            secondLog.Add(append);
-    }
-
-    void WorkloadRunner::Check(fs::Result result)
-    {
-        auto expected = result == fs::Result::success || (call.operation == WorkloadOperation::expectSize && result == fs::Result::unsupported);
-        if (expected || failure)
-            return;
-
-        failure.emplace();
-        failure->phase = phase.Name();
-        failure->operation = call.operation;
-        infra::StringOutputStream stream{ failure->result };
-        stream << result;
-    }
-
     // The device stays claimed until the board is reset, since the request or the call that timed out may still complete
     void WorkloadRunner::Interrupt()
     {
-        if (interrupted)
+        if (state == State::interrupted)
             return;
 
-        interrupted = true;
+        state = State::interrupted;
         callTimer.Cancel();
-        idleTimer.Cancel();
-        pollTimer.Cancel();
-        failure.emplace();
-        failure->phase = phase.Name();
-        failure->operation = call.operation;
-        failure->result = "timeout";
-        PrintFailure();
-        running = false;
+        idle.Cancel();
+        report.TimedOut(call.operation);
         onInterrupted();
-    }
-
-    void WorkloadRunner::PrintStart() const
-    {
-        results.Record("workload")
-            .Add("device", context.device)
-            .Add("subject", context.subject)
-            .Add("workload", context.workload)
-            .Add("fill", context.fill)
-            .Add("scale", context.scale)
-            .Add("ramBytes", context.ramBytes);
-    }
-
-    void WorkloadRunner::PrintPhase()
-    {
-        if (!phase.Name().empty())
-            phase.Print(results, context, { phaseStopwatch.ElapsedNs(), flash->Counts(), VolumeNow() });
-    }
-
-    void WorkloadRunner::PrintWindow(const char* log, const std::optional<WindowTotals>& totals)
-    {
-        if (!totals)
-            return;
-
-        auto record = results.Record("window");
-        record.Add("device", context.device)
-            .Add("subject", context.subject)
-            .Add("workload", context.workload)
-            .Add("fill", context.fill)
-            .Add("log", log)
-            .Add("appends", totals->appends);
-        AddCounts(record, totals->device);
-        AddCounts(record, totals->volume);
-    }
-
-    void WorkloadRunner::PrintFailure() const
-    {
-        if (!failure)
-            return;
-
-        results.Record("workload.failed")
-            .Add("device", context.device)
-            .Add("subject", context.subject)
-            .Add("workload", context.workload)
-            .Add("fill", context.fill)
-            .Add("phase", failure->phase)
-            .Add("op", OperationName(failure->operation))
-            .Add("result", failure->result);
-    }
-
-    void WorkloadRunner::PrintDone() const
-    {
-        results.Record("workload.done")
-            .Add("device", context.device)
-            .Add("subject", context.subject)
-            .Add("workload", context.workload)
-            .Add("fill", context.fill);
     }
 
     std::optional<VolumeCounts> WorkloadRunner::VolumeNow() const
