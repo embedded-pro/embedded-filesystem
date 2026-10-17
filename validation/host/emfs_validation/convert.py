@@ -15,10 +15,12 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
+from emfs_validation.workloads import DeviceRuns, Totals, WorkloadRun, workload_results
+
 TRANSCRIPT = "transcript.log"
 RUN = "run.json"
 RESULT_KEYS = ("metric", "workload", "subject", "device", "unit", "value", "ramBytes", "better")
-RESULT_IDENTITY = ("metric", "workload", "subject", "device")
+RESULT_IDENTITY = ("metric", "workload", "subject", "device", "fill")
 MEASURED_PREFIXES = ("bench.", "measured.")
 BENCH_STATISTICS = ("minNs", "medianNs", "p99Ns", "maxNs", "meanNs")
 RUN_NAME = re.compile(r"^(\d{4})_(\d{2})_(\d{2})(?:_(\d+))?$")
@@ -101,6 +103,7 @@ class Fragment:
         self.models = models
         self.devices: dict[str, dict[str, str]] = {}
         self.results: list[dict[str, Any]] = []
+        self.workloads: dict[tuple[str, str], dict[tuple[str, int], WorkloadRun]] = {}
 
     def device(self, local: str, parameters: dict[str, str]) -> str:
         """Adds a device of the board, with the run and the parameters of the model the run is converted with."""
@@ -135,8 +138,23 @@ class Fragment:
         if name not in self.devices:
             raise ConversionError(f"a result of {entry['metric']} is on an unknown device '{entry['device']}'")
         entry = {**entry, "device": name}
-        self.discard(lambda earlier: all(earlier[key] == entry[key] for key in RESULT_IDENTITY))
+        self.discard(lambda earlier: all(earlier.get(key) == entry.get(key) for key in RESULT_IDENTITY))
         self.results.append(entry)
+
+    def workload_run(self, record: Record, restart: bool = False) -> WorkloadRun:
+        """The run of the workload of a record; a `workload` record restarts it, so that the last run replaces earlier ones."""
+        runs = self.workloads.setdefault((record.field("device"), record.field("subject")), {})
+        key = (record.field("workload"), record.number("fill"))
+        if restart or key not in runs:
+            runs[key] = WorkloadRun()
+        return runs[key]
+
+    def workload_results(self) -> None:
+        """The metrics of the workloads, once every record of the run is read."""
+        for (device, subject), runs in self.workloads.items():
+            model = self.models.get(f"{self.board}/{device}", {})
+            for entry in workload_results(DeviceRuns(device, subject, runs, model)):
+                self.result(entry)
 
     def discard(self, matches: Callable[[dict[str, Any]], bool]) -> None:
         self.results = [result for result in self.results if not matches(result)]
@@ -208,11 +226,42 @@ def convert_cycles_failed(fragment: Fragment, record: Record) -> None:
     fragment.discard(lambda result: result["metric"] == "F-2" and result["subject"] == subject)
 
 
+def convert_workload(fragment: Fragment, record: Record) -> None:
+    """The start of a run of a workload, which replaces an earlier run of the workload at its fill level on its device."""
+    fragment.workload_run(record, restart=True).ram_bytes = record.number("ramBytes")
+
+
+def convert_phase(fragment: Fragment, record: Record) -> None:
+    """A phase of a workload, named as on the host; phases of a run with the same name are added up."""
+    run = fragment.workload_run(record)
+    run.ram_bytes = record.number("ramBytes")
+    run.add_phase(record.field("phase").replace(",", " "), Totals.parse(record.fields))
+
+
+def convert_window(fragment: Fragment, record: Record) -> None:
+    fragment.workload_run(record).windows[record.field("log")] = Totals.parse(record.fields)
+
+
+def convert_workload_failed(fragment: Fragment, record: Record) -> None:
+    """A run of a workload with a call that failed, or that timed out, leaves no results."""
+    fragment.workload_run(record).failed = True
+
+
+def convert_workload_done(fragment: Fragment, record: Record) -> None:
+    """The end of a run of a workload; a run without one, cut off by a reset or by the end of the transcript, leaves no results."""
+    fragment.workload_run(record).done = True
+
+
 CONVERTERS: dict[str, Callable[[Fragment, Record], None]] = {
     "device": convert_device,
     "bench": convert_bench,
     "cycles": convert_cycles,
     "cycles.failed": convert_cycles_failed,
+    "workload": convert_workload,
+    "phase": convert_phase,
+    "window": convert_window,
+    "workload.failed": convert_workload_failed,
+    "workload.done": convert_workload_done,
 }
 
 
@@ -240,6 +289,7 @@ def convert_run(directory: Path, models: dict[str, dict[str, str]]) -> dict[str,
             converter = CONVERTERS.get(record.kind)
             if converter is not None:
                 converter(fragment, record)
+        fragment.workload_results()
     except ConversionError as error:
         raise ConversionError(f"{directory}: {error}") from None
     return fragment.json()

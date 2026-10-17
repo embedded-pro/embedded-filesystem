@@ -5,14 +5,19 @@ target_include_directories(validation.timing PUBLIC
 )
 
 target_link_libraries(validation.timing PUBLIC
+    infra.timer
     infra.util
 )
 
 target_sources(validation.timing PRIVATE
     CycleCounter.hpp
+    LatencyHistogram.cpp
+    LatencyHistogram.hpp
     Nanoseconds.hpp
     Samples.cpp
     Samples.hpp
+    Stopwatch.cpp
+    Stopwatch.hpp
 )
 
 if (EMFS_BUILD_TESTS)

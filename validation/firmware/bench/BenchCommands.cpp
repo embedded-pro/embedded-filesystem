@@ -69,7 +69,7 @@ namespace validation
         if (target == nullptr)
             return services::HilStatus::unsupported;
 
-        if (pending.Busy() || bench.Running())
+        if (pending.Busy() || bench.Running() || target->flash.InUse())
             return services::HilStatus::busy;
 
         bench.Check(target->flash, Start());
@@ -94,7 +94,7 @@ namespace validation
         if (target == nullptr)
             return services::HilStatus::unsupported;
 
-        if (pending.Busy() || bench.Running())
+        if (pending.Busy() || bench.Running() || target->flash.InUse())
             return services::HilStatus::busy;
 
         request.flash = &target->flash;

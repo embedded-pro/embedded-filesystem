@@ -13,9 +13,7 @@ target_sources(metrics.workload PRIVATE
     FileSystemUnderTest.hpp
     MetricComputations.cpp
     MetricComputations.hpp
-    Pattern.cpp
     Pattern.hpp
-    Random.cpp
     Random.hpp
     Runner.cpp
     Runner.hpp

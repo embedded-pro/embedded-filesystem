@@ -34,6 +34,7 @@ if (TARGET_CORTEX STREQUAL m7)
         validation.devices
         validation.hil
         validation.results
+        validation.workload
     )
 
     target_sources(validation.firmware PRIVATE
