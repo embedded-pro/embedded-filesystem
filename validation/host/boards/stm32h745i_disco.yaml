@@ -6,4 +6,4 @@ sysclk: 400000000
 baud: 115200
 command_timeout: 2.0
 scale: 16
-devices: []
+devices: [qspi]

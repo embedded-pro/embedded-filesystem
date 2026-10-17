@@ -434,3 +434,80 @@ def test_the_last_run_of_a_subject_replaces_its_earlier_runs(tmp_path):
     fragment = convert_run(write_run(tmp_path / "2026_10_20", [RAM_FLASH, CYCLES, again]), {})
 
     assert fragment["results"] == [f2("mount", 1100), f2("mount settled", 4400)]
+
+
+QSPI = "EVT device id=1 device=qspi kind=nor sectors=4096 sectorSize=4096 pageSize=256 chip=20ba20 clockHz=50000000"
+
+
+def bench(record_id: int, op: str, size: int, median: int) -> str:
+    return (
+        f"EVT bench id={record_id} device=qspi op={op} size={size} n=64 minNs={median - 10} medianNs={median} "
+        f"p99Ns={median + 20} maxNs={median + 30} meanNs={median + 5}"
+    )
+
+
+def test_a_bench_record_becomes_parameters_of_its_device(tmp_path):
+    fragment = convert_run(write_run(tmp_path / "2026_10_20", [QSPI, bench(2, "program", 16, 300000)]), {})
+
+    parameters = fragment["devices"][f"{BOARD}/qspi"]
+    assert {key: value for key, value in parameters.items() if key.startswith("bench.")} == {
+        "bench.program.16.n": "64",
+        "bench.program.16.minNs": "299990",
+        "bench.program.16.medianNs": "300000",
+        "bench.program.16.p99Ns": "300020",
+        "bench.program.16.maxNs": "300030",
+        "bench.program.16.meanNs": "300005",
+    }
+    assert fragment["results"] == []
+
+
+def test_the_benchmarks_give_the_parameters_of_a_nor_model(tmp_path):
+    lines = [
+        QSPI,
+        bench(2, "program", 256, 450000),
+        bench(3, "erase", 4096, 45000000),
+        bench(4, "read", 256, 7120),
+        bench(5, "read", 65536, 1312720),
+    ]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/qspi"]
+
+    assert parameters["measured.pageProgramNs"] == "450000"
+    assert parameters["measured.sectorEraseNs"] == "45000000"
+    assert parameters["measured.readBytesPerSecond"] == "50000000"
+    assert parameters["measured.readFixedNs"] == "2000"
+
+
+def test_a_model_parameter_waits_for_its_benchmark(tmp_path):
+    lines = [QSPI, bench(2, "program", 16, 300000), bench(3, "read", 256, 7120)]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/qspi"]
+
+    assert not [key for key in parameters if key.startswith("measured.")]
+
+
+def test_reads_that_take_no_longer_with_their_size_give_no_rate(tmp_path):
+    lines = [QSPI, bench(2, "read", 256, 7000), bench(3, "read", 65536, 7000)]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/qspi"]
+
+    assert "measured.readBytesPerSecond" not in parameters
+
+
+def test_a_bench_record_on_a_device_that_the_run_did_not_report_is_an_error(tmp_path):
+    with pytest.raises(ConversionError, match="benchmark is on an unknown device 'qspi'"):
+        convert_run(write_run(tmp_path / "2026_10_20", [bench(1, "read", 256, 7000)]), {})
+
+
+@pytest.mark.parametrize("key", ["bench.read.256.medianNs", "measured.pageProgramNs"])
+def test_a_device_record_with_a_key_of_the_benchmarks_is_an_error(tmp_path, key):
+    with pytest.raises(ConversionError, match=f"has '{key}'"):
+        convert_run(write_run(tmp_path / "2026_10_20", [f"{QSPI} {key}=1"]), {})
+
+
+def test_a_device_reported_again_after_its_benchmarks_keeps_them(tmp_path):
+    lines = [QSPI, bench(2, "erase", 4096, 45000000), QSPI.replace("id=1", "id=3")]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/qspi"]
+
+    assert parameters["measured.sectorEraseNs"] == "45000000"

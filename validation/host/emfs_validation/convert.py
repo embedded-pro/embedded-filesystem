@@ -19,6 +19,8 @@ TRANSCRIPT = "transcript.log"
 RUN = "run.json"
 RESULT_KEYS = ("metric", "workload", "subject", "device", "unit", "value", "ramBytes", "better")
 RESULT_IDENTITY = ("metric", "workload", "subject", "device")
+MEASURED_PREFIXES = ("bench.", "measured.")
+BENCH_STATISTICS = ("minNs", "medianNs", "p99Ns", "maxNs", "meanNs")
 RUN_NAME = re.compile(r"^(\d{4})_(\d{2})_(\d{2})(?:_(\d+))?$")
 
 
@@ -106,10 +108,23 @@ class Fragment:
         model = self.models.get(name, {})
         complete = {**parameters, "run": self.run}
         complete.update({"model" if key == "model" else f"model.{key}": str(value) for key, value in model.items()})
-        if name in self.devices and self.devices[name] != complete:
-            raise ConversionError(f"device '{local}' is reported with different parameters")
-        self.devices[name] = complete
+        if name in self.devices:
+            if self.reported(name) != complete:
+                raise ConversionError(f"device '{local}' is reported with different parameters")
+        else:
+            self.devices[name] = complete
         return name
+
+    def reported(self, name: str) -> dict[str, str]:
+        """The parameters of a device as its device record and the conversion give them, without what its benchmarks measured."""
+        return {key: value for key, value in self.devices[name].items() if not key.startswith(MEASURED_PREFIXES)}
+
+    def measured(self, local: str) -> dict[str, str]:
+        """The parameters of a device of the board that its benchmarks add to."""
+        name = f"{self.board}/{local}"
+        if name not in self.devices:
+            raise ConversionError(f"a benchmark is on an unknown device '{local}'")
+        return self.devices[name]
 
     def result(self, entry: dict[str, Any]) -> None:
         """Adds a result, in place of an earlier one of the same metric, workload, subject and device."""
@@ -132,7 +147,7 @@ class Fragment:
 
 def convert_device(fragment: Fragment, record: Record) -> None:
     for key in record.fields:
-        if key in ("run", "model") or key.startswith("model."):
+        if key in ("run", "model") or key.startswith(("model.", *MEASURED_PREFIXES)):
             raise ConversionError(f"{record} has '{key}', which the conversion adds")
     parameters = {key: value for key, value in record.fields.items() if key != "device"}
     fragment.device(record.field("device"), parameters)
@@ -153,6 +168,39 @@ def convert_cycles(fragment: Fragment, record: Record) -> None:
     fragment.result({**common, "workload": f"{operation} settled", "value": record.number("settledCycles")})
 
 
+def convert_bench(fragment: Fragment, record: Record) -> None:
+    """A benchmark: its statistics among the parameters of the device, as `bench.<op>.<size>.<statistic>`, and the parameters
+    a model takes from the benchmarks of the device so far, as `measured.<parameter>`."""
+    parameters = fragment.measured(record.field("device"))
+    prefix = f"bench.{record.field('op')}.{record.number('size')}"
+    parameters[f"{prefix}.n"] = str(record.number("n"))
+    for statistic in BENCH_STATISTICS:
+        parameters[f"{prefix}.{statistic}"] = str(record.number(statistic))
+    parameters.update(model_parameters(parameters))
+
+
+def model_parameters(parameters: dict[str, str]) -> dict[str, str]:
+    """The parameters of a NOR model from the medians of the benchmarks: a program of a page, an erase of a sector, and
+    the rate and the fixed cost of a read, from the smallest and the largest read."""
+    medians = {
+        key[: -len(".medianNs")]: int(value) for key, value in parameters.items() if key.startswith("bench.") and key.endswith(".medianNs")
+    }
+    model: dict[str, str] = {}
+    page = f"bench.program.{parameters.get('pageSize')}"
+    if page in medians:
+        model["measured.pageProgramNs"] = str(medians[page])
+    sector = f"bench.erase.{parameters.get('sectorSize')}"
+    if sector in medians:
+        model["measured.sectorEraseNs"] = str(medians[sector])
+    reads = sorted((int(key.split(".")[2]), median) for key, median in medians.items() if key.startswith("bench.read."))
+    if len(reads) >= 2 and reads[-1][1] > reads[0][1]:
+        (smallest, smallest_ns), (largest, largest_ns) = reads[0], reads[-1]
+        rate = (largest - smallest) * 1_000_000_000 // (largest_ns - smallest_ns)
+        model["measured.readBytesPerSecond"] = str(rate)
+        model["measured.readFixedNs"] = str(max(0, smallest_ns - smallest * 1_000_000_000 // rate))
+    return model
+
+
 def convert_cycles_failed(fragment: Fragment, record: Record) -> None:
     """A run of F-2 that failed leaves no F-2 for its subject, not even for the operations it completed."""
     subject = record.field("subject")
@@ -161,6 +209,7 @@ def convert_cycles_failed(fragment: Fragment, record: Record) -> None:
 
 CONVERTERS: dict[str, Callable[[Fragment, Record], None]] = {
     "device": convert_device,
+    "bench": convert_bench,
     "cycles": convert_cycles,
     "cycles.failed": convert_cycles_failed,
 }
