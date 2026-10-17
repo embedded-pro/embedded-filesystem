@@ -1,3 +1,4 @@
+#include "fs/common/TransferAlignment.hpp"
 #include "fs/fat/FatTable.hpp"
 #include "fs/fat/lite/test/FatLiteFixture.hpp"
 #include <algorithm>
@@ -23,6 +24,23 @@ namespace
         FatLiteFileWithLargeClustersTest()
             : FatLiteFileTest(fat16WithLargeClusters)
         {}
+    };
+
+    class FatLiteFileWithTransferAlignmentTest
+        : public testing::Test
+        , public FatLiteFixture
+    {
+    public:
+        FatLiteFileWithTransferAlignmentTest()
+            : FatLiteFixture(fat16WithLargeClusters, fs::bufferAlignment)
+        {}
+
+        infra::ByteRange At(std::size_t offset, std::size_t size)
+        {
+            return infra::Head(infra::DiscardHead(infra::MakeRange(aligned), offset), size);
+        }
+
+        alignas(fs::bufferAlignment) std::array<uint8_t, 4096 + fs::bufferAlignment> aligned{};
     };
 
     class FatLiteFileWithOneFatTest
@@ -438,5 +456,44 @@ TEST_F(FatLiteFileWithOneFatTest, a_volume_with_one_fat_is_written)
     WriteFile("/log.txt", infra::MakeRange(contents));
     ExpectUnmount();
 
+    ExpectContentsOnFullVolume("/log.txt", contents);
+}
+
+TEST_F(FatLiteFileWithTransferAlignmentTest, whole_sectors_go_directly_to_and_from_a_buffer_at_the_transfer_alignment)
+{
+    auto contents = Pattern<4096>();
+    infra::Copy(infra::MakeRange(contents), At(fs::bufferAlignment, 4096));
+    ExpectMount();
+    auto file = ExpectOpen("/log.txt", fs::OpenMode::readWrite);
+    ExpectWrite(*file, At(fs::bufferAlignment, 4096));
+
+    auto writes = device.WriteRequests();
+    ExpectWrite(*file, At(fs::bufferAlignment, 4096));
+    EXPECT_EQ(writes + 1, device.WriteRequests());
+
+    file->Seek(0);
+    auto reads = device.ReadRequests();
+    ExpectRead(*file, At(fs::bufferAlignment, 4096), fs::Result::success, 4096);
+    EXPECT_EQ(reads + 1, device.ReadRequests());
+    EXPECT_TRUE(std::ranges::equal(contents, At(fs::bufferAlignment, 4096)));
+    EXPECT_LE(fs::bufferAlignment, device.BufferAlignment());
+}
+
+TEST_F(FatLiteFileWithTransferAlignmentTest, whole_sectors_go_through_the_window_to_and_from_a_buffer_off_the_transfer_alignment)
+{
+    auto contents = Pattern<4096>();
+    infra::Copy(infra::MakeRange(contents), At(4, 4096));
+    ExpectMount();
+    auto file = ExpectOpen("/log.txt", fs::OpenMode::readWrite);
+    ExpectWrite(*file, At(4, 4096));
+
+    std::ranges::fill(At(4, 4096), uint8_t{ 0 });
+    file->Seek(0);
+    ExpectRead(*file, At(4, 4096), fs::Result::success, 4096);
+    EXPECT_TRUE(std::ranges::equal(contents, At(4, 4096)));
+    EXPECT_LE(fs::bufferAlignment, device.BufferAlignment());
+
+    ExpectClose(*file);
+    ExpectUnmount();
     ExpectContentsOnFullVolume("/log.txt", contents);
 }

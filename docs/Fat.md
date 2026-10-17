@@ -126,7 +126,8 @@ The whole sectors of a read go directly from the device into the buffer of the c
 A write goes directly to the device when its whole sectors form a contiguous run longer than the cache can collect, which is the number of cache sectors minus two; the cache drops the sectors it holds of that range, and the run is written at rank 0 in one request.
 Shorter writes, and the partial sectors at the ends of any transfer, go through the cache.
 A driver that moves data with DMA may need aligned buffers: `hal::SdCardStm` of hal-st needs 4 bytes, and, while the data cache of a Cortex-M7 is on, buffers aligned and sized to its cache line of 32 bytes, so that it can clean and invalidate the cache itself.
-The sectors of the cache, and the buffer of `fs::FatFormatter`, are therefore aligned to 32 bytes, and `FatConfig::transferAlignment` gives the alignment the driver needs: the whole sectors of a transfer go directly to or from the buffer of the caller only when their place in it is aligned to it, and through the cache otherwise.
+The sectors of the cache, and the buffer of `fs::FatFormatter`, are therefore aligned to 32 bytes, and `FatConfig::transferAlignment` gives the alignment the driver needs, a power of two of at most 32: the whole sectors of a transfer go directly to or from the buffer of the caller only when their place in it is aligned to it, and through the cache one sector at a time otherwise.
+`fs::FatReader` and `fs::FatLite` align their sector buffer in the same way and take the alignment as the second argument of their constructor, 1 by default.
 The cache writes back consecutive sectors of the same rank that it holds in adjacent slots in one multi-block request, so that collected writes leave the cache as multi-block requests.
 To keep such sectors adjacent, a sector that is written takes the slot after the one of its predecessor; when that slot holds a modified sector, the cache moves it to the first free or unmodified slot after it, and otherwise a written sector takes the first free slot, else the first unmodified one.
 Modified metadata thereby moves to the last slots, and a stream of collected writes fills the others in order.
@@ -291,7 +292,7 @@ It leaves out:
 * the extent cache: a read continues the cluster chain from the cluster it reached last, and a `Seek` back follows the chain again from the start of the file;
 * the background scan of the FAT and the closed files.
 
-A read copies a partial sector from the sector buffer and reads whole sectors straight into the buffer of the caller, at most one cluster per request.
+A read copies a partial sector from the sector buffer and reads whole sectors straight into the buffer of the caller, at most one cluster per request, when the buffer is aligned for the driver as described under [Direct transfers](#direct-transfers), and through the sector buffer otherwise.
 
 ```cpp
 hal::BlockDevice& sdCard = ...;
@@ -300,6 +301,7 @@ fs::FatReader::WithStorage<2> reader{ sdCard };
 
 The template arguments of `fs::FatReader::WithStorage<Files, Directories, Limits, Features>` are the number of open files, the number of open directory handles, 1 by default, an optional `fs::PathLimits`, the longest name and the longest path in UTF-8 bytes, 255 each by default, and an optional `fs::FatReaderFeatures`.
 The longest name also sizes the buffer that holds a name while it is reported, as `FatLimits::maxNameBytes` does for `fs::FatFileSystem`.
+The constructor takes the device and the alignment of the buffers that the driver transfers, 1 by default, as described under [Direct transfers](#direct-transfers).
 With `fs::FatReaderFeatures::longNames` left out, the volume reads only short names, as FatFs does without `FF_USE_LFN`: it skips the long name entries, finds and lists every entry by its 8.3 name, and its name buffer holds one short name, 34 bytes.
 On a Cortex-M4, F-1 measures 19.1 KB of flash and 2.0 KB of RAM for `fs::FatReader::WithStorage<1>`, against 61.0 KB and 7.8 KB for `fs::FatFileSystem` with the same calls and 5.8 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 
@@ -338,7 +340,7 @@ hal::BlockDevice& sdCard = ...;
 fs::FatLite::WithStorage<2> lite{ sdCard };
 ```
 
-The template arguments of `fs::FatLite::WithStorage<Files, Directories, Limits, Features>` are those of `fs::FatReader::WithStorage`.
+The template arguments of `fs::FatLite::WithStorage<Files, Directories, Limits, Features>` and its constructor are those of `fs::FatReader::WithStorage`, and its whole sectors go through the sector buffer when the buffer of the caller is not aligned for the driver.
 On a Cortex-M4, F-1 measures 30.4 KB of flash and 2.4 KB of RAM for `fs::FatLite::WithStorage<1>` that reads only short names, against 45.7 KB and 7.4 KB for `fs::FatFileSystem` with every `fs::FatFeatures` left out and 7.4 KB and 1.1 KB for `fatfs/minimal`, which also removes, renames and makes directories, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 Reading long names adds 0.8 KB of flash and 0.2 KB of RAM.
 
@@ -380,14 +382,14 @@ F-1 measures the volume with every feature left out as `embedded-filesystem/fat-
 
 `fs::FatConfig` holds the settings that need no storage:
 
-| `fs::FatConfig`           | Default                       | Meaning                                                                  |
-|---------------------------|-------------------------------|--------------------------------------------------------------------------|
-| `maxPathBytes`            | 255                           | The longest path in UTF-8 bytes                                          |
-| `idleDelay`               | 10 ms                         | The idle time after which the background scan of the FAT starts          |
-| `discard`                 | `true`                        | Whether freed clusters are discarded                                     |
-| `blocksPerAllocationUnit` | 0                             | The allocation unit of the card in blocks, 0 when it is unknown          |
-| `transferAlignment`       | 1                             | The alignment in bytes of the buffers that the driver transfers directly |
-| `timerServiceId`          | `infra::systemTimerServiceId` | The timer service that gives the time of timestamps                      |
+| `fs::FatConfig`           | Default                       | Meaning                                                                                                |
+|---------------------------|-------------------------------|--------------------------------------------------------------------------------------------------------|
+| `maxPathBytes`            | 255                           | The longest path in UTF-8 bytes                                                                        |
+| `idleDelay`               | 10 ms                         | The idle time after which the background scan of the FAT starts                                        |
+| `discard`                 | `true`                        | Whether freed clusters are discarded                                                                   |
+| `blocksPerAllocationUnit` | 0                             | The allocation unit of the card in blocks, 0 when it is unknown                                        |
+| `transferAlignment`       | 1                             | The alignment in bytes of the buffers that the driver transfers directly, a power of two of at most 32 |
+| `timerServiceId`          | `infra::systemTimerServiceId` | The timer service that gives the time of timestamps                                                    |
 
 ## RAM
 

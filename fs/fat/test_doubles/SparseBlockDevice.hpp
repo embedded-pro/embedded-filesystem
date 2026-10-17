@@ -49,6 +49,7 @@ namespace fs
         uint32_t WriteRequests() const;
         uint32_t EraseRequests() const;
         uint32_t FlushRequests() const;
+        std::size_t BufferAlignment() const;
 
     private:
         bool Start(uint32_t firstBlock, uint32_t blocks, const infra::Function<void(Result)>& onDone);
@@ -59,6 +60,7 @@ namespace fs
 
     private:
         static constexpr uint32_t unused = 0xffffffff;
+        static constexpr std::uintptr_t maximumBufferAlignment = 4096;
 
         uint32_t numberOfBlocks;
         uint32_t blockSize;
@@ -71,6 +73,7 @@ namespace fs
         uint32_t writeRequests{ 0 };
         uint32_t eraseRequests{ 0 };
         uint32_t flushRequests{ 0 };
+        std::uintptr_t bufferAddresses{ 0 };
         infra::AutoResetFunction<void(Result)> onDone;
     };
 

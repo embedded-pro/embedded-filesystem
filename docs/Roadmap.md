@@ -112,7 +112,7 @@ The drivers of hal-st and the cycle counter of EmIL need changes first, made as 
 6. F-2: the RAM devices, the cycle counter, `fs::FileSystem::Idle()` and the cycles until the volume is idle, and `cycles.run` for the four subjects, through the glue of FatFs and littlefs that step 4 adds.
 7. NOR devices on the boards: the region of the QSPI flash and the parallel NOR with all its address lines, the counting `hal::Flash` and the benchmarks of NOR flash.
 8. The workload runner with its operations, histograms and windows, L1, L2, L3, L4, L6 and L7 on the NOR devices, and C-1 and C-2 from `metrics.device_models`.
-9. Buffers aligned for drivers that use DMA: the sectors of the cache and the buffer of the formatter aligned to 32 bytes, and `FatConfig::transferAlignment`, as [Fat.md](Fat.md#direct-transfers) describes.
+9. Buffers aligned for drivers that use DMA: the sectors of the cache, of `fs::FatReader` and of `fs::FatLite` and the buffer of the formatter aligned to 32 bytes, and `FatConfig::transferAlignment` and the alignment of `fs::FatReader` and `fs::FatLite`, as [Fat.md](Fat.md#direct-transfers) describes.
 10. Block devices on the boards: the regions of the microSD card and of the eMMC, the counting `hal::BlockDevice`, the benchmarks of block devices, and the model of the eMMC from its datasheet.
 11. The workloads on the FAT volumes of the microSD card and the eMMC.
 12. The comparison of `fs::FatFormatter` with the SD Memory Card Formatter: `validation::FatLayout`, `layout.read` and `layout.format`.

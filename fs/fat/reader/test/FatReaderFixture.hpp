@@ -58,8 +58,9 @@ class FatReaderFixture
 public:
     using Sector = std::array<uint8_t, 512>;
 
-    explicit FatReaderFixture(const FatReaderVolumeCase& volumeCase = fat16Volume)
+    explicit FatReaderFixture(const FatReaderVolumeCase& volumeCase = fat16Volume, std::size_t transferAlignment = 1)
         : device(volumeCase.blocks)
+        , volume(device, transferAlignment)
     {
         fs::FatFormatConfig config;
         config.sectorsPerCluster = volumeCase.sectorsPerCluster;
@@ -226,7 +227,7 @@ public:
     fs::SparseBlockDevice::WithStorage<192> device;
     fs::FatFormatter::WithStorage<8> formatter{ device };
     std::optional<fs::FatImageBuilder> builder;
-    fs::FatReader::WithStorage<2, 2> volume{ device };
+    fs::FatReader::WithStorage<2, 2> volume;
     testing::StrictMock<infra::MockCallback<void(fs::Result)>> mountDone;
     testing::StrictMock<infra::MockCallback<void(fs::Result)>> unmountDone;
     testing::StrictMock<infra::MockCallback<void(fs::Result, const fs::EntryInfo&)>> statDone;

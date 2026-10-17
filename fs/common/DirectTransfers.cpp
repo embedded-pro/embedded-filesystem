@@ -4,16 +4,17 @@
 
 namespace fs
 {
-    DirectTransfers::DirectTransfers(FlushBarrier& barrier, SectorCache& cache)
+    DirectTransfers::DirectTransfers(FlushBarrier& barrier, SectorCache& cache, std::size_t alignment)
         : barrier(barrier)
         , cache(cache)
+        , alignment(alignment)
     {}
 
     DirectTransfers::~DirectTransfers() = default;
 
     void DirectTransfers::Read(uint32_t firstSector, infra::ByteRange buffer, const infra::Function<void(Result result)>& onDone)
     {
-        really_assert(!this->onDone);
+        really_assert(!this->onDone && Accepts(buffer));
 
         this->firstSector = firstSector;
         this->buffer = buffer;
@@ -26,7 +27,7 @@ namespace fs
 
     void DirectTransfers::Write(uint32_t firstSector, infra::ConstByteRange data, uint8_t rank, const infra::Function<void(Result result)>& onDone)
     {
-        really_assert(!this->onDone);
+        really_assert(!this->onDone && Accepts(data));
 
         this->onDone = onDone;
         cache.Discard(firstSector, firstSector + Sectors(data));
@@ -46,6 +47,11 @@ namespace fs
             {
                 OnDone(result);
             });
+    }
+
+    bool DirectTransfers::Accepts(infra::ConstByteRange buffer) const
+    {
+        return alignment.Accepts(buffer);
     }
 
     void DirectTransfers::OnRead(hal::BlockDevice::Result result)

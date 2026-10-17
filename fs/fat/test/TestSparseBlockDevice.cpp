@@ -277,3 +277,22 @@ TEST_F(SparseBlockDeviceTest, observer_sees_every_request_in_order)
         });
     Expect(hal::BlockDevice::Result::success);
 }
+
+TEST_F(SparseBlockDeviceTest, reports_the_alignment_that_every_buffer_it_transferred_shares)
+{
+    alignas(64) std::array<uint8_t, 64> storage{};
+
+    device.WriteBlocks(infra::Head(infra::DiscardHead(infra::MakeRange(storage), 32), 16), 1, [this](hal::BlockDevice::Result result)
+        {
+            done.callback(result);
+        });
+    Expect(hal::BlockDevice::Result::success);
+    EXPECT_EQ(32u, device.BufferAlignment());
+
+    device.ReadBlocks(infra::Head(infra::DiscardHead(infra::MakeRange(storage), 4), 16), 1, [this](hal::BlockDevice::Result result)
+        {
+            done.callback(result);
+        });
+    Expect(hal::BlockDevice::Result::success);
+    EXPECT_EQ(4u, device.BufferAlignment());
+}

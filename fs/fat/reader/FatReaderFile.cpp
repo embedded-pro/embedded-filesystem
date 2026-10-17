@@ -133,7 +133,7 @@ namespace fs
         auto sectorInCluster = position % ClusterBytes() / sectorSize;
         auto sector = volume.Geometry().SectorOfCluster(cluster) + sectorInCluster;
 
-        if (position % sectorSize != 0 || Remaining() < sectorSize)
+        if (position % sectorSize != 0 || Remaining() < sectorSize || !volume.Alignment().Accepts(infra::DiscardHead(buffer, bytesRead)))
             TransferPart(sector);
         else
             TransferSectors(sector, static_cast<uint32_t>(std::min<std::size_t>(Remaining() / sectorSize, volume.Geometry().sectorsPerCluster - sectorInCluster)));

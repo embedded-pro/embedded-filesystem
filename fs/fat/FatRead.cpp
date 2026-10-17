@@ -43,7 +43,7 @@ namespace fs
         auto sector = volume.Geometry().SectorOfCluster(run.ClusterAt(index)) + sectorInCluster;
         auto offset = file.position % SectorSize();
 
-        if (offset != 0 || Remaining() < SectorSize())
+        if (offset != 0 || Remaining() < SectorSize() || !volume.Transfers().Accepts(buffer))
             TransferPart(sector, offset, std::min(Remaining(), SectorSize() - offset));
         else
         {
