@@ -21,6 +21,10 @@ namespace validation
         uint64_t eraseRequests{};
         uint64_t sectorsErased{};
         uint64_t eraseNs{};
+
+        FlashCounts operator-(const FlashCounts& earlier) const;
+        FlashCounts operator+(const FlashCounts& other) const;
+        bool operator==(const FlashCounts& other) const = default;
     };
 
     struct FlashGuard
