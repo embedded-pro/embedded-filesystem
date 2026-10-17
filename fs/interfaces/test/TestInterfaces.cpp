@@ -19,6 +19,7 @@ TEST(FileSystemInterfaceTest, file_system_mock_implements_every_operation)
     EXPECT_CALL(mock, Rename(infra::BoundedConstString("/a"), infra::BoundedConstString("/b"), testing::_));
     EXPECT_CALL(mock, MakeDirectory(infra::BoundedConstString("/dir"), testing::_));
     EXPECT_CALL(mock, Usage(testing::_));
+    EXPECT_CALL(mock, Idle()).WillOnce(testing::Return(true));
 
     fileSystem.Mount([](fs::Result) {});
     fileSystem.Unmount([](fs::Result) {});
@@ -29,6 +30,7 @@ TEST(FileSystemInterfaceTest, file_system_mock_implements_every_operation)
     fileSystem.Rename("/a", "/b", [](fs::Result) {});
     fileSystem.MakeDirectory("/dir", [](fs::Result) {});
     fileSystem.Usage([](fs::Result, fs::VolumeUsage) {});
+    EXPECT_TRUE(fileSystem.Idle());
 }
 
 TEST(FileSystemInterfaceTest, file_mock_implements_every_operation)

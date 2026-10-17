@@ -40,6 +40,8 @@ namespace fs
         virtual void Rename(infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone) = 0;
         virtual void MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone) = 0;
         virtual void Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone) = 0;
+
+        virtual bool Idle() const = 0;
     };
 }
 

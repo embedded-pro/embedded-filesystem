@@ -139,6 +139,11 @@ namespace fs
         return queue;
     }
 
+    const OperationQueue& FatVolume::Queue() const
+    {
+        return queue;
+    }
+
     FatOperation& FatVolume::Operation()
     {
         return operation;
