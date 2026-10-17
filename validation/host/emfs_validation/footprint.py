@@ -87,7 +87,7 @@ def core_results(directory: Path) -> list[dict[str, Any]]:
 def parameters(core: str, toolchain: str, configuration: str) -> dict[str, Any]:
     device: dict[str, Any] = {"toolchain": toolchain, "configuration": configuration}
     if core.endswith(LINK_TIME_OPTIMIZATION):
-        device["linkTimeOptimization"] = True
+        device["linkTimeOptimization"] = "true"
     return device
 
 

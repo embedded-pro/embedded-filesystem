@@ -67,9 +67,17 @@ def test_a_core_built_with_link_time_optimization_says_so(tmp_path):
 
     report = fragment(tmp_path, "arm-none-eabi-gcc 15.2.1", "MinSizeRel")
 
-    expected = {"toolchain": "arm-none-eabi-gcc 15.2.1", "configuration": "MinSizeRel", "linkTimeOptimization": True}
+    expected = {"toolchain": "arm-none-eabi-gcc 15.2.1", "configuration": "MinSizeRel", "linkTimeOptimization": "true"}
     assert report["devices"]["cortex-m4-lto"] == expected
     assert "linkTimeOptimization" not in report["devices"]["cortex-m4"]
+
+
+def test_every_parameter_of_a_core_is_text_as_the_merge_of_the_metrics_reads_it(tmp_path):
+    write_reports(tmp_path, ("cortex-m4", "cortex-m4-lto"))
+
+    report = fragment(tmp_path, "arm-none-eabi-gcc 15.2.1", "MinSizeRel")
+
+    assert all(isinstance(value, str) for device in report["devices"].values() for value in device.values())
 
 
 def test_a_core_without_the_empty_image_is_an_error(tmp_path):
