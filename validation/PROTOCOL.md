@@ -87,6 +87,7 @@ EVT device id=<number> device=fmc kind=nor sectors=128 sectorSize=131072 pageSiz
 | `bench.program <device> size=<bytes> n=<count>` | `EVT bench`, then `OK` |
 | `bench.erase <device> n=<count>`                | `EVT bench`, then `OK` |
 | `bench.read <device> size=<bytes> n=<count>`    | `EVT bench`, then `OK` |
+| `dev.check <device>`                            | `OK` or `ERR failed`   |
 
 The benchmarks run on `qspi` and `fmc`, `n` times, from 1 to 1024, and measure every request on its own, from the request to its completion:
 
@@ -94,9 +95,12 @@ The benchmarks run on `qspi` and `fmc`, `n` times, from 1 to 1024, and measure e
 * `bench.erase` erases, fills with data and then erases again each of the first `n` sectors, and measures the last erase;
 * `bench.read` reads `size` bytes, from 1 to 65536, at consecutive addresses from the start of the device, and from the start again where the next read would not fit.
 
+`dev.check` checks the address and data lines of a device: it erases sector 0 and every sector at a power of two, programs a page that names the sector into each, reads them all back and erases them; a missing or stuck address line maps two of these sectors onto one, and a faulty data line changes what reads back, so either answers `ERR failed`.
+
 What they program is erased when they end, and they erase what the device held before.
 A device that is not present answers `ERR unsupported`, a count or a size out of range, or programs that do not fit on the device, `ERR range`, and a benchmark while one runs `ERR busy`.
 A request that does not complete within its guard answers `ERR timeout`, and the device stays busy until the request completes: a read 100 ms, a program 20 ms per page, and an erase 2 s per sector on `qspi` and 8 s on `fmc`.
+`hal::NorFlashStm` has limits of its own, 1 s for a page and 10 s for a sector, past which it aborts the firmware, so a request of `fmc` that never completes ends in a reset of the board.
 A benchmark that does not end within 30 minutes answers `ERR timeout` too.
 
 ```text

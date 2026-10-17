@@ -45,14 +45,14 @@ namespace validation
         void WriteBuffer(infra::ConstByteRange buffer, uint32_t address, infra::Function<void()> onDone) override
         {
             Log("P", address, buffer.size());
-            ram.WriteBuffer(buffer, address, [] {});
+            ram.WriteBuffer(buffer, address & addressMask, [] {});
             Complete(programDelay, onDone);
         }
 
         void ReadBuffer(infra::ByteRange buffer, uint32_t address, infra::Function<void()> onDone) override
         {
             Log("R", address, buffer.size());
-            ram.ReadBuffer(buffer, address, [] {});
+            ram.ReadBuffer(buffer, address & addressMask, [] {});
             auto delay = readDelay;
             if (!readDelays.empty())
             {
@@ -65,7 +65,11 @@ namespace validation
         void EraseSectors(uint32_t beginIndex, uint32_t endIndex, infra::Function<void()> onDone) override
         {
             Log("E", beginIndex, endIndex);
-            ram.EraseSectors(beginIndex, endIndex, [] {});
+            for (auto sector = beginIndex; sector != endIndex; ++sector)
+            {
+                auto aliased = ram.SectorOfAddress(ram.AddressOfSector(sector) & addressMask);
+                ram.EraseSectors(aliased, aliased + 1, [] {});
+            }
             Complete(eraseDelay, onDone);
         }
 
@@ -74,6 +78,7 @@ namespace validation
         infra::Duration readDelay{ std::chrono::microseconds(10) };
         infra::BoundedDeque<infra::Duration>::WithMaxSize<8> readDelays;
         infra::BoundedString::WithStorage<4096> log;
+        uint32_t addressMask{ 0xffffffff };
 
     private:
         void Log(const char* kind, uint32_t first, std::size_t second)

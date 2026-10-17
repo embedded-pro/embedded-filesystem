@@ -196,8 +196,9 @@ def model_parameters(parameters: dict[str, str]) -> dict[str, str]:
     if len(reads) >= 2 and reads[-1][1] > reads[0][1]:
         (smallest, smallest_ns), (largest, largest_ns) = reads[0], reads[-1]
         rate = (largest - smallest) * 1_000_000_000 // (largest_ns - smallest_ns)
-        model["measured.readBytesPerSecond"] = str(rate)
-        model["measured.readFixedNs"] = str(max(0, smallest_ns - smallest * 1_000_000_000 // rate))
+        if rate > 0:
+            model["measured.readBytesPerSecond"] = str(rate)
+            model["measured.readFixedNs"] = str(max(0, smallest_ns - smallest * 1_000_000_000 // rate))
     return model
 
 

@@ -14,10 +14,10 @@ namespace validation
     enum class BenchOutcome : uint8_t
     {
         done,
+        failed,
         timeout
     };
 
-    // The benchmarks of NOR flash of docs/Validation.md: each request is measured on its own, and the device is left erased
     class NorBench
     {
     public:
@@ -27,7 +27,7 @@ namespace validation
 
         static bool ProgramFits(const CountingFlash& flash, uint32_t size, uint32_t repetitions);
         static bool EraseFits(const CountingFlash& flash, uint32_t repetitions);
-        static bool ReadFits(const CountingFlash& flash, uint32_t size);
+        static bool ReadFits(const CountingFlash& flash, uint32_t size, uint32_t repetitions);
 
         NorBench(ResultLines& results, uint32_t clockHz);
         NorBench(const NorBench& other) = delete;
@@ -37,6 +37,7 @@ namespace validation
         void Program(CountingFlash& flash, infra::BoundedConstString device, uint32_t size, uint32_t repetitions, const infra::Function<void(BenchOutcome outcome)>& onDone);
         void Erase(CountingFlash& flash, infra::BoundedConstString device, uint32_t repetitions, const infra::Function<void(BenchOutcome outcome)>& onDone);
         void Read(CountingFlash& flash, infra::BoundedConstString device, uint32_t size, uint32_t repetitions, const infra::Function<void(BenchOutcome outcome)>& onDone);
+        void Check(CountingFlash& flash, const infra::Function<void(BenchOutcome outcome)>& onDone);
         bool Running() const;
 
     private:
@@ -46,6 +47,8 @@ namespace validation
         infra::Function<void()> Then(Step next);
         infra::Function<void()> Measured(Step next);
         void TimedOut();
+        void Stop();
+        void Finish(BenchOutcome outcome);
         void Report();
 
         void EraseForProgram();
@@ -55,6 +58,14 @@ namespace validation
         void FillNext();
         void NextSector();
         void ReadNext();
+
+        uint32_t CheckSector() const;
+        infra::ConstByteRange Tag(uint32_t sector);
+        void EraseForCheck();
+        void ProgramTag();
+        void ReadTag();
+        void CompareTag();
+        void EraseChecked();
 
     private:
         ResultLines& results;
@@ -76,6 +87,8 @@ namespace validation
         uint32_t slotBytes{ 0 };
         uint32_t slotsPerSector{ 0 };
         uint32_t fillOffset{ 0 };
+        uint32_t checkSectors{ 0 };
+        bool mismatch{ false };
         Samples::WithCapacity<maximumRepetitions> samples;
         std::array<uint8_t, maximumProgramBytes> data{};
         std::array<uint8_t, maximumReadBytes> readBuffer{};

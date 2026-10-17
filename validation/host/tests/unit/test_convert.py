@@ -511,3 +511,20 @@ def test_a_device_reported_again_after_its_benchmarks_keeps_them(tmp_path):
     parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/qspi"]
 
     assert parameters["measured.sectorEraseNs"] == "45000000"
+
+
+def test_a_read_faster_than_its_rate_has_no_fixed_cost(tmp_path):
+    lines = [QSPI, bench(2, "read", 256, 1000), bench(3, "read", 65536, 1306600)]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/qspi"]
+
+    assert parameters["measured.readBytesPerSecond"] == "50000000"
+    assert parameters["measured.readFixedNs"] == "0"
+
+
+def test_reads_slower_than_a_byte_per_second_give_no_rate(tmp_path):
+    lines = [QSPI, bench(2, "read", 1, 1000), bench(3, "read", 2, 2_000_000_000)]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/qspi"]
+
+    assert "measured.readBytesPerSecond" not in parameters

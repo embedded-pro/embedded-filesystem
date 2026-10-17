@@ -170,6 +170,29 @@ TEST_F(QuadSpiNorTest, a_volatile_configuration_that_does_not_take_the_dummy_cyc
     EXPECT_FALSE(nor.Present());
 }
 
+TEST_F(QuadSpiNorTest, a_volatile_configuration_with_the_default_or_the_same_dummy_cycles_is_kept)
+{
+    testing::InSequence sequence;
+    ExpectIdentification({ 0x20, 0xba, 0x20 });
+    ExpectVolatileConfiguration(0x0b);
+    Start(true);
+
+    ExpectIdentification({ 0x20, 0xba, 0x20 });
+    ExpectVolatileConfiguration(0xab);
+    Start(true);
+}
+
+TEST_F(QuadSpiNorTest, a_start_that_fails_after_one_that_succeeded_leaves_the_flash_absent)
+{
+    ExpectIdentification({ 0xef, 0x40, 0x19 });
+    Start(true);
+
+    ExpectIdentification({ 0xff, 0xff, 0xff });
+    Start(false);
+
+    EXPECT_FALSE(nor.Present());
+}
+
 TEST_F(QuadSpiNorTest, a_flash_of_another_maker_keeps_its_configuration)
 {
     ExpectIdentification({ 0xef, 0x40, 0x19 });

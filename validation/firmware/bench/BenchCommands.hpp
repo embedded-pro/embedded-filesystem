@@ -12,6 +12,7 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <limits>
 
 namespace validation
 {
@@ -43,6 +44,7 @@ namespace validation
         services::HilStatus Program(const services::HilArguments& arguments);
         services::HilStatus Erase(const services::HilArguments& arguments);
         services::HilStatus Read(const services::HilArguments& arguments);
+        services::HilStatus Check(const services::HilArguments& arguments);
 
         services::HilStatus Parse(const services::HilArguments& arguments, bool sized, Request& request) const;
         const NorBenchTarget* Find(infra::BoundedConstString name) const;
@@ -54,7 +56,7 @@ namespace validation
         NorBench& bench;
         infra::MemoryRange<const NorBenchTarget> targets;
         services::HilPendingOperation pending;
-        std::array<Command, 3> commands;
+        std::array<Command, 4> commands;
     };
 }
 

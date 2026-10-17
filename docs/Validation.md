@@ -168,6 +168,7 @@ A command that runs for minutes is a `services::HilPendingOperation` whose timeo
 | `bench.program <device> size=<bytes> n=<count>`                                     | Programs `size` bytes at `n` erased, page-aligned addresses                                    | `EVT bench`, `OK`                              |
 | `bench.erase <device> n=<count>`                                                    | Erases `n` sectors                                                                             | `EVT bench`, `OK`                              |
 | `bench.read <device> size=<bytes> n=<count>`                                        | Reads `size` bytes `n` times                                                                   | `EVT bench`, `OK`                              |
+| `dev.check <device>`                                                                | Checks the address and data lines of a NOR device                                              | `OK` or `ERR failed`                           |
 | `bench.blocks <device> <read\|write> blocks=<count> n=<count>`                      | Reads or writes `n` requests of `blocks` consecutive blocks                                    | `EVT bench`, `OK`                              |
 | `bench.units <device> units=<count> n=<count>`                                      | Writes one block into each of `units` allocation units in turn, `n` rounds                     | `EVT bench`, `OK`                              |
 | `bench.flush <device> n=<count>`, `bench.discard <device> blocks=<count> n=<count>` | Flushes or discards `n` times                                                                  | `EVT bench`, `OK`                              |
@@ -229,6 +230,7 @@ The benchmarks measure each parameter of a model on its own, on the volume of th
 
 Each benchmark keeps the duration of every repetition, at most 1024, in a fixed array, and reports their minimum, median, 99th percentile, maximum and mean.
 A program is measured at the start of a slot of whole pages in a sector erased before, and an erase on a sector filled with data, as the volume leaves it; `PROTOCOL.md` describes the commands.
+Before them, `dev.check` programs a page naming its sector into sector 0 and every sector at a power of two and reads them back, which fails if an address line, such as A20 to A22 of the parallel NOR, does not reach the chip.
 Every request goes through the counting device of the device, whose guard ends a benchmark that a request outlasts with `ERR timeout`: 100 ms for a read, 20 ms per page programmed, and per sector erased 2 s on `qspi` and 8 s on `fmc`, below the 10.7 s after which the cycle counter wraps.
 
 ### Workloads

@@ -151,6 +151,46 @@ TEST_F(NorBenchTest, a_request_outlasting_its_guard_before_the_measured_requests
     EXPECT_EQ("E0,1 ", Log());
 }
 
+TEST_F(NorBenchTest, a_check_programs_a_tag_into_sector_0_and_every_sector_at_a_power_of_two_reads_them_back_and_erases_them)
+{
+    bench.Check(flash, Done());
+    Await();
+
+    EXPECT_EQ("E0,1 P0,64 E1,2 P256,64 E2,3 P512,64 E4,5 P1024,64 R0,64 R256,64 R512,64 R1024,64 E0,1 E1,2 E2,3 E4,5 ", Log());
+    EXPECT_EQ("", Output());
+    EXPECT_TRUE(Erased());
+}
+
+TEST_F(NorBenchTest, a_check_fails_on_a_device_whose_highest_address_line_is_missing)
+{
+    timed.addressMask = 1023;
+
+    bench.Check(flash, Done());
+    Await(validation::BenchOutcome::failed);
+
+    EXPECT_TRUE(Erased());
+}
+
+TEST_F(NorBenchTest, a_check_fails_on_a_device_with_a_missing_address_line_below_the_highest)
+{
+    timed.addressMask = 0xfffffeff;
+
+    bench.Check(flash, Done());
+    Await(validation::BenchOutcome::failed);
+}
+
+TEST_F(NorBenchTest, the_end_of_a_benchmark_leaves_a_later_guard_without_action)
+{
+    validation::CountingFlash guarded{ timed, 64, cycles, validation::FakeCycleCounter::clockHz, { 50us, 1s, 1s } };
+    bench.Read(guarded, "ram", 16, 1, Done());
+    Await();
+
+    timed.readDelay = 100us;
+    std::array<uint8_t, 4> buffer{};
+    guarded.ReadBuffer(infra::MakeRange(buffer), 0, [] {});
+    ForwardTime(1s);
+}
+
 TEST_F(NorBenchTest, tells_whether_a_benchmark_fits_on_the_device)
 {
     EXPECT_TRUE(validation::NorBench::ProgramFits(flash, 16, 32));
@@ -159,10 +199,14 @@ TEST_F(NorBenchTest, tells_whether_a_benchmark_fits_on_the_device)
     EXPECT_FALSE(validation::NorBench::ProgramFits(flash, 257, 1));
     EXPECT_FALSE(validation::NorBench::ProgramFits(flash, 0, 1));
 
+    EXPECT_FALSE(validation::NorBench::ProgramFits(flash, 16, 0));
+
     EXPECT_TRUE(validation::NorBench::EraseFits(flash, 8));
     EXPECT_FALSE(validation::NorBench::EraseFits(flash, 9));
+    EXPECT_FALSE(validation::NorBench::EraseFits(flash, 0));
 
-    EXPECT_TRUE(validation::NorBench::ReadFits(flash, 2048));
-    EXPECT_FALSE(validation::NorBench::ReadFits(flash, 2049));
-    EXPECT_FALSE(validation::NorBench::ReadFits(flash, 0));
+    EXPECT_TRUE(validation::NorBench::ReadFits(flash, 2048, 1024));
+    EXPECT_FALSE(validation::NorBench::ReadFits(flash, 2049, 1));
+    EXPECT_FALSE(validation::NorBench::ReadFits(flash, 0, 1));
+    EXPECT_FALSE(validation::NorBench::ReadFits(flash, 16, 1025));
 }

@@ -185,3 +185,23 @@ TEST_F(CountingFlashTest, a_timeout_without_an_action_is_only_ignored)
     ForwardTime(1s);
     Complete();
 }
+
+TEST_F(CountingFlashTest, a_flash_that_completes_within_the_call_can_be_asked_again_from_the_completion)
+{
+    EXPECT_CALL(flash, ReadBuffer(testing::_, testing::_, testing::_)).Times(2).WillRepeatedly([](infra::ByteRange, uint32_t, const infra::Function<void()>& onDone)
+        {
+            onDone();
+        });
+
+    EXPECT_CALL(done, callback()).Times(2);
+    counting.ReadBuffer(infra::MakeRange(buffer), 0, [this]
+        {
+            done.callback();
+            EXPECT_FALSE(counting.Busy());
+            counting.ReadBuffer(infra::MakeRange(buffer), 64, Done());
+        });
+
+    EXPECT_FALSE(counting.Busy());
+    EXPECT_EQ(2, counting.Counts().readRequests);
+    EXPECT_EQ(0, counting.Counts().readNs);
+}

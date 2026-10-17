@@ -230,7 +230,10 @@ def test_bench_prints_a_bench_record(terminal, line, op, size):
         ("bench.read sd size=4 n=1", "unsupported"),
         ("bench.read ramflash size=4 n=1", "unsupported"),
         ("bench.program qspi size=4097 n=1", "range"),
-        ("bench.program fmc size=1 n=263000", "range"),
+        ("bench.read qspi size=x n=0", "range"),
+        ("bench.read qspi size=0x100 n=1", None),
+        ("bench.read qspi size=99999999999 n=1", "usage"),
+        ("bench.read qspi size=4 n=1 n=2000", None),
         ("bench.program qspi size=256 n=1024", None),
         ("bench.erase fmc n=129", "range"),
         ("bench.read qspi size=65537 n=1", "range"),
@@ -255,3 +258,17 @@ def test_bench_on_a_device_the_board_does_not_have_is_unsupported():
         terminal.command("bench.erase fmc n=1")
 
     assert error.value.reason == "unsupported"
+
+
+@pytest.mark.parametrize(
+    ("line", "reason"),
+    [("dev.check qspi", None), ("dev.check", "usage"), ("dev.check qspi fmc", "usage"), ("dev.check ramflash", "unsupported")],
+)
+def test_dev_check_checks_a_nor_device_of_the_board(terminal, line, reason):
+    if reason is None:
+        assert terminal.command(line).ok
+        return
+    with pytest.raises(FirmwareError) as error:
+        terminal.command(line)
+
+    assert error.value.reason == reason

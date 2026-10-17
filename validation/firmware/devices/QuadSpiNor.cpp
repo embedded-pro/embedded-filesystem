@@ -30,6 +30,8 @@ namespace validation
     {
         this->geometry = &geometry;
         this->onDone = onDone;
+        region.reset();
+        flash.reset();
         spi.ReceiveData(Command(commandReadJedecId), infra::MakeRange(identification), hal::QuadSpi::Lines::SingleSpeed(), [this]
             {
                 Identified();
@@ -145,9 +147,15 @@ namespace validation
         return static_cast<uint8_t>((volatileConfiguration[0] & dummyCyclesMask) >> dummyCyclesShift);
     }
 
-    hal::Flash& QuadSpiNor::Region() const
+    hal::Flash& QuadSpiNor::Region()
     {
         really_assert(region.has_value());
-        return const_cast<services::FlashRegion&>(*region);
+        return *region;
+    }
+
+    const hal::Flash& QuadSpiNor::Region() const
+    {
+        really_assert(region.has_value());
+        return *region;
     }
 }

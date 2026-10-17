@@ -51,6 +51,12 @@ def describes_device(terminal, device):
     assert int(values["clockHz"]) > 0
 
 
+@then(parsers.parse("the address lines and the data lines of {device} check out"))
+def checks_device(terminal, device):
+    response = terminal.command(f"dev.check {device}", timeout=BENCH_TIMEOUT, check=False)
+    assert response.ok, response.raw
+
+
 @when(parsers.parse("the programs, erases and reads of {device} are benchmarked"))
 def benchmark(terminal, context, device):
     terminal.drain_events("device")

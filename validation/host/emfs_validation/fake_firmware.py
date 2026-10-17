@@ -35,6 +35,16 @@ CYCLE_SUBJECTS = {
 }
 
 
+def parse_number(text: str) -> int | None:
+    """A number as the firmware parses it: decimal, or hexadecimal after 0x, of at most 32 bits."""
+    base, digits = (16, text[2:]) if len(text) > 2 and text[:2] in ("0x", "0X") else (10, text)
+    allowed = "0123456789abcdefABCDEF"[: 22 if base == 16 else 10]
+    if not digits or any(digit not in allowed for digit in digits):
+        return None
+    value = int(digits, base)
+    return value if value <= 0xFFFFFFFF else None
+
+
 class FakeFirmware:
     def __init__(self, board: Board, uid: str = "00112233445566778899aabb", commit: str = "fake", cortex_m4_stopped: bool = True) -> None:
         self.board = board
@@ -102,6 +112,8 @@ class FakeFirmware:
             return self._device_info(arguments)
         if name in BENCH_KEYS:
             return self._bench(name, arguments)
+        if name == "dev.check":
+            return self._check(arguments)
         return "ERR usage"
 
     @staticmethod
@@ -151,13 +163,21 @@ class FakeFirmware:
 
     def _bench(self, name: str, arguments: list[str]) -> str:
         positional = [argument for argument in arguments if "=" not in argument]
-        keys = dict(argument.split("=", 1) for argument in arguments if "=" in argument)
-        if len(positional) != 1 or keys.keys() != BENCH_KEYS[name] or not all(value.isdigit() for value in keys.values()):
+        keys: dict[str, str] = {}
+        for argument in arguments:
+            if "=" in argument:
+                key, value = argument.split("=", 1)
+                keys.setdefault(key, value)
+        if len(positional) != 1 or keys.keys() != BENCH_KEYS[name]:
             return "ERR usage"
-        repetitions = int(keys["n"])
-        size = int(keys.get("size", "0"))
+        repetitions = parse_number(keys["n"])
+        if repetitions is None:
+            return "ERR usage"
         if not 1 <= repetitions <= MAXIMUM_BENCH_REPETITIONS:
             return "ERR range"
+        size = parse_number(keys.get("size", "0"))
+        if size is None:
+            return "ERR usage"
         device = positional[0]
         if device not in NOR_DEVICES or device not in self.board.devices:
             return "ERR unsupported"
@@ -173,6 +193,13 @@ class FakeFirmware:
             f"device={device} op={operation} size={size} n={repetitions} minNs={median - 1000} medianNs={median} "
             f"p99Ns={median + 5000} maxNs={median + 10000} meanNs={median + 500}",
         )
+        return "OK"
+
+    def _check(self, arguments: list[str]) -> str:
+        if len(arguments) != 1 or "=" in arguments[0]:
+            return "ERR usage"
+        if arguments[0] not in NOR_DEVICES or arguments[0] not in self.board.devices:
+            return "ERR unsupported"
         return "OK"
 
     @staticmethod

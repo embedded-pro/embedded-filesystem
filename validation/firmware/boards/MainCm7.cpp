@@ -73,6 +73,7 @@ namespace
 
     infra::BoundedConstString Hex(infra::BoundedString& text, uint32_t value, std::size_t digits)
     {
+        text.clear();
         infra::StringOutputStream stream{ text };
         stream << infra::hex << infra::Width(digits, '0') << value;
         return text;

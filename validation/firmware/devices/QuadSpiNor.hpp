@@ -13,7 +13,6 @@
 
 namespace validation
 {
-    // The first sectors of a QSPI NOR flash, set up as the demos of hal-st set it up once its SFDP geometry is read
     class QuadSpiNor
         : public hal::Flash
     {
@@ -44,7 +43,8 @@ namespace validation
         void Finish(bool present);
         bool Answers() const;
         uint8_t ConfiguredDummyCycles() const;
-        hal::Flash& Region() const;
+        hal::Flash& Region();
+        const hal::Flash& Region() const;
 
     private:
         hal::QuadSpi& spi;

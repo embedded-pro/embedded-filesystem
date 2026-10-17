@@ -140,3 +140,35 @@ TEST_F(BenchCommandsTest, a_benchmark_that_outlasts_the_timeout_answers_timeout_
     EXPECT_THAT(output, testing::HasSubstr("EVT bench id=1 device=ram op=erase"));
     EXPECT_THAT(output, testing::Not(testing::HasSubstr("OK")));
 }
+
+TEST_F(BenchCommandsTest, check_answers_ok_on_a_device_whose_tags_read_back)
+{
+    Execute("dev.check ram");
+    ForwardTime(10s);
+
+    EXPECT_EQ("\r\nOK\r\n", Output());
+}
+
+TEST_F(BenchCommandsTest, check_answers_failed_on_a_device_with_a_missing_address_line)
+{
+    timed.addressMask = 1023;
+
+    Execute("dev.check ram");
+    ForwardTime(10s);
+
+    EXPECT_EQ("\r\nERR failed\r\n", Output());
+}
+
+TEST_F(BenchCommandsTest, check_takes_one_present_device_and_waits_for_a_running_benchmark)
+{
+    Execute("dev.check");
+    EXPECT_EQ("ERR usage\r\n", Output());
+
+    Execute("dev.check absent");
+    EXPECT_EQ("ERR unsupported\r\n", Output());
+
+    Execute("bench.read ram size=16 n=1");
+    Execute("dev.check ram");
+    EXPECT_EQ("ERR busy\r\n", Output());
+    ForwardTime(10s);
+}

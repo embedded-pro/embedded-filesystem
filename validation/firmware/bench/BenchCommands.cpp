@@ -12,6 +12,7 @@ namespace validation
               services::HilBind<BenchCommands, &BenchCommands::Program>("bench.program", "<device> size=<bytes> n=<count>", *this, context.response),
               services::HilBind<BenchCommands, &BenchCommands::Erase>("bench.erase", "<device> n=<count>", *this, context.response),
               services::HilBind<BenchCommands, &BenchCommands::Read>("bench.read", "<device> size=<bytes> n=<count>", *this, context.response),
+              services::HilBind<BenchCommands, &BenchCommands::Check>("dev.check", "<device>", *this, context.response),
           } }
     {}
 
@@ -50,12 +51,28 @@ namespace validation
     {
         Request request{};
         auto status = Parse(arguments, true, request);
-        if (status == services::HilStatus::done && !NorBench::ReadFits(*request.flash, request.size))
+        if (status == services::HilStatus::done && !NorBench::ReadFits(*request.flash, request.size, request.repetitions))
             status = services::HilStatus::range;
         if (status != services::HilStatus::done)
             return status;
 
         bench.Read(*request.flash, request.device, request.size, request.repetitions, Start());
+        return services::HilStatus::done;
+    }
+
+    services::HilStatus BenchCommands::Check(const services::HilArguments& arguments)
+    {
+        if (!arguments.Shape(1, 1, {}))
+            return services::HilStatus::usage;
+
+        const auto* target = Find(arguments.Positional(0));
+        if (target == nullptr)
+            return services::HilStatus::unsupported;
+
+        if (pending.Busy() || bench.Running())
+            return services::HilStatus::busy;
+
+        bench.Check(target->flash, Start());
         return services::HilStatus::done;
     }
 
@@ -69,7 +86,7 @@ namespace validation
 
         auto status = services::HilStatus::done;
         arguments.Number("n", request.repetitions, 1, NorBench::maximumRepetitions, status);
-        arguments.Number("size", request.size, 0, 0xffffffff, status);
+        arguments.Number("size", request.size, 0, std::numeric_limits<uint32_t>::max(), status);
         if (status != services::HilStatus::done)
             return status;
 
@@ -110,6 +127,8 @@ namespace validation
 
         if (outcome == BenchOutcome::done)
             context.response.Ok();
+        else if (outcome == BenchOutcome::failed)
+            context.response.Error(services::HilStatus::failed);
         else
             context.response.Error(services::HilStatus::timeout);
     }
