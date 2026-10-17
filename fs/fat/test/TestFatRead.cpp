@@ -1,3 +1,4 @@
+#include "fs/common/TransferAlignment.hpp"
 #include "fs/fat/FatTable.hpp"
 #include "fs/fat/test/FatFileSystemFixture.hpp"
 #include <array>
@@ -19,8 +20,8 @@ namespace
         : public FatFileSystemFixture
     {
     public:
-        explicit FatReadTest(uint32_t blocks = 16384)
-            : FatFileSystemFixture(blocks)
+        explicit FatReadTest(uint32_t blocks = 16384, const fs::FatConfig& volumeConfig = {})
+            : FatFileSystemFixture(blocks, ClusterSize(1), volumeConfig)
         {}
 
         void SetUp() override
@@ -58,6 +59,22 @@ namespace
         }
 
         std::array<uint8_t, 8192> buffer{};
+    };
+
+    class FatReadWithTransferAlignmentTest
+        : public FatReadTest
+    {
+    public:
+        FatReadWithTransferAlignmentTest()
+            : FatReadTest(16384, fs::FatConfig{ .transferAlignment = fs::bufferAlignment })
+        {}
+
+        infra::ByteRange At(std::size_t offset, std::size_t size)
+        {
+            return infra::Head(infra::DiscardHead(infra::MakeRange(aligned), offset), size);
+        }
+
+        alignas(fs::bufferAlignment) std::array<uint8_t, 2048 + fs::bufferAlignment> aligned{};
     };
 
     class FatReadOnFat32Test
@@ -290,4 +307,32 @@ TEST_F(FatReadOnFat32Test, reads_a_file_in_the_root_of_fat32)
     ExpectRead(*file, infra::MakeRange(buffer), fs::Result::success, 1300);
 
     EXPECT_TRUE(std::equal(contents.begin(), contents.end(), buffer.begin()));
+}
+
+TEST_F(FatReadWithTransferAlignmentTest, whole_sectors_go_directly_into_a_buffer_at_the_transfer_alignment)
+{
+    auto contents = Pattern<2048>();
+    builder->AddFile(0, "", "DATA    BIN", infra::MakeRange(contents));
+    auto file = ExpectOpen("/data.bin");
+    auto reads = device.ReadRequests();
+
+    ExpectRead(*file, At(fs::bufferAlignment, 2048), fs::Result::success, 2048);
+
+    EXPECT_EQ(reads + 2, device.ReadRequests());
+    EXPECT_TRUE(std::ranges::equal(contents, At(fs::bufferAlignment, 2048)));
+    EXPECT_LE(fs::bufferAlignment, device.BufferAlignment());
+}
+
+TEST_F(FatReadWithTransferAlignmentTest, whole_sectors_go_through_the_cache_into_a_buffer_off_the_transfer_alignment)
+{
+    auto contents = Pattern<2048>();
+    builder->AddFile(0, "", "DATA    BIN", infra::MakeRange(contents));
+    auto file = ExpectOpen("/data.bin");
+    auto reads = device.ReadRequests();
+
+    ExpectRead(*file, At(4, 2048), fs::Result::success, 2048);
+
+    EXPECT_EQ(reads + 1 + 4, device.ReadRequests());
+    EXPECT_TRUE(std::ranges::equal(contents, At(4, 2048)));
+    EXPECT_LE(fs::bufferAlignment, device.BufferAlignment());
 }

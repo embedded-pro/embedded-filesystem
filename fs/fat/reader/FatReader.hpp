@@ -4,6 +4,7 @@
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/HandlePool.hpp"
 #include "fs/common/Path.hpp"
+#include "fs/common/TransferAlignment.hpp"
 #include "fs/fat/FatLifecycle.hpp"
 #include "fs/fat/FatShortName.hpp"
 #include "fs/fat/reader/FatReaderDirectory.hpp"
@@ -54,7 +55,7 @@ namespace fs
         bool Idle() const override;
 
     protected:
-        FatReader(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const PathLimits& limits);
+        FatReader(hal::BlockDevice& device, infra::ByteRange sector, std::size_t transferAlignment, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const PathLimits& limits);
         FatReader(const FatReader& other) = delete;
         FatReader& operator=(const FatReader& other) = delete;
         ~FatReader() = default;
@@ -103,7 +104,7 @@ namespace fs
         template<std::size_t Completions, std::size_t NameBytes>
         struct FatReaderStorage
         {
-            std::array<uint8_t, 512> sectorStorage{};
+            alignas(bufferAlignment) std::array<uint8_t, 512> sectorStorage{};
             std::array<uint8_t, NameBytes> nameStorage{};
             DeferredCompletions::WithMaxSize<Completions> deferredStorage;
         };
@@ -117,8 +118,8 @@ namespace fs
         static_assert(Files > 0 && Directories > 0 && Limits.maxNameBytes >= ShortName::maxUtf8Bytes);
 
     public:
-        explicit WithStorage(hal::BlockDevice& device)
-            : FatReader(device, infra::MakeRange(this->sectorStorage), infra::MakeRange(this->nameStorage), NameReadingFor<Features>(), this->deferredStorage, Limits)
+        explicit WithStorage(hal::BlockDevice& device, std::size_t transferAlignment = 1)
+            : FatReader(device, infra::MakeRange(this->sectorStorage), transferAlignment, infra::MakeRange(this->nameStorage), NameReadingFor<Features>(), this->deferredStorage, Limits)
         {}
 
     private:

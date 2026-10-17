@@ -15,7 +15,7 @@ namespace fs
         , limits{ parts.nameBuffer.size(), config.maxPathBytes }
         , operations(parts.operations)
         , onMediaRemoved(onMediaRemoved)
-        , transfers(parts.barrier, parts.cache)
+        , transfers(parts.barrier, parts.cache, config.transferAlignment)
         , assembler(parts.nameBuffer)
         , reader(parts.cache, state.geometry, assembler)
         , walk(reader, state.geometry)

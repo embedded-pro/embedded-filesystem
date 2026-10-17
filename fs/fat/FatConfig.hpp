@@ -38,6 +38,7 @@ namespace fs
         infra::Duration idleDelay{ std::chrono::milliseconds(10) };
         bool discard{ true };
         uint32_t blocksPerAllocationUnit{ 0 };
+        std::size_t transferAlignment{ 1 };
         uint32_t timerServiceId{ infra::systemTimerServiceId };
     };
 }

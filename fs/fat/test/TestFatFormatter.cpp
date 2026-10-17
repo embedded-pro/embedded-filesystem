@@ -1,3 +1,4 @@
+#include "fs/common/TransferAlignment.hpp"
 #include "fs/fat/FatBootSector.hpp"
 #include "fs/fat/FatFormatter.hpp"
 #include "fs/fat/FatFsInfo.hpp"
@@ -361,4 +362,12 @@ TEST_F(FatFormatterTest, formats_again)
     ExpectDone();
 
     EXPECT_EQ(fs::FatType::fat12, Geometry().type);
+}
+
+TEST_F(FatFormatterTest, writes_from_a_buffer_aligned_for_a_driver_that_uses_dma)
+{
+    Format(formatter);
+    ExpectDone();
+
+    EXPECT_LE(fs::bufferAlignment, device.BufferAlignment());
 }

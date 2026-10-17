@@ -1,6 +1,7 @@
 #ifndef FS_FAT_FAT_FORMATTER_HPP
 #define FS_FAT_FAT_FORMATTER_HPP
 
+#include "fs/common/TransferAlignment.hpp"
 #include "fs/fat/FatFormatLayout.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
@@ -68,7 +69,7 @@ namespace fs
         template<std::size_t BufferSectors>
         struct FatFormatterStorage
         {
-            std::array<uint8_t, BufferSectors * 512> bufferStorage;
+            alignas(bufferAlignment) std::array<uint8_t, BufferSectors * 512> bufferStorage;
         };
     }
 

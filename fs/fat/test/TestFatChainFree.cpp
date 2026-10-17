@@ -29,7 +29,7 @@ namespace
         }
 
         fs::SectorCache::WithStorage<1> tinyCache{ barrier };
-        fs::DirectTransfers transfers{ barrier, tinyCache };
+        fs::DirectTransfers transfers{ barrier, tinyCache, 1 };
         fs::FatVolumeState state;
         fs::FatTableWriter writer{ tinyCache, state.geometry };
         fs::FatFreeSpaceScan freeSpace{ tinyCache, state, infra::MemoryRange<fs::FatReservation>() };
