@@ -113,6 +113,42 @@ EVT bench id=<number> device=<device> op=<program|erase|read> size=<bytes> n=<co
 | `size`                                          | The bytes of a program or a read, and the size of a sector for an erase                |
 | `minNs`, `medianNs`, `p99Ns`, `maxNs`, `meanNs` | Of the measured requests, with the nearest rank for the median and the 99th percentile |
 
+## Workloads
+
+| Command                                                         | Answer                                                         |
+|-----------------------------------------------------------------|----------------------------------------------------------------|
+| `fs.format <device>`                                            | `OK`, or `ERR failed`                                          |
+| `wl.run <device> <workload> [fill=<percent>] [scale=<divisor>]` | `EVT workload`, `EVT phase` per phase, `EVT window`, then `OK` |
+
+The workloads run on the NOR volume of `qspi` and of `fmc`, as `docs/Validation.md` describes:
+
+* `fs.format` formats the volume of the device with `fs::NorFileSystem::Format`, which erases the whole device;
+* `wl.run` runs `L1`, `L2`, `L3`, `L4`, `L6` or `L7` of `docs/Metrics.md`, formatting the volume first, with the sizes of the files divided by `scale`, from 1 to 1024, 16 by default; `L4` keeps its 200 files;
+* `fill`, from 0 to 99, fills the volume to a level before `L2`, `L3` and `L4`, as the host does; `L7` fills to 10, 50 and 90 % itself, and the other workloads take no fill.
+
+The volume is unmounted when a workload ends, so that no background work of the volume runs into a later benchmark.
+A device that is not present or a workload that is unknown answers `ERR unsupported`, a fill or a scale out of range, or a fill for a workload without one, `ERR range`, and a command while a workload runs `ERR busy`.
+A workload in which a call fails prints `EVT workload.failed` at its end and answers `ERR failed`; a request that does not complete within its guard, or a call that does not complete within 10 minutes, ends the workload with `EVT workload.failed` and `ERR timeout`, and the board is reset before the next one.
+A workload that does not end within 2 hours, and a format within 30 minutes, answers `ERR timeout` too.
+
+```text
+EVT workload id=<number> device=<device> subject=embedded-filesystem/nor workload=<workload> fill=<percent> scale=<divisor> ramBytes=<bytes>
+EVT phase id=<number> device=<device> subject=<subject> workload=<workload> phase=<phase> fill=<percent> ramBytes=<bytes> elapsedNs=<ns> <counts> <operations>
+EVT window id=<number> device=<device> subject=<subject> workload=L2 fill=<percent> log=<first|second> appends=<count> <counts>
+EVT workload.failed id=<number> device=<device> subject=<subject> workload=<workload> fill=<percent> phase=<phase> op=<operation> result=<result>
+```
+
+| Key                                                                                                                                                      | Value                                                                                                                                                                                                                                                                                  |
+|----------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `phase`                                                                                                                                                  | The phase as the host names it, with commas for spaces, such as `L1,65536,64` or `L2,second,log`; the volume is filled in the phase `fill`                                                                                                                                             |
+| `elapsedNs`                                                                                                                                              | From the start of the phase to its end                                                                                                                                                                                                                                                 |
+| `readRequests`, `bytesRead`, `readNs`, `programRequests`, `bytesProgrammed`, `pagesProgrammed`, `programNs`, `eraseRequests`, `sectorsErased`, `eraseNs` | The counts of the counting device in the phase or the window, and the time its requests took                                                                                                                                                                                           |
+| `allocatedSectors`, `erasedBlocks`, `checkpoints`, `movedBlocks`                                                                                         | The counts of the volume in the phase or the window, from `Counters()` of the NOR volume, across mounts                                                                                                                                                                                |
+| `<operation>.calls`, `<operation>.userBytes`, `<operation>.latencyNs`, `<operation>.maxNs`                                                               | For every operation called in the phase, from `format`, `mount`, `unmount`, `open`, `read`, `write`, `seek`, `sync`, `close`, `expectSize`, `remove`, `makeDirectory`, `list`, `usage` and `idle`: the calls, the bytes they wrote or read, the sum of their latencies and the longest |
+| `<operation>.histogram`                                                                                                                                  | The latencies of the calls as pairs of a bucket and a count; bucket `b` holds durations from `(4 + b % 4) << (b / 4 - 1)` ns, four per octave, and buckets 0 to 3 hold 0 to 3 ns                                                                                                       |
+| `log`, `appends`                                                                                                                                         | The window of W-2: the calls of the first log after a checkpoint until the fourth checkpoint after it, at its end, or of the second log from its first checkpoint once it holds 4 KiB, and the appends among them                                                                      |
+| `op`, `result`                                                                                                                                           | The operation of the first call that failed and what it returned, or `timeout`                                                                                                                                                                                                         |
+
 ## Processor cycles
 
 | Command                            | Answer                                                                                                                            |

@@ -66,13 +66,13 @@ Without `--port`, the scenarios skip; with `--fake` instead, they run against `e
 
 The session stops with exit code 3 when the board does not answer `ping`, and refuses a `--results` directory that already holds a run.
 
-| Scenarios        | What they do on the board                                                                                                                                                                                                  | Time                      |
-|------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------|
-| `boot.feature`   | Resets the board and checks the boot event, `ping`, `info` and `firmware.info`                                                                                                                                             | Seconds                   |
-| `nor.feature`    | Lists, describes and checks the NOR devices, and runs their benchmarks: erases sectors across the first 16 MiB of the QSPI flash and across the parallel NOR of the STM32H757I-EVAL, which keep nothing those sectors held | About a minute per device |
-| `cycles.feature` | Runs F-2 for the four subjects on the RAM devices in the SDRAM, which it overwrites; nothing else of the board is written                                                                                                  | Up to a few minutes       |
+| Scenarios        | What they do on the board                                                                                                                                                                                               | Time                        |
+|------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------|
+| `boot.feature`   | Resets the board and checks the boot event, `ping`, `info` and `firmware.info`                                                                                                                                          | Seconds                     |
+| `nor.feature`    | Lists, describes and checks the NOR devices, runs their benchmarks and runs the workloads on them: formats the first 16 MiB of the QSPI flash and the parallel NOR of the STM32H757I-EVAL, which keep nothing they held | One to two hours per device |
+| `cycles.feature` | Runs F-2 for the four subjects on the RAM devices in the SDRAM, which it overwrites; nothing else of the board is written                                                                                               | Up to a few minutes         |
 
-`-k cycles` runs F-2 alone, `-k nor` the NOR devices alone, and `-k boot` the boot scenarios alone.
+`-k cycles` runs F-2 alone, `-k nor` the NOR devices alone, `-k workloads` their workloads alone, and `-k boot` the boot scenarios alone.
 On a board fresh from ST, the first 16 MiB of the QSPI flash hold the images of its demonstration, which `nor.feature` breaks.
 F-2 counts cycles with the cycle counter of the Cortex-M7, which the firmware unlocks, so the run needs no debugger; a debugger that keeps the clocks of the core running in sleep changes nothing, as [docs/Validation.md](../docs/Validation.md#processor-cycles) explains.
 
