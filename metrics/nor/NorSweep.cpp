@@ -13,6 +13,7 @@ namespace metrics
         constexpr NorTiming qspiMaximum{ 3ms, 400ms, 50'000'000 };
         constexpr NorTiming internalTiming{ 8us, 20ms, 100'000'000 };
         constexpr fs::NorOperations operations = fs::NorOperationsFor<fs::NorFeatures{}>();
+        constexpr fs::NorOperations liteOperations{};
 
         void Wait(SweepContext<hal::Flash>& context, const bool& done)
         {
@@ -27,6 +28,11 @@ namespace metrics
     const NorModel internalSweep96k{ "internal-96k", 48, 2048, 16, 16, internalTiming, internalTiming };
     const NorModel norSweep128kTwoSectors{ "nor-128k-two-sector-blocks", 64, 2048, 256, 1, qspiTypical, qspiMaximum };
 
+    const char* SubjectName(NorSweepSubject subject)
+    {
+        return subject == NorSweepSubject::nor ? "embedded-filesystem/nor" : "embedded-filesystem/nor-lite";
+    }
+
     fs::NorConfig SweepConfig(const NorModel& model)
     {
         if (&model == &internalSweep96k)
@@ -38,15 +44,17 @@ namespace metrics
         return norSweep128kConfig;
     }
 
-    std::size_t SweepRamBytes(const NorModel& model)
+    std::size_t SweepRamBytes(const NorModel& model, NorSweepSubject subject)
     {
+        auto lite = subject == NorSweepSubject::norLite;
+
         if (&model == &internalSweep96k)
-            return sizeof(fs::NorFileSystem::WithStorage<internalSweep96kConfig, 1>);
+            return lite ? sizeof(fs::NorLite::WithStorage<internalSweep96kConfig, 1>) : sizeof(fs::NorFileSystem::WithStorage<internalSweep96kConfig, 1>);
 
         if (&model == &norSweep128kTwoSectors)
-            return sizeof(fs::NorFileSystem::WithStorage<norSweep128kTwoSectorsConfig, 1>);
+            return lite ? sizeof(fs::NorLite::WithStorage<norSweep128kTwoSectorsConfig, 1>) : sizeof(fs::NorFileSystem::WithStorage<norSweep128kTwoSectorsConfig, 1>);
 
-        return sizeof(fs::NorFileSystem::WithStorage<norSweep128kConfig, 1>);
+        return lite ? sizeof(fs::NorLite::WithStorage<norSweep128kConfig, 1>) : sizeof(fs::NorFileSystem::WithStorage<norSweep128kConfig, 1>);
     }
 
     NorImageSuperblock SuperblockOf(const NorModel& model, const fs::NorConfig& config)
@@ -126,7 +134,7 @@ namespace metrics
         {}
     }
 
-    NorSweepVolume::FileSystem::FileSystem(hal::Flash& flash, const fs::NorConfig& config)
+    NorSweepVolume::FullFileSystem::FullFileSystem(hal::Flash& flash, const fs::NorConfig& config)
         : NorSweepVolumeStorage(config)
         , fs::NorFileSystem(fs::NorVolumeParts{ flash, deferred, infra::MakeRange(blockStates), infra::MakeRange(eraseCounts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(nodeSlots), operations }, config)
     {
@@ -138,47 +146,37 @@ namespace metrics
         AttachPathSlots(infra::MakeRange(pathSlots));
     }
 
-    bool NorSweepVolume::FileSystem::JournalMoreThanHalfFull()
-    {
-        return Volume().Journal().IsMoreThanHalfFull();
-    }
-
-    std::size_t NorSweepVolume::FileSystem::ModifiedNodes()
-    {
-        return Volume().Cache().ModifiedNodes();
-    }
-
-    bool NorSweepVolume::FileSystem::RecordsStartOutsideTheCheckpointBlock()
-    {
-        const auto& state = Volume().State();
-        return state.checkpoint.recordsBlock != state.checkpointBlock;
-    }
-
-    bool NorSweepVolume::FileSystem::CollectionDueForSpace()
-    {
-        return Volume().Collector().DueForSpace();
-    }
-
-    infra::SharedPtr<fs::NorDirectory> NorSweepVolume::FileSystem::AllocateDirectory()
+    infra::SharedPtr<fs::NorDirectory> NorSweepVolume::FullFileSystem::AllocateDirectory()
     {
         return directories.Allocate();
     }
 
-    infra::SharedPtr<fs::NorFile> NorSweepVolume::FileSystem::AllocateFile()
+    infra::SharedPtr<fs::NorFile> NorSweepVolume::FullFileSystem::AllocateFile()
     {
         return files.Allocate();
     }
 
-    NorSweepVolume::NorSweepVolume(SweepContext<hal::Flash>& context, const fs::NorConfig& config)
+    NorSweepVolume::LiteFileSystem::LiteFileSystem(hal::Flash& flash, const fs::NorConfig& config)
+        : NorSweepVolumeStorage(config)
+        , fs::NorLite(fs::NorVolumeParts{ flash, deferred, infra::MakeRange(blockStates), infra::MakeRange(eraseCounts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(nodeSlots), liteOperations }, config)
+    {}
+
+    infra::SharedPtr<fs::NorFile> NorSweepVolume::LiteFileSystem::AllocateFile()
+    {
+        return files.Allocate();
+    }
+
+    NorSweepVolume::NorSweepVolume(SweepContext<hal::Flash>& context, const fs::NorConfig& config, NorSweepSubject subject)
         : context(context)
-        , fileSystem(context.device, config)
+        , fileSystem(subject == NorSweepSubject::nor ? static_cast<fs::FileSystem&>(full.emplace(context.device, config)) : lite.emplace(context.device, config))
+        , volume(full.has_value() ? full->Volume() : lite->Volume())
     {}
 
     fs::Result NorSweepVolume::Format()
     {
         return Run([this](const infra::Function<void(fs::Result)>& onDone)
             {
-                fileSystem.Format(onDone);
+                full->Format(onDone);
             });
     }
 
@@ -229,27 +227,28 @@ namespace metrics
 
     bool NorSweepVolume::JournalMoreThanHalfFull()
     {
-        return fileSystem.JournalMoreThanHalfFull();
+        return volume.Journal().IsMoreThanHalfFull();
     }
 
     std::size_t NorSweepVolume::ModifiedNodes()
     {
-        return fileSystem.ModifiedNodes();
+        return volume.Cache().ModifiedNodes();
     }
 
     bool NorSweepVolume::RecordsStartOutsideTheCheckpointBlock()
     {
-        return fileSystem.RecordsStartOutsideTheCheckpointBlock();
+        const auto& state = volume.State();
+        return state.checkpoint.recordsBlock != state.checkpointBlock;
     }
 
     bool NorSweepVolume::CollectionDueForSpace()
     {
-        return fileSystem.CollectionDueForSpace();
+        return volume.Collector().DueForSpace();
     }
 
     fs::NorCounters NorSweepVolume::Counters() const
     {
-        return fileSystem.Counters();
+        return volume.Counters();
     }
 
     std::optional<fs::EntryType> NorSweepVolume::TypeOf(const std::string& path)

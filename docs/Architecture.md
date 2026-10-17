@@ -15,8 +15,8 @@ The on-disk designs are described in [Fat.md](Fat.md) and [NorFilesystem.md](Nor
             fs::FileSystem / fs::File / fs::Directory
                      (fs/interfaces)
                  /                          \
- fs::FatFileSystem, fs::FatReader,     fs::NorFileSystem
- fs::FatLite                                  (fs/nor)
+ fs::FatFileSystem, fs::FatReader,     fs::NorFileSystem, fs::NorLite
+ fs::FatLite                           (fs/nor, fs/nor/lite)
  (fs/fat, fs/fat/reader, fs/fat/lite)
                  \                          /
              shared building blocks (fs/common)
@@ -36,6 +36,7 @@ The on-disk designs are described in [Fat.md](Fat.md) and [NorFilesystem.md](Nor
 | `fs/fat/reader` | `fs.fat_reader` | `fs::FatReader`, a FAT volume that only reads, built from the parts of `fs.fat` that read                                      |
 | `fs/fat/lite`   | `fs.fat_lite`   | `fs::FatLite`, a FAT volume that writes files with one sector buffer, built from the parts of `fs.fat_reader` and `fs.fat`     |
 | `fs/nor`        | `fs.nor`        | The log-structured NOR filesystem, its garbage collection and its wear leveling                                                |
+| `fs/nor/lite`   | `fs.nor_lite`   | `fs::NorLite`, a NOR volume that creates, appends to and reads files, built from the parts of `fs.nor`                         |
 | `metrics`       | `metrics.*`     | Host-only device models, metered devices, workloads and baselines, see [Metrics.md](Metrics.md)                                |
 | `validation`    | `validation.*`  | Firmware for boards, the reference images of F-1 and the host package that runs the boards, see [Validation.md](Validation.md) |
 
@@ -377,7 +378,7 @@ fs::NorFileSystem::WithStorage<norConfig, 4> norVolume{ norFlash };
 
 For FAT, the template arguments are the number of open files and the number of sectors in the cache, followed by an optional `fs::FatLimits` with the other sizes and an optional `fs::FatFeatures` with the calls and the work the volume leaves out; `fs::FatConfig` holds the settings that need no storage, such as the allocation unit of the card and the timer service that gives the time of timestamps, as described in [Fat.md](Fat.md#configuration).
 `fs::FatReader::WithStorage<Files, Directories, Limits>` takes the number of open files and of open directory handles, and an optional `fs::PathLimits`, as described in [Fat.md](Fat.md#read-only-volume), and `fs::FatLite::WithStorage<Files, Directories, Limits>` the same, as described in [Fat.md](Fat.md#lite-volume).
-For NOR, they are the configuration, the number of open files and an optional `fs::NorFeatures`; the constructor takes the device and an optional idle delay, as described in [NorFilesystem.md](NorFilesystem.md#configuration).
+For NOR, they are the configuration, the number of open files and an optional `fs::NorFeatures`; the constructor takes the device and an optional idle delay, as described in [NorFilesystem.md](NorFilesystem.md#configuration), and `fs::NorLite::WithStorage<Config, Files>` takes the configuration and the number of open files, as described in [NorFilesystem.md](NorFilesystem.md#lite-volume).
 The block states and the erase-count table are sized by `maxBlocks`, the largest number of blocks the volume may span; mounting a device with more blocks fails with `Result::unsupported`.
 
 ## Testing

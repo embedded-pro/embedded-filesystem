@@ -24,6 +24,7 @@ IMAGES = {
     "fat_minimal": "embedded-filesystem/fat-minimal",
     "fat_lite": "embedded-filesystem/fat-lite",
     "nor_minimal": "embedded-filesystem/nor-minimal",
+    "nor_lite": "embedded-filesystem/nor-lite",
     "fatfs_default": "fatfs/default",
     "fatfs_tuned": "fatfs/tuned",
     "fatfs_minimal": "fatfs/minimal",

@@ -1,6 +1,7 @@
 #include "metrics/device/VirtualTimeEnvironment.hpp"
 #include "metrics/nor/NorSweep.hpp"
 #include "gtest/gtest.h"
+#include <cstdint>
 #include <ostream>
 #include <vector>
 
@@ -81,13 +82,45 @@ TEST_P(NorSweepTest, a_sweep_volume_makes_directories_and_tells_their_type)
     EXPECT_EQ(std::nullopt, volume.TypeOf("/b"));
 }
 
+TEST_P(NorSweepTest, a_lite_sweep_volume_reads_and_appends_to_what_the_full_one_wrote_and_makes_no_directories)
+{
+    auto config = metrics::SweepConfig(model);
+    {
+        metrics::NorSweepVolume full{ context, config };
+        full.Format();
+        full.Mount();
+        full.OpenFile("/f", fs::OpenMode::write);
+        full.Write({ 1, 2, 3 });
+        full.Close();
+        full.Unmount();
+    }
+
+    metrics::NorSweepVolume lite{ context, config, metrics::NorSweepSubject::norLite };
+    EXPECT_EQ(fs::Result::success, lite.Mount());
+    EXPECT_EQ(fs::Result::unsupported, lite.MakeDirectory("/a"));
+    EXPECT_EQ(fs::Result::success, lite.OpenFile("/f", fs::OpenMode::append));
+    EXPECT_EQ(fs::Result::success, lite.Write({ 4 }));
+    EXPECT_EQ(fs::Result::success, lite.Close());
+    EXPECT_EQ((std::vector<uint8_t>{ 1, 2, 3, 4 }), lite.ReadFile("/f"));
+    EXPECT_EQ(fs::Result::success, lite.Unmount());
+}
+
 INSTANTIATE_TEST_SUITE_P(Models, NorSweepTest, testing::Values(&metrics::norSweep128k, &metrics::internalSweep96k, &metrics::norSweep128kTwoSectors));
 
 TEST(NorSweepModelsTest, the_ram_of_a_model_is_that_of_its_volume_with_one_file)
 {
-    EXPECT_EQ(sizeof(fs::NorFileSystem::WithStorage<metrics::norSweep128kConfig, 1>), metrics::SweepRamBytes(metrics::norSweep128k));
-    EXPECT_EQ(sizeof(fs::NorFileSystem::WithStorage<metrics::internalSweep96kConfig, 1>), metrics::SweepRamBytes(metrics::internalSweep96k));
-    EXPECT_EQ(sizeof(fs::NorFileSystem::WithStorage<metrics::norSweep128kTwoSectorsConfig, 1>), metrics::SweepRamBytes(metrics::norSweep128kTwoSectors));
+    EXPECT_EQ(sizeof(fs::NorFileSystem::WithStorage<metrics::norSweep128kConfig, 1>), metrics::SweepRamBytes(metrics::norSweep128k, metrics::NorSweepSubject::nor));
+    EXPECT_EQ(sizeof(fs::NorFileSystem::WithStorage<metrics::internalSweep96kConfig, 1>), metrics::SweepRamBytes(metrics::internalSweep96k, metrics::NorSweepSubject::nor));
+    EXPECT_EQ(sizeof(fs::NorFileSystem::WithStorage<metrics::norSweep128kTwoSectorsConfig, 1>), metrics::SweepRamBytes(metrics::norSweep128kTwoSectors, metrics::NorSweepSubject::nor));
+    EXPECT_EQ(sizeof(fs::NorLite::WithStorage<metrics::norSweep128kConfig, 1>), metrics::SweepRamBytes(metrics::norSweep128k, metrics::NorSweepSubject::norLite));
+    EXPECT_EQ(sizeof(fs::NorLite::WithStorage<metrics::internalSweep96kConfig, 1>), metrics::SweepRamBytes(metrics::internalSweep96k, metrics::NorSweepSubject::norLite));
+    EXPECT_EQ(sizeof(fs::NorLite::WithStorage<metrics::norSweep128kTwoSectorsConfig, 1>), metrics::SweepRamBytes(metrics::norSweep128kTwoSectors, metrics::NorSweepSubject::norLite));
+}
+
+TEST(NorSweepModelsTest, each_subject_reports_under_its_own_name)
+{
+    EXPECT_STREQ("embedded-filesystem/nor", metrics::SubjectName(metrics::NorSweepSubject::nor));
+    EXPECT_STREQ("embedded-filesystem/nor-lite", metrics::SubjectName(metrics::NorSweepSubject::norLite));
 }
 
 TEST(NorSweepModelsTest, one_model_has_blocks_of_two_sectors)

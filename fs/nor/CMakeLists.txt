@@ -129,6 +129,7 @@ target_sources(fs.nor PRIVATE
     NorUnmount.hpp
     NorVolume.cpp
     NorVolume.hpp
+    NorVolumeMount.hpp
     NorVolumeState.cpp
     NorVolumeState.hpp
     NorWear.cpp
@@ -139,6 +140,7 @@ target_sources(fs.nor PRIVATE
     NorWrite.hpp
 )
 
+add_subdirectory(lite)
 add_subdirectory(test_doubles)
 
 if (EMFS_BUILD_TESTS)

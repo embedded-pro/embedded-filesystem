@@ -8,6 +8,7 @@ the cost of an operation must not depend on the size of the file or on how full 
 wear must be spread evenly even when most of the volume holds data that never changes,
 and every operation must be asynchronous.
 It also has to survive a power loss at any moment.
+`fs::NorLite` mounts the same volumes for products that only create, append to and read files, with fewer calls and a smaller image, as described under [Lite volume](#lite-volume).
 This document describes the on-flash format and the algorithms.
 
 ## Terms
@@ -582,6 +583,34 @@ A volume mounts whatever a volume with every feature wrote, so leaving a feature
 
 On the boards of [Validation.md](Validation.md), a volume runs on a region of 16 MiB of a QSPI NOR flash, with the `fs::NorConfig` above, which the NOR subject uses on `nor-qspi-16m`, and on a parallel NOR of 16 MiB with blocks of one 128 KiB sector, a program unit of 2 bytes and the write buffer of the chip as the page.
 
+## Lite volume
+
+`fs::NorLite`, in `fs/nor/lite`, is a NOR volume for a product that creates, appends to and reads files, such as a data logger, and needs the smallest image that writes NOR flash.
+It runs the operations of `fs::NorFileSystem` on the same `fs::NorVolume`, mounts with the same `fs::NorVolumeMount`, and makes the moves of static wear leveling with `fs::NorForegroundLeveling`, as a volume without `NorFeatures::background` does, so it keeps the format, the power-fail safety and the wear leveling of the full volume.
+It has:
+
+* `Mount` and `Unmount`;
+* `Open` in every mode of [Architecture.md](Architecture.md#open-modes), which creates a file that does not exist and empties a file that is opened for writing, and `Stat`;
+* `Read`, `Write` at the end of a file, `Seek`, `Sync` and `Close` on its files.
+
+It leaves out:
+
+* `Format`, so the flash is formatted before, by `fs::NorFileSystem` or `fs::NorFormatter`;
+* `MakeDirectory`, `Remove`, `Rename`, `OpenDirectory` and `Usage`, which complete with `unsupported` on a mounted volume, and with `notMounted` otherwise; it opens files in the directories that a full volume made;
+* `Truncate` and a `Write` before the end of a file, which complete with `unsupported`, as `NorFeatures::truncate` and `NorFeatures::overwrite` do;
+* the background work, as `NorFeatures::background` does, the directory handles and the slots for waiting calls on paths: an `Open` or a `Stat` while another one runs completes with `busy`.
+
+Since it removes nothing, a file gives its blocks back when it is opened for writing again.
+
+```cpp
+hal::Flash& norFlash = ...;
+fs::NorLite::WithStorage<norConfig, 2> lite{ norFlash };
+```
+
+The template arguments of `fs::NorLite::WithStorage<Config, Files>` are the configuration and the number of open files; `directories` and `pathOperations` of `fs::NorConfig` are not used.
+On a Cortex-M4, F-1 measures 60.7 KB of flash and 17.4 KB of RAM for `fs::NorLite::WithStorage` with the configuration of `nor-qspi-16m` and one file, against 63.2 KB and 17.6 KB for `fs::NorFileSystem` with every `fs::NorFeatures` left out and 15.7 KB and 0.4 KB for `littlefs/default`, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+Most of what is left is the code that every write needs, the journal, the checkpoints, the maps and the garbage collection, and most of the RAM is the tables and the node cache of [RAM use](#ram-use).
+
 ## Counters
 
 The volume counts, since it was mounted, the blocks it allocated, the sectors it erased, the checkpoints it wrote and the blocks static wear leveling moved, as 32-bit counters that `Counters()` returns without a device access.
@@ -602,4 +631,5 @@ The NOR filesystem is tested on `hal::FlashStub` from EmIL, which models NOR pro
 `fs::NorImageBuilder` arranges directories and files synchronously on an image before the operation under test; it changes the maps with the trees of `fs/nor` and writes them with a checkpoint, and the independent checker of `metrics/nor` checks the images it builds.
 The metrics harness adds wrappers that count operations per block and simulate the timing of a NOR device, and a wrapper that cuts power in the middle of a program or an erase.
 The metrics W-1 to W-6, R-2, R-4, WL-1 to WL-4 and P-1 cover the behaviour described above.
+`fs::NorLite` has tests of its own in `fs/nor/lite/test`, and the power-cut sweep runs its writes too.
 See [Testing.md](Testing.md) and [Metrics.md](Metrics.md).

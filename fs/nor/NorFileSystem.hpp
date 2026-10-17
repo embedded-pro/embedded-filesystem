@@ -17,6 +17,7 @@
 #include "fs/nor/NorPathSlot.hpp"
 #include "fs/nor/NorRecord.hpp"
 #include "fs/nor/NorVolume.hpp"
+#include "fs/nor/NorVolumeMount.hpp"
 #include "hal/interfaces/Flash.hpp"
 #include "infra/util/BoundedVector.hpp"
 #include "infra/util/MemoryRange.hpp"
@@ -33,6 +34,7 @@ namespace fs
 {
     class NorFileSystem
         : public FileSystem
+        , private NorVolumeMount<NorFileSystem>
     {
     public:
         template<NorConfig Config, std::size_t Files, NorFeatures Features = NorFeatures{}>
@@ -69,6 +71,8 @@ namespace fs
         void AttachPathSlots(infra::MemoryRange<NorPathSlot> slots);
 
     private:
+        friend class NorVolumeMount<NorFileSystem>;
+
         virtual infra::SharedPtr<NorDirectory> AllocateDirectory() = 0;
         virtual infra::SharedPtr<NorFile> AllocateFile() = 0;
 
@@ -84,9 +88,8 @@ namespace fs
         void BeginFormat();
         void StartFormat();
         void BeginMount();
-        void StartMount();
-        void Replay();
         void BeginUnmount();
+        void Mounted(Result result);
         void LifecycleOperationDone(Result result);
         void Entered(Result result);
         void DeferCompletion(infra::Function<void(Result result)>& onDone, Result result);
@@ -100,24 +103,11 @@ namespace fs
         infra::Function<void(Result result)> onMountDone;
         infra::Function<void(Result result)> onUnmountDone;
         infra::Function<void(Result result)> lifecycleDone;
-        std::optional<NorRecordPosition> replayCheckpointBefore;
         Result lifecycleResult{ Result::success };
     };
 
     namespace detail
     {
-        template<NorConfig Config, std::size_t Completions>
-        struct NorVolumeStorage
-        {
-            std::array<uint8_t, NorBlockStateBytes(Config.maxBlocks)> blockStateStorage{};
-            std::array<uint8_t, Config.maxBlocks> eraseCountStorage{};
-            std::array<uint8_t, NorNodeBlockBytes(Config.maxBlocks)> nodeBlockStorage{};
-            std::array<uint8_t, RoundUpTo(static_cast<uint32_t>(NorLargestRecordBytes(Config.inlineBytes, Config.maxNameBytes)), Config.programUnit)> journalStorage{};
-            std::array<uint8_t, Config.cachedNodes * Config.nodeSize> nodeStorage{};
-            std::array<NorNodeCache::Slot, Config.cachedNodes> nodeSlotStorage{};
-            DeferredCompletions::WithMaxSize<Completions> deferredStorage;
-        };
-
         template<class Operation, class Call>
         void StartNorOperation(NorVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished)
         {

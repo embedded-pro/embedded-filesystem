@@ -3,9 +3,12 @@
 
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/HandlePool.hpp"
+#include "fs/interfaces/FileSystem.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorConfig.hpp"
 #include "fs/nor/NorFileSystem.hpp"
+#include "fs/nor/NorVolume.hpp"
+#include "fs/nor/lite/NorLite.hpp"
 #include "hal/interfaces/Flash.hpp"
 #include "infra/util/BoundedVector.hpp"
 #include "metrics/device/DeviceModels.hpp"
@@ -27,8 +30,15 @@ namespace metrics
     constexpr fs::NorConfig internalSweep96kConfig{ .maxBlocks = 48, .programUnit = 16, .pageSize = 16, .cachedNodes = fs::norMinimumCachedNodes };
     constexpr fs::NorConfig norSweep128kTwoSectorsConfig{ .maxBlocks = 32, .sectorsPerBlock = 2, .cachedNodes = fs::norMinimumCachedNodes };
 
+    enum class NorSweepSubject : uint8_t
+    {
+        nor,
+        norLite
+    };
+
+    const char* SubjectName(NorSweepSubject subject);
     fs::NorConfig SweepConfig(const NorModel& model);
-    std::size_t SweepRamBytes(const NorModel& model);
+    std::size_t SweepRamBytes(const NorModel& model, NorSweepSubject subject);
     NorImageSuperblock SuperblockOf(const NorModel& model, const fs::NorConfig& config);
 
     std::optional<fs::Result> Format(SweepContext<hal::Flash>& context, const fs::NorConfig& config);
@@ -56,7 +66,7 @@ namespace metrics
     class NorSweepVolume
     {
     public:
-        NorSweepVolume(SweepContext<hal::Flash>& context, const fs::NorConfig& config);
+        NorSweepVolume(SweepContext<hal::Flash>& context, const fs::NorConfig& config, NorSweepSubject subject = NorSweepSubject::nor);
 
         fs::Result Format();
         fs::Result Mount();
@@ -80,17 +90,14 @@ namespace metrics
         std::optional<std::vector<uint8_t>> ReadFile(const std::string& path);
 
     private:
-        class FileSystem
+        class FullFileSystem
             : private detail::NorSweepVolumeStorage
             , public fs::NorFileSystem
         {
         public:
-            FileSystem(hal::Flash& flash, const fs::NorConfig& config);
+            FullFileSystem(hal::Flash& flash, const fs::NorConfig& config);
 
-            bool JournalMoreThanHalfFull();
-            std::size_t ModifiedNodes();
-            bool RecordsStartOutsideTheCheckpointBlock();
-            bool CollectionDueForSpace();
+            using fs::NorFileSystem::Volume;
 
         private:
             infra::SharedPtr<fs::NorDirectory> AllocateDirectory() override;
@@ -103,12 +110,31 @@ namespace metrics
             fs::NorBackground background{ Volume(), defaultIdleDelay };
         };
 
+        class LiteFileSystem
+            : private detail::NorSweepVolumeStorage
+            , public fs::NorLite
+        {
+        public:
+            LiteFileSystem(hal::Flash& flash, const fs::NorConfig& config);
+
+            using fs::NorLite::Volume;
+
+        private:
+            infra::SharedPtr<fs::NorFile> AllocateFile() override;
+
+        private:
+            fs::HandlePool<fs::NorFile::WithBuffer<256>, 1> files{ Volume() };
+        };
+
         template<class Start>
         fs::Result Run(const Start& start);
 
     private:
         SweepContext<hal::Flash>& context;
-        FileSystem fileSystem;
+        std::optional<FullFileSystem> full;
+        std::optional<LiteFileSystem> lite;
+        fs::FileSystem& fileSystem;
+        fs::NorVolume& volume;
         infra::SharedPtr<fs::File> file;
     };
 }

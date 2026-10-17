@@ -9,7 +9,7 @@ embedded-filesystem provides asynchronous, heap-less C++20 filesystems for micro
 - `fs/interfaces/` — `fs::Result`, `fs::OpenMode`, `fs::FileSystem`, `fs::File`, `fs::Directory`, `fs::EntryInfo`, `fs::VolumeUsage` (target `fs.interfaces`)
 - `fs/common/` — path parsing, sector cache, per-volume operation queue, handle pools, CRC-protected records (target `fs.common`)
 - `fs/fat/` — FAT12/16/32 with long file names, and the formatter (target `fs.fat`); `fs/fat/reader/` — `fs::FatReader`, the read-only FAT volume built from the parts of `fs.fat` that read (target `fs.fat_reader`); `fs/fat/lite/` — `fs::FatLite`, the FAT volume that writes files with one sector buffer (target `fs.fat_lite`); design in `docs/Fat.md`
-- `fs/nor/` — log-structured NOR filesystem, garbage collection, wear leveling (target `fs.nor`); design in `docs/NorFilesystem.md`
+- `fs/nor/` — log-structured NOR filesystem, garbage collection, wear leveling (target `fs.nor`); `fs/nor/lite/` — `fs::NorLite`, the NOR volume that creates, appends to and reads files with the parts of `fs.nor` (target `fs.nor_lite`); design in `docs/NorFilesystem.md`
 - `metrics/` — host-only device models, metered and power-cut devices, workloads, FatFs/littlefs baselines (targets `metrics.*`); definitions in `docs/Metrics.md`
 - `validation/` — firmware for ST boards on hal-st, F-1 reference images, the Python host package `validation/host` and the committed runs `validation/results` (targets `validation.*`); design in `docs/Validation.md`
 - `cmake/emfs_third_party.cmake` — the pins of FatFs and littlefs, built as `third_party.*` for `metrics/` and `validation/`

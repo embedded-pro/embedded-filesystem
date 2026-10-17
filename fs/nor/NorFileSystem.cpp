@@ -1,5 +1,4 @@
 #include "fs/nor/NorFileSystem.hpp"
-#include "infra/event/EventDispatcher.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
 #include <utility>
@@ -256,44 +255,12 @@ namespace fs
     {
         lifecycleClaimer.Claim([this]
             {
-                replayCheckpointBefore = std::nullopt;
+                lifecycleDone = lifecycle.CompletionWith<void(Result result)>([](Result result)
+                    {
+                        return NorMountDone{ result };
+                    });
                 StartMount();
             });
-    }
-
-    void NorFileSystem::StartMount()
-    {
-        lifecycleDone = lifecycle.CompletionWith<void(Result result)>([](Result result)
-            {
-                return NorMountDone{ result };
-            });
-        volume.Cache().Clear();
-        volume.Operation().emplace<NorMount>(volume.Flash(), volume.Config(), volume.State(), volume.JournalBuffer(), [this](Result result)
-                              {
-                                  if (result == Result::success)
-                                      Replay();
-                                  else
-                                      LifecycleOperationDone(result);
-                              })
-            .Start();
-    }
-
-    void NorFileSystem::Replay()
-    {
-        volume.Operation().emplace<NorReplay>(volume, replayCheckpointBefore, [this](Result result, std::optional<NorRecordPosition> overflow)
-                              {
-                                  if (!overflow.has_value())
-                                      LifecycleOperationDone(result);
-                                  else
-                                  {
-                                      replayCheckpointBefore = overflow;
-                                      infra::EventDispatcher::Instance().Schedule([this]
-                                          {
-                                              StartMount();
-                                          });
-                                  }
-                              })
-            .Start();
     }
 
     void NorFileSystem::BeginUnmount()
@@ -310,6 +277,11 @@ namespace fs
                                       })
                     .Start();
             });
+    }
+
+    void NorFileSystem::Mounted(Result result)
+    {
+        LifecycleOperationDone(result);
     }
 
     void NorFileSystem::LifecycleOperationDone(Result result)
