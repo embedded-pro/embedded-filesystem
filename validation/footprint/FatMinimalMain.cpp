@@ -5,7 +5,7 @@
 
 namespace
 {
-    constexpr fs::FatFeatures minimal{ .makeDirectory = false, .remove = false, .rename = false, .expectSize = false, .usage = false, .backgroundScan = false, .timestamps = false, .cleanShutdown = false, .longNames = false };
+    constexpr fs::FatFeatures minimal{ .makeDirectory = false, .remove = false, .rename = false, .expectSize = false, .usage = false, .openDirectory = false, .backgroundScan = false, .timestamps = false, .cleanShutdown = false, .longNames = false };
 }
 
 int main()

@@ -119,9 +119,39 @@ namespace fs
         }
 
         void StartFatExpectSize(FatVolume& volume, FatOpenFile& file, FatExtentCache& extents, uint32_t size, const infra::Function<void(Result result)>& onDone);
+        void StartFatOpenDirectory(FatVolume& volume, FatOpenDirectoryCall&& call, const FatDirectoryAllocation& allocate, const infra::Function<void(Result result)>& onFinished);
         void MarkFatDirty(FatDirtyFlag& flag, const infra::Function<void(Result result)>& onDone);
         void MarkFatClean(FatDirtyFlag& flag, const infra::Function<void(Result result)>& onDone);
         void ReadFatCleanState(FatMount& mount);
+
+        template<bool Enabled, std::size_t Directories>
+        struct FatDirectoryStorage
+        {
+            FatDirectoryStorage() = default;
+
+            explicit FatDirectoryStorage(FatVolume&)
+            {}
+
+            infra::SharedPtr<FatDirectory> Allocate()
+            {
+                return nullptr;
+            }
+        };
+
+        template<std::size_t Directories>
+        struct FatDirectoryStorage<true, Directories>
+        {
+            explicit FatDirectoryStorage(FatVolume& volume)
+                : pool(volume)
+            {}
+
+            infra::SharedPtr<FatDirectory> Allocate()
+            {
+                return pool.Allocate();
+            }
+
+            HandlePool<FatDirectory, Directories> pool;
+        };
 
         template<bool Enabled>
         struct FatBackgroundStorage
@@ -161,6 +191,8 @@ namespace fs
             operations.expectSize = &detail::StartFatExpectSize;
         if constexpr (Features.usage)
             operations.usage = &detail::StartFatOperation<FatUsage, FatUsageCall>;
+        if constexpr (Features.openDirectory)
+            operations.openDirectory = &detail::StartFatOpenDirectory;
         if constexpr (Features.timestamps)
             operations.now = &FatNow;
         if constexpr (Features.cleanShutdown)
@@ -178,12 +210,12 @@ namespace fs
 
     template<std::size_t Files, std::size_t CacheSectors, FatLimits Limits, FatFeatures Features>
     class FatFileSystem::WithStorage
-        : private detail::FatVolumeStorage<CacheSectors, Files + Limits.directories + Limits.pathOperations + 2, Limits.maxNameBytes, Limits.closedFiles, Limits.freeRuns>
+        : private detail::FatVolumeStorage<CacheSectors, Files + (Features.openDirectory ? Limits.directories : 0) + Limits.pathOperations + 2, Limits.maxNameBytes, Limits.closedFiles, Limits.freeRuns>
         , public FatFileSystem
     {
-        static_assert(Files > 0 && CacheSectors > 2 && Limits.directories > 0 && Limits.pathOperations > 0 && Limits.extentsPerFile > 0);
+        static_assert(Files > 0 && CacheSectors > 2 && (Limits.directories > 0 || !Features.openDirectory) && Limits.pathOperations > 0 && Limits.extentsPerFile > 0);
 
-        using Storage = detail::FatVolumeStorage<CacheSectors, Files + Limits.directories + Limits.pathOperations + 2, Limits.maxNameBytes, Limits.closedFiles, Limits.freeRuns>;
+        using Storage = detail::FatVolumeStorage<CacheSectors, Files + (Features.openDirectory ? Limits.directories : 0) + Limits.pathOperations + 2, Limits.maxNameBytes, Limits.closedFiles, Limits.freeRuns>;
 
     public:
         explicit WithStorage(hal::BlockDevice& device, const FatConfig& config = {})
@@ -211,7 +243,7 @@ namespace fs
 
     private:
         typename infra::BoundedVector<FatPathSlot>::template WithMaxSize<Limits.pathOperations> pathSlots;
-        HandlePool<FatDirectory, Limits.directories> directories{ Volume() };
+        detail::FatDirectoryStorage<Features.openDirectory, Limits.directories> directories{ Volume() };
         HandlePool<FatFile::WithExtents<Limits.extentsPerFile>, Files> files{ Volume() };
         detail::FatBackgroundStorage<Features.backgroundScan> background{ Volume() };
     };

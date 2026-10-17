@@ -25,6 +25,7 @@ namespace fs
         bool rename{ true };
         bool expectSize{ true };
         bool usage{ true };
+        bool openDirectory{ true };
         bool backgroundScan{ true };
         bool timestamps{ true };
         bool cleanShutdown{ true };

@@ -60,7 +60,7 @@ namespace fs
 
     void FatFileSystem::OpenDirectory(infra::BoundedConstString path, const infra::Function<void(Result result, infra::SharedPtr<Directory> directory)>& onDone)
     {
-        if (auto refusal = Refusal(path); refusal != Result::success)
+        if (auto refusal = Refusal(path, volume.Operations().openDirectory != nullptr); refusal != Result::success)
             volume.Defer(onDone, refusal);
         else
             Start(FatOpenDirectoryCall{ path, onDone });
@@ -269,7 +269,7 @@ namespace fs
         if (auto* stat = std::get_if<FatStatCall>(&call))
             volume.Operation().emplace<FatStat>(volume, std::move(*stat), finished).Start();
         else if (auto* openDirectory = std::get_if<FatOpenDirectoryCall>(&call))
-            volume.Operation().emplace<FatOpenDirectory>(volume, std::move(*openDirectory), allocateDirectory, finished).Start();
+            volume.Operations().openDirectory(volume, std::move(*openDirectory), allocateDirectory, finished);
         else if (auto* open = std::get_if<FatOpenCall>(&call))
             volume.Operation().emplace<FatOpen>(volume, std::move(*open), allocateFile, finished).Start();
         else if (auto* makeDirectory = std::get_if<FatMakeDirectoryCall>(&call))
@@ -284,6 +284,11 @@ namespace fs
 
     namespace detail
     {
+        void StartFatOpenDirectory(FatVolume& volume, FatOpenDirectoryCall&& call, const FatDirectoryAllocation& allocate, const infra::Function<void(Result result)>& onFinished)
+        {
+            volume.Operation().emplace<FatOpenDirectory>(volume, std::move(call), allocate, onFinished).Start();
+        }
+
         void StartFatExpectSize(FatVolume& volume, FatOpenFile& file, FatExtentCache& extents, uint32_t size, const infra::Function<void(Result result)>& onDone)
         {
             volume.Operation().emplace<FatExpectSize>(volume, file, extents, size, onDone).Start();

@@ -570,6 +570,7 @@ Every feature is in by default.
 | `truncate`        | `Truncate`                                                                                                          |
 | `format`          | `Format`, so the flash is formatted before                                                                          |
 | `overwrite`       | Writing before the end of a file: a `Write` at a position before the end of a file that is not opened for appending |
+| `openDirectory`   | `OpenDirectory`, and the directory handles that `NorConfig::directories` sizes                                      |
 
 A volume mounts whatever a volume with every feature wrote, so leaving a feature out never changes the format on flash; F-1 measures the volume with every feature left out as `embedded-filesystem/nor-minimal`.
 

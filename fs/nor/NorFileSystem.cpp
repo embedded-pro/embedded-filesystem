@@ -79,7 +79,7 @@ namespace fs
 
     void NorFileSystem::OpenDirectory(infra::BoundedConstString path, const infra::Function<void(Result result, infra::SharedPtr<Directory> directory)>& onDone)
     {
-        if (auto refusal = Refusal(path); refusal != Result::success)
+        if (auto refusal = Refusal(path, volume.Operations().openDirectory != nullptr); refusal != Result::success)
             volume.Defer(onDone, refusal);
         else
             Start(NorOpenDirectoryCall{ path, onDone });
@@ -197,12 +197,11 @@ namespace fs
         if (auto* stat = std::get_if<NorStatCall>(&call))
             volume.Operation().emplace<NorStat>(volume, std::move(*stat), finished).Start();
         else if (auto* openDirectory = std::get_if<NorOpenDirectoryCall>(&call))
-            volume.Operation().emplace<NorOpenDirectory>(volume, std::move(*openDirectory), [this]
-                                  {
-                                      return AllocateDirectory();
-                                  },
-                                  finished)
-                .Start();
+            volume.Operations().openDirectory(volume, std::move(*openDirectory), [this]
+                {
+                    return AllocateDirectory();
+                },
+                finished);
         else if (auto* open = std::get_if<NorOpenCall>(&call))
             volume.Operation().emplace<NorOpen>(volume, std::move(*open), [this]
                                   {
@@ -348,6 +347,11 @@ namespace fs
         void StartNorOverwrite(NorVolume& volume, NorOpenFile& file, infra::ConstByteRange data, const infra::Function<void(Result result)>& onDone)
         {
             volume.FileOverwrite().Overwrite(file, data, onDone);
+        }
+
+        void StartNorOpenDirectory(NorVolume& volume, NorOpenDirectoryCall&& call, const NorDirectoryAllocation& allocate, const infra::Function<void(Result result)>& onFinished)
+        {
+            volume.Operation().emplace<NorOpenDirectory>(volume, std::move(call), allocate, onFinished).Start();
         }
     }
 }

@@ -125,6 +125,36 @@ namespace fs
         void StartNorTruncate(NorVolume& volume, NorOpenFile& file, uint32_t size, const infra::Function<void(Result result)>& onDone);
         void StartNorFormat(NorVolume& volume, const infra::Function<void(Result result)>& onDone);
         void StartNorOverwrite(NorVolume& volume, NorOpenFile& file, infra::ConstByteRange data, const infra::Function<void(Result result)>& onDone);
+        void StartNorOpenDirectory(NorVolume& volume, NorOpenDirectoryCall&& call, const NorDirectoryAllocation& allocate, const infra::Function<void(Result result)>& onFinished);
+
+        template<bool Enabled, std::size_t Directories>
+        struct NorDirectoryStorage
+        {
+            NorDirectoryStorage() = default;
+
+            explicit NorDirectoryStorage(NorVolume&)
+            {}
+
+            infra::SharedPtr<NorDirectory> Allocate()
+            {
+                return nullptr;
+            }
+        };
+
+        template<std::size_t Directories>
+        struct NorDirectoryStorage<true, Directories>
+        {
+            explicit NorDirectoryStorage(NorVolume& volume)
+                : pool(volume)
+            {}
+
+            infra::SharedPtr<NorDirectory> Allocate()
+            {
+                return pool.Allocate();
+            }
+
+            HandlePool<NorDirectory, Directories> pool;
+        };
     }
 
     template<NorFeatures Features>
@@ -144,20 +174,22 @@ namespace fs
             operations.format = &detail::StartNorFormat;
         if constexpr (Features.overwrite)
             operations.overwrite = &detail::StartNorOverwrite;
+        if constexpr (Features.openDirectory)
+            operations.openDirectory = &detail::StartNorOpenDirectory;
 
         return operations;
     }
 
     template<NorConfig Config, std::size_t Files, NorFeatures Features>
     class NorFileSystem::WithStorage
-        : private detail::NorVolumeStorage<Config, Files + Config.directories + Config.pathOperations + 3>
+        : private detail::NorVolumeStorage<Config, Files + (Features.openDirectory ? Config.directories : 0) + Config.pathOperations + 3>
         , public NorFileSystem
     {
         static_assert(IsValidNorConfig(Config));
-        static_assert(Files > 0 && Config.directories > 0);
+        static_assert(Files > 0 && (Config.directories > 0 || !Features.openDirectory));
         static_assert(NorFormatter::BufferBytes(Config) <= Config.cachedNodes * Config.nodeSize);
 
-        using Storage = detail::NorVolumeStorage<Config, Files + Config.directories + Config.pathOperations + 3>;
+        using Storage = detail::NorVolumeStorage<Config, Files + (Features.openDirectory ? Config.directories : 0) + Config.pathOperations + 3>;
 
     public:
         explicit WithStorage(hal::Flash& flash, infra::Duration idleDelay = defaultIdleDelay)
@@ -184,7 +216,7 @@ namespace fs
 
     private:
         typename infra::BoundedVector<NorPathSlot>::template WithMaxSize<Config.pathOperations> pathSlots;
-        HandlePool<NorDirectory, Config.directories> directories{ Volume() };
+        detail::NorDirectoryStorage<Features.openDirectory, Config.directories> directories{ Volume() };
         HandlePool<NorFile::WithBuffer<NorFileBufferBytes(Config)>, Files> files{ Volume() };
     };
 

@@ -5,10 +5,12 @@
 #include "fs/fat/FatTimestamp.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/Function.hpp"
+#include "infra/util/SharedPtr.hpp"
 #include <cstdint>
 
 namespace fs
 {
+    class FatDirectory;
     class FatDirtyFlag;
     class FatExtentCache;
     struct FatLongNames;
@@ -18,6 +20,8 @@ namespace fs
 
     template<class Call>
     using FatPathOperation = void (*)(FatVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished);
+    using FatDirectoryAllocation = infra::Function<infra::SharedPtr<FatDirectory>()>;
+    using FatOpenDirectoryOperation = void (*)(FatVolume& volume, FatOpenDirectoryCall&& call, const FatDirectoryAllocation& allocate, const infra::Function<void(Result result)>& onFinished);
     using FatExpectSizeOperation = void (*)(FatVolume& volume, FatOpenFile& file, FatExtentCache& extents, uint32_t size, const infra::Function<void(Result result)>& onDone);
     using FatClock = FatDateTime (*)(uint32_t timerServiceId);
     using FatDirtyMark = void (*)(FatDirtyFlag& flag, const infra::Function<void(Result result)>& onDone);
@@ -30,6 +34,7 @@ namespace fs
         FatPathOperation<FatRenameCall> rename{ nullptr };
         FatExpectSizeOperation expectSize{ nullptr };
         FatPathOperation<FatUsageCall> usage{ nullptr };
+        FatOpenDirectoryOperation openDirectory{ nullptr };
         FatClock now{ nullptr };
         FatDirtyMark markDirty{ nullptr };
         FatDirtyMark markClean{ nullptr };

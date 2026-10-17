@@ -12,7 +12,7 @@
 
 namespace
 {
-    constexpr fs::FatFeatures withoutChanges{ .makeDirectory = false, .remove = false, .rename = false, .expectSize = false, .usage = false };
+    constexpr fs::FatFeatures withoutChanges{ .makeDirectory = false, .remove = false, .rename = false, .expectSize = false, .usage = false, .openDirectory = false };
 
     template<fs::FatFeatures Features, uint32_t Blocks = 4096>
     class FatFeaturesFixture
@@ -59,6 +59,11 @@ namespace
 
         void StartDisabledCalls()
         {
+            volume.OpenDirectory("/", [this](fs::Result result, infra::SharedPtr<fs::Directory> directory)
+                {
+                    EXPECT_EQ(nullptr, directory);
+                    done.callback(result);
+                });
             volume.MakeDirectory("/a", Done());
             volume.Remove("/a", Done());
             volume.Rename("/a", "/b", Done());
@@ -136,13 +141,13 @@ TEST_F(FatFeaturesTest, disabled_calls_complete_with_unsupported)
     ExpectDone(fs::Result::success);
 
     StartDisabledCalls();
-    ExpectDone(fs::Result::unsupported, 4);
+    ExpectDone(fs::Result::unsupported, 5);
 }
 
 TEST_F(FatFeaturesTest, disabled_calls_are_not_mounted_before_mount)
 {
     StartDisabledCalls();
-    ExpectDone(fs::Result::notMounted, 4);
+    ExpectDone(fs::Result::notMounted, 5);
 }
 
 TEST_F(FatFeaturesTest, disabled_calls_are_unsupported_before_their_paths_are_validated)
@@ -150,9 +155,13 @@ TEST_F(FatFeaturesTest, disabled_calls_are_unsupported_before_their_paths_are_va
     volume.Mount(Done());
     ExpectDone(fs::Result::success);
 
+    volume.OpenDirectory("relative", [this](fs::Result result, infra::SharedPtr<fs::Directory>)
+        {
+            done.callback(result);
+        });
     volume.MakeDirectory("relative", Done());
     volume.Rename("/a", "/b/", Done());
-    ExpectDone(fs::Result::unsupported, 2);
+    ExpectDone(fs::Result::unsupported, 3);
 }
 
 TEST_F(FatFeaturesTest, expect_size_is_unsupported_on_a_writable_file_only)
@@ -352,4 +361,11 @@ TEST_F(FatWithoutLongNamesTest, long_names_on_the_volume_are_still_found_read_re
             done.callback(result);
         });
     ExpectDone(fs::Result::notFound);
+}
+
+TEST(FatDirectoryStorageTest, a_volume_without_directory_handles_allocates_none)
+{
+    fs::detail::FatDirectoryStorage<false, 1> storage;
+
+    EXPECT_EQ(nullptr, storage.Allocate());
 }

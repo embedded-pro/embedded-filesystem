@@ -34,6 +34,7 @@ namespace fs
         bool truncate{ true };
         bool format{ true };
         bool overwrite{ true };
+        bool openDirectory{ true };
     };
 
     constexpr std::size_t norMinimumCachedNodes = 15;

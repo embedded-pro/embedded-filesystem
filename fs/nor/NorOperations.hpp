@@ -5,10 +5,12 @@
 #include "fs/nor/NorPathSlot.hpp"
 #include "infra/util/ByteRange.hpp"
 #include "infra/util/Function.hpp"
+#include "infra/util/SharedPtr.hpp"
 #include <cstdint>
 
 namespace fs
 {
+    class NorDirectory;
     class NorVolume;
     struct NorOpenFile;
 
@@ -16,6 +18,8 @@ namespace fs
     using NorPathOperation = void (*)(NorVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished);
     using NorTruncateOperation = void (*)(NorVolume& volume, NorOpenFile& file, uint32_t size, const infra::Function<void(Result result)>& onDone);
     using NorFormatOperation = void (*)(NorVolume& volume, const infra::Function<void(Result result)>& onDone);
+    using NorDirectoryAllocation = infra::Function<infra::SharedPtr<NorDirectory>()>;
+    using NorOpenDirectoryOperation = void (*)(NorVolume& volume, NorOpenDirectoryCall&& call, const NorDirectoryAllocation& allocate, const infra::Function<void(Result result)>& onFinished);
     using NorOverwriteOperation = void (*)(NorVolume& volume, NorOpenFile& file, infra::ConstByteRange data, const infra::Function<void(Result result)>& onDone);
 
     struct NorOperations
@@ -26,6 +30,7 @@ namespace fs
         NorTruncateOperation truncate{ nullptr };
         NorFormatOperation format{ nullptr };
         NorOverwriteOperation overwrite{ nullptr };
+        NorOpenDirectoryOperation openDirectory{ nullptr };
     };
 }
 

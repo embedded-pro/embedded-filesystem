@@ -300,7 +300,7 @@ fs::FatReader::WithStorage<2> reader{ sdCard };
 
 The template arguments of `fs::FatReader::WithStorage<Files, Directories, Limits>` are the number of open files, the number of open directory handles, 1 by default, and an optional `fs::PathLimits`, the longest name and the longest path in UTF-8 bytes, 255 each by default.
 The longest name also sizes the buffer that holds a name while it is reported, as `FatLimits::maxNameBytes` does for `fs::FatFileSystem`.
-On a Cortex-M4, F-1 measures 22.2 KB of flash and 2.0 KB of RAM for `fs::FatReader::WithStorage<1>`, against 67.0 KB and 7.7 KB for `fs::FatFileSystem` with the same calls and 5.9 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+On a Cortex-M4, F-1 measures 22.2 KB of flash and 2.0 KB of RAM for `fs::FatReader::WithStorage<1>`, against 67.1 KB and 7.7 KB for `fs::FatFileSystem` with the same calls and 5.9 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 
 ## Lite volume
 
@@ -338,7 +338,7 @@ fs::FatLite::WithStorage<2> lite{ sdCard };
 ```
 
 The template arguments of `fs::FatLite::WithStorage<Files, Directories, Limits>` are those of `fs::FatReader::WithStorage`.
-On a Cortex-M4, F-1 measures 35.3 KB of flash and 2.6 KB of RAM for `fs::FatLite::WithStorage<1>`, against 53.4 KB and 7.6 KB for `fs::FatFileSystem` with every `fs::FatFeatures` left out and 7.4 KB and 1.1 KB for `fatfs/minimal`, which also removes, renames and makes directories, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+On a Cortex-M4, F-1 measures 35.3 KB of flash and 2.6 KB of RAM for `fs::FatLite::WithStorage<1>`, against 51.5 KB and 7.4 KB for `fs::FatFileSystem` with every `fs::FatFeatures` left out and 7.4 KB and 1.1 KB for `fatfs/minimal`, which also removes, renames and makes directories, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 
 ## Configuration
 
@@ -368,6 +368,7 @@ Every feature is in by default.
 | `rename`          | `Rename`                                                                                                                                                                                                                                                             |
 | `expectSize`      | `ExpectSize`                                                                                                                                                                                                                                                         |
 | `usage`           | `Usage`                                                                                                                                                                                                                                                              |
+| `openDirectory`   | `OpenDirectory`, and the directory handles that `FatLimits::directories` sizes                                                                                                                                                                                       |
 | `backgroundScan`  | The count of the free clusters while the volume is idle: `Usage` counts them on its first call, and until then a file opened for appending starts at the allocation cursor instead of in a whole free allocation unit                                                |
 | `timestamps`      | The time of entries: every entry is dated 1980-01-01 00:00:00, as with a clock that is not set                                                                                                                                                                       |
 | `cleanShutdown`   | The clean-shutdown bit of the FAT: the volume never marks itself dirty, so a PC cannot tell that it was removed without `Unmount`, and a FAT32 mount reads neither FSINFO nor the FAT, so `Usage` and the allocation do not start from its counts                    |
