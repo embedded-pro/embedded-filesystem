@@ -10,14 +10,12 @@ target_link_libraries(validation.cycles PUBLIC
     infra.timer
     services.hil.commands
     validation.results
+    validation.timing
 )
 
 target_sources(validation.cycles PRIVATE
-    CycleCounter.hpp
     CycleRun.cpp
     CycleRun.hpp
-    CycleSamples.cpp
-    CycleSamples.hpp
     CycleSubject.hpp
     CyclesCommands.cpp
     CyclesCommands.hpp

@@ -3,6 +3,7 @@ add_subdirectory(cycles)
 add_subdirectory(devices)
 add_subdirectory(hil)
 add_subdirectory(results)
+add_subdirectory(timing)
 
 if (TARGET_MCU_VENDOR STREQUAL st)
     add_subdirectory(boards)

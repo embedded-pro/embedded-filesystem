@@ -225,7 +225,7 @@ TEST_F(EmfsFatSubjectTest, runs_f2_on_the_ram_block_device)
 
 TEST_F(EmfsFatSubjectTest, runs_the_default_plan_of_f2_as_often_as_the_samples_hold)
 {
-    ExpectFullRun(subject, "ramblock", validation::CyclePlan(), validation::CycleSamples::capacity);
+    ExpectFullRun(subject, "ramblock", validation::CyclePlan(), validation::CycleRun::maximumRuns);
 }
 
 TEST_F(EmfsFatSubjectTest, a_reset_closes_the_open_file_and_unmounts)
@@ -252,7 +252,7 @@ TEST_F(EmfsNorSubjectTest, runs_f2_on_the_ram_flash)
 
 TEST_F(EmfsNorSubjectTest, runs_the_default_plan_of_f2_as_often_as_the_samples_hold)
 {
-    ExpectFullRun(subject, "ramflash", validation::CyclePlan(), validation::CycleSamples::capacity);
+    ExpectFullRun(subject, "ramflash", validation::CyclePlan(), validation::CycleRun::maximumRuns);
 }
 
 TEST_F(EmfsNorSubjectTest, opening_more_files_than_the_volume_holds_completes_with_the_result_of_the_volume)
@@ -277,7 +277,7 @@ TEST_F(FatFsSubjectTest, runs_f2_on_the_ram_block_device)
 
 TEST_F(FatFsSubjectTest, runs_the_default_plan_of_f2_as_often_as_the_samples_hold)
 {
-    ExpectFullRun(subject, "ramblock", validation::CyclePlan(), validation::CycleSamples::capacity);
+    ExpectFullRun(subject, "ramblock", validation::CyclePlan(), validation::CycleRun::maximumRuns);
 }
 
 TEST_F(FatFsSubjectTest, a_reset_closes_the_open_file_and_unmounts)
@@ -357,7 +357,7 @@ TEST_F(LittleFsSubjectTest, runs_f2_on_the_ram_flash)
 
 TEST_F(LittleFsSubjectTest, runs_the_default_plan_of_f2_as_often_as_the_samples_hold)
 {
-    ExpectFullRun(subject, "ramflash", validation::CyclePlan(), validation::CycleSamples::capacity);
+    ExpectFullRun(subject, "ramflash", validation::CyclePlan(), validation::CycleRun::maximumRuns);
 }
 
 TEST_F(LittleFsSubjectTest, a_reset_closes_the_open_file_and_unmounts)

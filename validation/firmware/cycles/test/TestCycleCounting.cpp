@@ -1,5 +1,4 @@
 #include "infra/event/test_helper/EventDispatcherFixture.hpp"
-#include "validation/firmware/cycles/CycleSamples.hpp"
 #include "validation/firmware/cycles/IdleCycleCounter.hpp"
 #include "gmock/gmock.h"
 #include <cstdint>
@@ -73,56 +72,4 @@ TEST_F(IdleCycleCounterTest, forwards_requests_for_execution)
 {
     EXPECT_CALL(strategy, RequestExecution());
     idle.RequestExecution();
-}
-
-TEST(CycleSamplesTest, has_no_samples_when_cleared)
-{
-    validation::CycleSamples samples;
-    samples.Add(5);
-    samples.Clear();
-
-    EXPECT_EQ(0, samples.Size());
-}
-
-TEST(CycleSamplesTest, gives_the_minimum_the_median_and_the_maximum)
-{
-    validation::CycleSamples samples;
-    for (uint32_t value : { 30, 10, 50, 20, 40 })
-        samples.Add(value);
-
-    EXPECT_EQ(5, samples.Size());
-    EXPECT_EQ(10, samples.Minimum());
-    EXPECT_EQ(30, samples.Median());
-    EXPECT_EQ(50, samples.Maximum());
-}
-
-TEST(CycleSamplesTest, the_median_of_an_even_count_is_the_lower_middle_value_as_on_the_host)
-{
-    validation::CycleSamples samples;
-    for (uint32_t value : { 40, 10, 30, 20 })
-        samples.Add(value);
-
-    EXPECT_EQ(20, samples.Median());
-}
-
-TEST(CycleSamplesTest, the_median_leaves_the_order_of_the_samples_alone)
-{
-    validation::CycleSamples samples;
-    for (uint32_t value : { 3, 1, 2 })
-        samples.Add(value);
-
-    EXPECT_EQ(2, samples.Median());
-    EXPECT_EQ(1, samples.Minimum());
-    EXPECT_EQ(3, samples.Maximum());
-    EXPECT_EQ(2, samples.Median());
-}
-
-TEST(CycleSamplesTest, holds_up_to_its_capacity)
-{
-    validation::CycleSamples samples;
-    for (std::size_t index = 0; index != validation::CycleSamples::capacity; ++index)
-        samples.Add(static_cast<uint32_t>(index));
-
-    EXPECT_EQ(validation::CycleSamples::capacity, samples.Size());
-    EXPECT_EQ(validation::CycleSamples::capacity - 1, samples.Maximum());
 }

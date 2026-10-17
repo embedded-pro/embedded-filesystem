@@ -26,7 +26,7 @@ namespace validation
 
         uint32_t runs = defaultRuns;
         auto status = services::HilStatus::done;
-        arguments.Number("n", runs, 1, static_cast<uint32_t>(CycleSamples::capacity), status);
+        arguments.Number("n", runs, 1, CycleRun::maximumRuns, status);
         if (status != services::HilStatus::done)
             return status;
 

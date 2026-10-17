@@ -2,7 +2,7 @@
 #define VALIDATION_FIRMWARE_CYCLES_IDLE_CYCLE_COUNTER_HPP
 
 #include "infra/event/LowPowerEventDispatcher.hpp"
-#include "validation/firmware/cycles/CycleCounter.hpp"
+#include "validation/firmware/timing/CycleCounter.hpp"
 #include <cstdint>
 
 namespace validation

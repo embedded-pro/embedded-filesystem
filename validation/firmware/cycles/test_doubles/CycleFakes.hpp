@@ -7,9 +7,9 @@
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/BoundedVector.hpp"
-#include "validation/firmware/cycles/CycleCounter.hpp"
 #include "validation/firmware/cycles/CycleSubject.hpp"
 #include "validation/firmware/cycles/IdleCycleCounter.hpp"
+#include "validation/firmware/timing/test_doubles/FakeCycleCounter.hpp"
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -17,20 +17,6 @@
 
 namespace validation
 {
-    // Cycles at one per microsecond of the clock of the fixture, plus the busy cycles the subject adds
-    class FakeCycleCounter
-        : public validation::CycleCounter
-    {
-    public:
-        uint32_t Cycles() const override
-        {
-            return static_cast<uint32_t>(added + std::chrono::duration_cast<std::chrono::microseconds>(infra::Now() - epoch).count());
-        }
-
-        infra::TimePoint epoch{ infra::Now() };
-        uint64_t added{ 0 };
-    };
-
     // The part of the clock of the fixture that the processor sleeps, in permille
     class FakeIdleCycles
         : public validation::IdleCycleSource
