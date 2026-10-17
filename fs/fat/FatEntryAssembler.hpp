@@ -42,7 +42,12 @@ namespace fs
             end
         };
 
-        explicit FatEntryAssembler(infra::ByteRange nameBuffer);
+        using Reading = Outcome (*)(FatEntryAssembler& assembler, infra::ConstByteRange entry, FatEntryPosition position);
+
+        static Outcome ReadLongNames(FatEntryAssembler& assembler, infra::ConstByteRange entry, FatEntryPosition position);
+        static Outcome ReadShortNames(FatEntryAssembler& assembler, infra::ConstByteRange entry, FatEntryPosition position);
+
+        explicit FatEntryAssembler(infra::ByteRange nameBuffer, Reading reading = &ReadLongNames);
         FatEntryAssembler(const FatEntryAssembler& other) = delete;
         FatEntryAssembler& operator=(const FatEntryAssembler& other) = delete;
         ~FatEntryAssembler() = default;
@@ -52,16 +57,20 @@ namespace fs
         void Reset();
 
     private:
+        template<bool LongNames>
+        Outcome Assemble(infra::ConstByteRange entry, FatEntryPosition position);
         void FeedLongEntry(const std::optional<LongEntry>& entry, FatEntryPosition position);
         void StartSet(const LongEntry& entry, FatEntryPosition position);
         void Prepend(const LongEntry& entry);
         void PrependCodePoint(char32_t codePoint);
+        template<bool LongNames>
         void FeedShortEntry(infra::ConstByteRange entry, FatEntryPosition position);
         bool SetCompletes(const ShortEntry& entry) const;
         bool NameIsValid() const;
 
     private:
         infra::ByteRange nameBuffer;
+        Reading reading;
         std::size_t nameBegin{ 0 };
         std::optional<uint8_t> expectedOrdinal;
         uint8_t checksum{ 0 };

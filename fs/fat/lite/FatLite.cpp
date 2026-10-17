@@ -8,10 +8,10 @@
 
 namespace fs
 {
-    FatLite::FatLite(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const PathLimits& limits)
+    FatLite::FatLite(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const PathLimits& limits)
         : barrier(device)
         , window(barrier, sector)
-        , volume(barrier, window, nameBuffer, deferred, [this]
+        , volume(barrier, window, nameBuffer, reading, deferred, [this]
               {
                   lifecycle.Dispatch(FatMediaRemoved{});
               })

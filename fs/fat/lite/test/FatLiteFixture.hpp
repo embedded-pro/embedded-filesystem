@@ -107,7 +107,12 @@ public:
 
     void ExpectStat(infra::BoundedConstString path, fs::Result result, const fs::EntryInfo& info = {})
     {
-        volume.Stat(path, [this](fs::Result result, const fs::EntryInfo& info)
+        ExpectStat(volume, path, result, info);
+    }
+
+    void ExpectStat(fs::FileSystem& fileSystem, infra::BoundedConstString path, fs::Result result, const fs::EntryInfo& info = {})
+    {
+        fileSystem.Stat(path, [this](fs::Result result, const fs::EntryInfo& info)
             {
                 statDone.callback(result, info);
             });
@@ -118,8 +123,13 @@ public:
 
     infra::SharedPtr<fs::File> ExpectOpen(infra::BoundedConstString path, fs::OpenMode mode, fs::Result result = fs::Result::success)
     {
+        return ExpectOpen(volume, path, mode, result);
+    }
+
+    infra::SharedPtr<fs::File> ExpectOpen(fs::FileSystem& fileSystem, infra::BoundedConstString path, fs::OpenMode mode, fs::Result result = fs::Result::success)
+    {
         infra::SharedPtr<fs::File> opened;
-        volume.Open(path, mode, [this, &opened](fs::Result result, infra::SharedPtr<fs::File> file)
+        fileSystem.Open(path, mode, [this, &opened](fs::Result result, infra::SharedPtr<fs::File> file)
             {
                 opened = file;
                 done.callback(result);

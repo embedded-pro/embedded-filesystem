@@ -21,7 +21,7 @@ namespace fs
     class FatReaderVolume
     {
     public:
-        FatReaderVolume(hal::BlockDevice& device, SectorSource& sectors, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved);
+        FatReaderVolume(hal::BlockDevice& device, SectorSource& sectors, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved);
         FatReaderVolume(const FatReaderVolume& other) = delete;
         FatReaderVolume& operator=(const FatReaderVolume& other) = delete;
         ~FatReaderVolume();

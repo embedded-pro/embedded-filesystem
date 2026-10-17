@@ -107,6 +107,18 @@ TEST_F(FatReaderDirectoryFat16Test, short_names_are_read_with_their_lower_case_f
     ExpectStat("/read.me", fs::Result::success, fs::EntryInfo{ "read.ME", fs::EntryType::file, 0 });
 }
 
+TEST_F(FatReaderDirectoryFat16Test, without_long_names_entries_are_listed_by_their_short_names)
+{
+    fs::FatReader::WithStorage<1, 1, fs::PathLimits{}, fs::FatReaderFeatures{ .longNames = false }> shortNames{ device };
+    builder->AddFile(0, "Meeting notes.txt", "MEETIN~1TXT", infra::ConstByteRange());
+    shortNames.Mount(Done());
+    ExpectDone(fs::Result::success);
+    auto directory = ExpectOpenDirectory(shortNames, "/");
+
+    ExpectNext(*directory, fs::Result::success, fs::EntryInfo{ "MEETIN~1.TXT", fs::EntryType::file, 0 });
+    ExpectNext(*directory, fs::Result::success);
+}
+
 TEST_F(FatReaderDirectoryFat16Test, a_second_next_on_a_handle_is_busy)
 {
     builder->AddFile(0, "", "FILE    TXT", infra::ConstByteRange());

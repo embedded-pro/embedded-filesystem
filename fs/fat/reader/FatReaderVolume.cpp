@@ -2,12 +2,12 @@
 
 namespace fs
 {
-    FatReaderVolume::FatReaderVolume(hal::BlockDevice& device, SectorSource& sectors, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved)
+    FatReaderVolume::FatReaderVolume(hal::BlockDevice& device, SectorSource& sectors, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved)
         : device(device)
         , deferred(deferred)
         , onMediaRemoved(onMediaRemoved)
         , sectors(sectors)
-        , assembler(nameBuffer)
+        , assembler(nameBuffer, reading)
     {}
 
     FatReaderVolume::~FatReaderVolume() = default;

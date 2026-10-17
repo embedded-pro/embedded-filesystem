@@ -14,6 +14,7 @@
 #include "fs/fat/lite/FatLiteVolume.hpp"
 #include "fs/fat/lite/FatLiteWindow.hpp"
 #include "fs/fat/reader/FatReaderDirectory.hpp"
+#include "fs/fat/reader/FatReaderFeatures.hpp"
 #include "fs/fat/reader/FatReaderMount.hpp"
 #include "fs/interfaces/FileSystem.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
@@ -36,7 +37,7 @@ namespace fs
         : public FileSystem
     {
     public:
-        template<std::size_t Files, std::size_t Directories = 1, PathLimits Limits = PathLimits{}>
+        template<std::size_t Files, std::size_t Directories = 1, PathLimits Limits = PathLimits{}, FatReaderFeatures Features = FatReaderFeatures{}>
         class WithStorage;
 
         using Machine = services::TableStateMachine<FatLifecycleState, FatLifecycleEvent, FatLite>;
@@ -57,7 +58,7 @@ namespace fs
         bool Idle() const override;
 
     protected:
-        FatLite(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const PathLimits& limits);
+        FatLite(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const PathLimits& limits);
         FatLite(const FatLite& other) = delete;
         FatLite& operator=(const FatLite& other) = delete;
         ~FatLite();
@@ -136,16 +137,16 @@ namespace fs
         };
     }
 
-    template<std::size_t Files, std::size_t Directories, PathLimits Limits>
+    template<std::size_t Files, std::size_t Directories, PathLimits Limits, FatReaderFeatures Features>
     class FatLite::WithStorage
-        : private detail::FatLiteStorage<Files + Directories + 3, Limits.maxNameBytes>
+        : private detail::FatLiteStorage<Files + Directories + 3, Features.longNames ? Limits.maxNameBytes : ShortName::maxUtf8Bytes>
         , public FatLite
     {
         static_assert(Files > 0 && Directories > 0 && Limits.maxNameBytes >= ShortName::maxUtf8Bytes);
 
     public:
         explicit WithStorage(hal::BlockDevice& device)
-            : FatLite(device, infra::MakeRange(this->sectorStorage), infra::MakeRange(this->nameStorage), this->deferredStorage, Limits)
+            : FatLite(device, infra::MakeRange(this->sectorStorage), infra::MakeRange(this->nameStorage), NameReadingFor<Features>(), this->deferredStorage, Limits)
         {}
 
     private:

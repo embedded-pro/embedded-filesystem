@@ -123,7 +123,12 @@ public:
 
     void StartStat(infra::BoundedConstString path)
     {
-        volume.Stat(path, [this](fs::Result result, const fs::EntryInfo& info)
+        StartStat(volume, path);
+    }
+
+    void StartStat(fs::FileSystem& fileSystem, infra::BoundedConstString path)
+    {
+        fileSystem.Stat(path, [this](fs::Result result, const fs::EntryInfo& info)
             {
                 statDone.callback(result, info);
             });
@@ -131,7 +136,12 @@ public:
 
     void ExpectStat(infra::BoundedConstString path, fs::Result result, const fs::EntryInfo& info = {})
     {
-        StartStat(path);
+        ExpectStat(volume, path, result, info);
+    }
+
+    void ExpectStat(fs::FileSystem& fileSystem, infra::BoundedConstString path, fs::Result result, const fs::EntryInfo& info = {})
+    {
+        StartStat(fileSystem, path);
         EXPECT_CALL(statDone, callback(result, info));
         ExecuteAllActions();
     }
@@ -152,8 +162,13 @@ public:
 
     infra::SharedPtr<fs::Directory> ExpectOpenDirectory(infra::BoundedConstString path, fs::Result result = fs::Result::success)
     {
+        return ExpectOpenDirectory(volume, path, result);
+    }
+
+    infra::SharedPtr<fs::Directory> ExpectOpenDirectory(fs::FileSystem& fileSystem, infra::BoundedConstString path, fs::Result result = fs::Result::success)
+    {
         infra::SharedPtr<fs::Directory> opened;
-        volume.OpenDirectory(path, [this, &opened](fs::Result result, infra::SharedPtr<fs::Directory> directory)
+        fileSystem.OpenDirectory(path, [this, &opened](fs::Result result, infra::SharedPtr<fs::Directory> directory)
             {
                 opened = directory;
                 openDone.callback(result);

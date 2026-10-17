@@ -145,6 +145,32 @@ TEST_F(FatLiteTest, names_that_need_long_name_entries_are_unsupported)
     ExpectOpen("/a+b.txt", fs::OpenMode::write, fs::Result::unsupported);
 }
 
+TEST_F(FatLiteTest, without_long_names_files_are_found_by_their_short_names_and_others_keep_their_long_names)
+{
+    auto contents = Pattern<100>();
+    auto created = Pattern<20>(1);
+    builder->AddFile(0, "Meeting notes.txt", "MEETIN~1TXT", infra::MakeRange(contents));
+
+    {
+        fs::FatLite::WithStorage<1, 1, fs::PathLimits{}, fs::FatReaderFeatures{ .longNames = false }> shortNames{ device };
+        shortNames.Mount(Done());
+        ExpectDone(fs::Result::success);
+
+        ExpectStat(shortNames, "/MEETIN~1.TXT", fs::Result::success, fs::EntryInfo{ "MEETIN~1.TXT", fs::EntryType::file, 100 });
+        ExpectStat(shortNames, "/Meeting notes.txt", fs::Result::notFound);
+        auto file = ExpectOpen(shortNames, "/new.txt", fs::OpenMode::write);
+        ExpectWrite(*file, infra::MakeRange(created));
+        ExpectClose(*file);
+        file = nullptr;
+
+        shortNames.Unmount(Done());
+        ExpectDone(fs::Result::success);
+    }
+
+    ExpectContentsOnFullVolume("/Meeting notes.txt", contents);
+    ExpectContentsOnFullVolume("/new.txt", created);
+}
+
 TEST_F(FatLiteTest, invalid_names_and_paths_are_refused)
 {
     ExpectMount();

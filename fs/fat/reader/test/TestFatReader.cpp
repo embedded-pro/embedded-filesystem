@@ -402,6 +402,17 @@ TEST_F(FatReaderTest, limits_size_the_names_and_paths)
     ExecuteAllActions();
 }
 
+TEST_F(FatReaderTest, without_long_names_entries_are_found_and_named_by_their_short_names)
+{
+    fs::FatReader::WithStorage<1, 1, fs::PathLimits{}, fs::FatReaderFeatures{ .longNames = false }> shortNames{ device };
+    builder->AddFile(0, "Meeting notes.txt", "MEETIN~1TXT", infra::ConstByteRange());
+    shortNames.Mount(Done());
+    ExpectDone(fs::Result::success);
+
+    ExpectStat(shortNames, "/MEETIN~1.TXT", fs::Result::success, fs::EntryInfo{ "MEETIN~1.TXT", fs::EntryType::file, 0 });
+    ExpectStat(shortNames, "/Meeting notes.txt", fs::Result::notFound);
+}
+
 TEST_F(FatReaderTest, path_calls_while_one_runs_are_busy)
 {
     ExpectMount();

@@ -7,6 +7,7 @@
 #include "fs/fat/FatLifecycle.hpp"
 #include "fs/fat/FatShortName.hpp"
 #include "fs/fat/reader/FatReaderDirectory.hpp"
+#include "fs/fat/reader/FatReaderFeatures.hpp"
 #include "fs/fat/reader/FatReaderFile.hpp"
 #include "fs/fat/reader/FatReaderMount.hpp"
 #include "fs/fat/reader/FatReaderVolume.hpp"
@@ -32,7 +33,7 @@ namespace fs
         : public FileSystem
     {
     public:
-        template<std::size_t Files, std::size_t Directories = 1, PathLimits Limits = PathLimits{}>
+        template<std::size_t Files, std::size_t Directories = 1, PathLimits Limits = PathLimits{}, FatReaderFeatures Features = FatReaderFeatures{}>
         class WithStorage;
 
         using Machine = services::TableStateMachine<FatLifecycleState, FatLifecycleEvent, FatReader>;
@@ -53,7 +54,7 @@ namespace fs
         bool Idle() const override;
 
     protected:
-        FatReader(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const PathLimits& limits);
+        FatReader(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const PathLimits& limits);
         FatReader(const FatReader& other) = delete;
         FatReader& operator=(const FatReader& other) = delete;
         ~FatReader() = default;
@@ -108,16 +109,16 @@ namespace fs
         };
     }
 
-    template<std::size_t Files, std::size_t Directories, PathLimits Limits>
+    template<std::size_t Files, std::size_t Directories, PathLimits Limits, FatReaderFeatures Features>
     class FatReader::WithStorage
-        : private detail::FatReaderStorage<Files + Directories + 3, Limits.maxNameBytes>
+        : private detail::FatReaderStorage<Files + Directories + 3, Features.longNames ? Limits.maxNameBytes : ShortName::maxUtf8Bytes>
         , public FatReader
     {
         static_assert(Files > 0 && Directories > 0 && Limits.maxNameBytes >= ShortName::maxUtf8Bytes);
 
     public:
         explicit WithStorage(hal::BlockDevice& device)
-            : FatReader(device, infra::MakeRange(this->sectorStorage), infra::MakeRange(this->nameStorage), this->deferredStorage, Limits)
+            : FatReader(device, infra::MakeRange(this->sectorStorage), infra::MakeRange(this->nameStorage), NameReadingFor<Features>(), this->deferredStorage, Limits)
         {}
 
     private:

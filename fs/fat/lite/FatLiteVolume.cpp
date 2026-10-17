@@ -3,8 +3,8 @@
 
 namespace fs
 {
-    FatLiteVolume::FatLiteVolume(FlushBarrier& barrier, FatLiteWindow& window, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved)
-        : FatReaderVolume(barrier.Device(), window, nameBuffer, deferred, onMediaRemoved)
+    FatLiteVolume::FatLiteVolume(FlushBarrier& barrier, FatLiteWindow& window, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved)
+        : FatReaderVolume(barrier.Device(), window, nameBuffer, reading, deferred, onMediaRemoved)
         , barrier(barrier)
         , window(window)
         , tableWriter(window, Geometry())

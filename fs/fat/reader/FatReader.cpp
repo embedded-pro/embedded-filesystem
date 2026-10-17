@@ -3,9 +3,9 @@
 
 namespace fs
 {
-    FatReader::FatReader(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const PathLimits& limits)
+    FatReader::FatReader(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const PathLimits& limits)
         : window(device, sector)
-        , volume(device, window, nameBuffer, deferred, [this]
+        , volume(device, window, nameBuffer, reading, deferred, [this]
               {
                   lifecycle.Dispatch(FatMediaRemoved{});
               })
