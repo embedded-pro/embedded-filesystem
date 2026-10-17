@@ -3,7 +3,9 @@
 
 #include "fs/fat/FatFileSystem.hpp"
 #include "fs/fat/FatFormatLayout.hpp"
+#include "fs/fat/lite/FatLite.hpp"
 #include "fs/fat/test_doubles/BlockImage.hpp"
+#include "fs/interfaces/FileSystem.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "metrics/device/DeviceModels.hpp"
 #include "metrics/fat/FatChecker.hpp"
@@ -35,12 +37,18 @@ namespace metrics
         SweepContext<hal::BlockDevice>& context;
     };
 
+    enum class SweepSubject : uint8_t
+    {
+        fat,
+        fatLite
+    };
+
+    const char* SubjectName(SweepSubject subject);
+
     class SweepVolume
     {
     public:
-        using FileSystem = fs::FatFileSystem::WithStorage<2, 8>;
-
-        explicit SweepVolume(SweepContext<hal::BlockDevice>& context);
+        SweepVolume(SweepContext<hal::BlockDevice>& context, SweepSubject subject);
 
         fs::Result Mount();
         fs::Result Unmount();
@@ -60,7 +68,9 @@ namespace metrics
 
     private:
         SweepContext<hal::BlockDevice>& context;
-        FileSystem fileSystem;
+        std::optional<fs::FatFileSystem::WithStorage<2, 8>> full;
+        std::optional<fs::FatLite::WithStorage<2>> lite;
+        fs::FileSystem& fileSystem;
     };
 }
 

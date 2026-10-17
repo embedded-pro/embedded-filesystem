@@ -4,8 +4,8 @@
 
 namespace fs
 {
-    FatTableWriter::FatTableWriter(SectorCache& cache, const FatGeometry& geometry)
-        : cache(cache)
+    FatTableWriter::FatTableWriter(SectorStore& sectors, const FatGeometry& geometry)
+        : sectors(sectors)
         , geometry(geometry)
     {}
 
@@ -16,9 +16,9 @@ namespace fs
         this->cluster = cluster;
         this->value = value;
         this->onDone = onDone;
-        straddles = LocateEntry(geometry.type, cluster, cache.SectorSize()).straddles;
+        straddles = LocateEntry(geometry.type, cluster, sectors.SectorSize()).straddles;
 
-        cache.Modify(SectorOf(cluster), tableRank, [this](Result result, infra::ByteRange contents)
+        sectors.Modify(SectorOf(cluster), tableRank, [this](Result result, infra::ByteRange contents)
             {
                 if (result != Result::success)
                     this->onDone(result);
@@ -37,12 +37,12 @@ namespace fs
 
     uint32_t FatTableWriter::SectorOf(uint32_t cluster) const
     {
-        return geometry.ActiveFatSector() + LocateEntry(geometry.type, cluster, cache.SectorSize()).sector;
+        return geometry.ActiveFatSector() + LocateEntry(geometry.type, cluster, sectors.SectorSize()).sector;
     }
 
     void FatTableWriter::WriteSecondPart()
     {
-        cache.Modify(SectorOf(cluster) + 1, tableRank, [this](Result result, infra::ByteRange contents)
+        sectors.Modify(SectorOf(cluster) + 1, tableRank, [this](Result result, infra::ByteRange contents)
             {
                 if (result == Result::success)
                     WriteStraddlingPart(cluster, value, contents, true);

@@ -13,6 +13,7 @@ namespace fs
         , timerServiceId(config.timerServiceId)
         , blocksPerAllocationUnit(config.blocksPerAllocationUnit)
         , limits{ parts.nameBuffer.size(), config.maxPathBytes }
+        , operations(parts.operations)
         , onMediaRemoved(onMediaRemoved)
         , transfers(parts.barrier, parts.cache)
         , assembler(parts.nameBuffer)
@@ -23,17 +24,20 @@ namespace fs
         , freeSpace(parts.cache, state, parts.freeRuns)
         , tableWriter(parts.cache, state.geometry)
         , allocator(parts.cache, state, tableWriter, *this, freeSpace)
-        , entryUpdate(parts.cache, reader, config.timerServiceId)
+        , entryUpdate(parts.cache, reader, *this)
         , chainFree(parts.cache, transfers, state, tableWriter, freeSpace, config.discard)
         , dirtyFlag(parts.cache, state)
         , closedFiles(parts.closedFiles)
-        , queue(config.idleDelay, [this]
+        , queue(
+              [this]
               {
-                  background.Idle();
-              })
-        , background(queue, freeSpace, [this](Result result)
+                  if (background != nullptr)
+                      background->ForegroundClaiming();
+              },
+              [this]
               {
-                  Report(result);
+                  if (background != nullptr)
+                      background->ForegroundReleased();
               })
     {}
 
@@ -104,11 +108,6 @@ namespace fs
         return chainFree;
     }
 
-    FatDirtyFlag& FatVolume::DirtyFlag()
-    {
-        return dirtyFlag;
-    }
-
     FatTableWriter& FatVolume::TableWriter()
     {
         return tableWriter;
@@ -139,14 +138,14 @@ namespace fs
         return queue;
     }
 
-    const OperationQueue& FatVolume::Queue() const
-    {
-        return queue;
-    }
-
     FatOperation& FatVolume::Operation()
     {
         return operation;
+    }
+
+    const FatOperations& FatVolume::Operations() const
+    {
+        return operations;
     }
 
     const FatReservations& FatVolume::Reservations() const
@@ -156,7 +155,7 @@ namespace fs
 
     FatDateTime FatVolume::Timestamp() const
     {
-        return ToFatDateTime(infra::Now(timerServiceId));
+        return operations.now != nullptr ? operations.now(timerServiceId) : fatEpoch;
     }
 
     uint32_t FatVolume::Generation() const
@@ -188,13 +187,17 @@ namespace fs
         dirtyFlag.Reset();
         ++generation;
         mounted = true;
-        background.Start();
+
+        if (background != nullptr)
+            background->Start();
     }
 
     void FatVolume::MarkUnmounted(Result reason)
     {
         mounted = false;
-        background.Stop();
+
+        if (background != nullptr)
+            background->Stop();
 
         while (!openFiles.empty())
             openFiles.front().Detach();
@@ -239,5 +242,31 @@ namespace fs
     {
         if (result == Result::mediaRemoved)
             onMediaRemoved();
+    }
+
+    void FatVolume::AttachBackground(FatBackgroundWork& work)
+    {
+        background = &work;
+    }
+
+    bool FatVolume::Idle() const
+    {
+        return queue.Idle() && (background == nullptr || !background->Scheduled());
+    }
+
+    void FatVolume::MarkDirty(const infra::Function<void(Result result)>& onDone)
+    {
+        if (operations.markDirty != nullptr)
+            operations.markDirty(dirtyFlag, onDone);
+        else
+            dirtyFlag.Skip(onDone);
+    }
+
+    void FatVolume::MarkClean(const infra::Function<void(Result result)>& onDone)
+    {
+        if (operations.markClean != nullptr)
+            operations.markClean(dirtyFlag, onDone);
+        else
+            dirtyFlag.Skip(onDone);
     }
 }

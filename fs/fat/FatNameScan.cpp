@@ -1,4 +1,5 @@
 #include "fs/fat/FatNameScan.hpp"
+#include "fs/fat/FatLongNames.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <bit>
 
@@ -11,8 +12,9 @@ namespace fs
 
     bool FatFreeSlots::operator==(const FatFreeSlots& other) const = default;
 
-    FatNameScan::FatNameScan(FatDirectoryReader& reader)
+    FatNameScan::FatNameScan(FatDirectoryReader& reader, const FatLongNames* longNames)
         : reader(reader)
+        , longNames(longNames)
     {}
 
     FatNameScan::~FatNameScan() = default;
@@ -140,7 +142,7 @@ namespace fs
 
     void FatNameScan::MarkTail(const ShortNameBytes& name)
     {
-        if (auto tail = NumericTailOf(name, *basis); tail.has_value() && *tail <= tails)
+        if (auto tail = longNames->tailOf(name, *basis); tail.has_value() && *tail <= tails)
             usedTails |= 1u << (*tail - 1);
     }
 

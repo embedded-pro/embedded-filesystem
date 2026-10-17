@@ -8,6 +8,7 @@ the cost of an operation must not depend on the size of the file or on how full 
 wear must be spread evenly even when most of the volume holds data that never changes,
 and every operation must be asynchronous.
 It also has to survive a power loss at any moment.
+`fs::NorLite` mounts the same volumes for products that only create, append to and read files, with fewer calls and a smaller image, as described under [Lite volume](#lite-volume).
 This document describes the on-flash format and the algorithms.
 
 ## Terms
@@ -46,7 +47,7 @@ The device is divided into blocks of `sectorsPerBlock` sectors, and sectors afte
 Except for the superblocks, every block can hold any type, and the type of a block changes every time it is erased and reused.
 This is what allows wear to be spread over the whole device.
 
-Integers are stored in little-endian order, and every CRC is `infra::Crc32`.
+Integers are stored in little-endian order, and every CRC is the CRC-32 of `infra::Crc32`, computed with `infra::Crc32Nibblewise`, whose table has 16 entries instead of 256.
 In this document, rounding a size up to the program unit is written as `Round(size)`.
 
 ## Superblocks
@@ -473,6 +474,12 @@ After each unit, the background releases the queue when a foreground operation w
 The fallback claims the queue as soon as a call releases it, as described under [Static wear leveling](#static-wear-leveling), and does not wait for the idle delay.
 The machine starts when the volume is mounted and stops when it is unmounted; a claim that still waits then is withdrawn.
 
+A volume built with `NorFeatures::background` left out does no work while it is idle, and links neither this machine nor a timer.
+A free block is then erased by the call that needs it, or by the refill of a call that leaves the pool below the watermark, and a checkpoint is written when the journal or the cache is full and at `Unmount`.
+Static wear leveling makes its moves in `fs::NorForegroundLeveling` instead, a `services::TableStateMachine` with the states `Stopped`, `Waiting`, `Claiming` and `Moving`.
+After the first call of a mount and after every call that allocated a block, when a move is due and the free blocks can hold twice the node blocks of a checkpoint, it claims the queue ahead of every waiting call and makes one move, as the fallback does.
+So the moves keep the rate of the background, the first one after a mount included, and the next call waits for the move.
+
 ## Power-fail safety
 
 A state change becomes visible only through a committed record or a committed checkpoint, both protected by a CRC.
@@ -537,7 +544,7 @@ hal::Flash& norFlash = ...;
 fs::NorFileSystem::WithStorage<norConfig, 4> norVolume{ norFlash };
 ```
 
-The template arguments of `fs::NorFileSystem::WithStorage<Config, Files>` are the configuration and the number of open files; the constructor takes the device and an optional idle delay, 10 ms by default.
+The template arguments of `fs::NorFileSystem::WithStorage<Config, Files, Features>` are the configuration, the number of open files and an optional `fs::NorFeatures`; the constructor takes the device and an optional idle delay, 10 ms by default.
 The fields marked as format parameters are stored in the superblock, and a volume mounts only with the format parameters it was formatted with.
 
 | `fs::NorConfig`               | Default | Meaning                                                                                                                               |
@@ -559,7 +566,51 @@ The fields marked as format parameters are stored in the superblock, and a volum
 
 The reserve and the watermark of the pool are computed from the configuration and the geometry of the device.
 
+`fs::NorFeatures` leaves out calls, and uses of calls, that a product never makes, so that their code is not linked; a call that is left out completes with `unsupported` on a mounted volume, and with `notMounted` otherwise, before its path is validated.
+Every feature is in by default.
+
+| `fs::NorFeatures` | Leaves out                                                                                                          |
+|-------------------|---------------------------------------------------------------------------------------------------------------------|
+| `makeDirectory`   | `MakeDirectory`                                                                                                     |
+| `remove`          | `Remove`                                                                                                            |
+| `rename`          | `Rename`                                                                                                            |
+| `truncate`        | `Truncate`                                                                                                          |
+| `format`          | `Format`, so the flash is formatted before                                                                          |
+| `overwrite`       | Writing before the end of a file: a `Write` at a position before the end of a file that is not opened for appending |
+| `openDirectory`   | `OpenDirectory`, and the directory handles that `NorConfig::directories` sizes                                      |
+| `background`      | The work while the volume is idle, as described under [Background work](#background-work)                           |
+
+A volume mounts whatever a volume with every feature wrote, so leaving a feature out never changes the format on flash; F-1 measures the volume with every feature left out as `embedded-filesystem/nor-minimal`.
+
 On the boards of [Validation.md](Validation.md), a volume runs on a region of 16 MiB of a QSPI NOR flash, with the `fs::NorConfig` above, which the NOR subject uses on `nor-qspi-16m`, and on a parallel NOR of 16 MiB with blocks of one 128 KiB sector, a program unit of 2 bytes and the write buffer of the chip as the page.
+
+## Lite volume
+
+`fs::NorLite`, in `fs/nor/lite`, is a NOR volume for a product that creates, appends to and reads files, such as a data logger, and needs the smallest image that writes NOR flash.
+It runs the operations of `fs::NorFileSystem` on the same `fs::NorVolume`, mounts with the same `fs::NorVolumeMount`, and makes the moves of static wear leveling with `fs::NorForegroundLeveling`, as a volume without `NorFeatures::background` does, so it keeps the format, the power-fail safety and the wear leveling of the full volume.
+It has:
+
+* `Mount` and `Unmount`;
+* `Open` in every mode of [Architecture.md](Architecture.md#open-modes), which creates a file that does not exist and empties a file that is opened for writing, and `Stat`;
+* `Read`, `Write` at the end of a file, `Seek`, `Sync` and `Close` on its files.
+
+It leaves out:
+
+* `Format`, so the flash is formatted before, by `fs::NorFileSystem` or `fs::NorFormatter`;
+* `MakeDirectory`, `Remove`, `Rename`, `OpenDirectory` and `Usage`, which complete with `unsupported` on a mounted volume, and with `notMounted` otherwise; it opens files in the directories that a full volume made;
+* `Truncate` and a `Write` before the end of a file, which complete with `unsupported`, as `NorFeatures::truncate` and `NorFeatures::overwrite` do;
+* the background work, as `NorFeatures::background` does, the directory handles and the slots for waiting calls on paths: an `Open` or a `Stat` while another one runs completes with `busy`.
+
+Since it removes nothing, a file gives its blocks back when it is opened for writing again.
+
+```cpp
+hal::Flash& norFlash = ...;
+fs::NorLite::WithStorage<norConfig, 2> lite{ norFlash };
+```
+
+The template arguments of `fs::NorLite::WithStorage<Config, Files>` are the configuration and the number of open files; `directories` and `pathOperations` of `fs::NorConfig` are not used.
+On a Cortex-M4, F-1 measures 60.9 KB of flash and 17.4 KB of RAM for `fs::NorLite::WithStorage` with the configuration of `nor-qspi-16m` and one file, against 63.3 KB and 17.6 KB for `fs::NorFileSystem` with every `fs::NorFeatures` left out and 15.7 KB and 0.4 KB for `littlefs/default`, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+Most of what is left is the code that every write needs, the journal, the checkpoints, the maps and the garbage collection, and most of the RAM is the tables and the node cache of [RAM use](#ram-use).
 
 ## Counters
 
@@ -581,4 +632,5 @@ The NOR filesystem is tested on `hal::FlashStub` from EmIL, which models NOR pro
 `fs::NorImageBuilder` arranges directories and files synchronously on an image before the operation under test; it changes the maps with the trees of `fs/nor` and writes them with a checkpoint, and the independent checker of `metrics/nor` checks the images it builds.
 The metrics harness adds wrappers that count operations per block and simulate the timing of a NOR device, and a wrapper that cuts power in the middle of a program or an erase.
 The metrics W-1 to W-6, R-2, R-4, WL-1 to WL-4 and P-1 cover the behaviour described above.
+`fs::NorLite` has tests of its own in `fs/nor/lite/test`, and the power-cut sweep runs its writes too.
 See [Testing.md](Testing.md) and [Metrics.md](Metrics.md).

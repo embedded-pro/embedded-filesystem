@@ -1,7 +1,9 @@
 #ifndef FS_FAT_FAT_BACKGROUND_SCAN_HPP
 #define FS_FAT_FAT_BACKGROUND_SCAN_HPP
 
+#include "fs/common/IdleTimer.hpp"
 #include "fs/common/OperationQueue.hpp"
+#include "fs/fat/FatBackgroundWork.hpp"
 #include "fs/fat/FatFreeSpaceScan.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/Function.hpp"
@@ -68,6 +70,7 @@ namespace fs
     using FatScanEvent = std::variant<FatScanStart, FatScanStop, FatScanIdle, FatScanGranted, FatScanStepped>;
 
     class FatBackgroundScan
+        : public FatBackgroundWork
     {
     public:
         using Machine = services::TableStateMachine<FatScanState, FatScanEvent, FatBackgroundScan>;
@@ -76,16 +79,19 @@ namespace fs
         static constexpr std::array<Machine::Transition, 14> Rows();
         static constexpr Machine::Rules Rules();
 
-        FatBackgroundScan(OperationQueue& queue, FatFreeSpaceScan& scan, const infra::Function<void(Result result)>& onFailed);
+        FatBackgroundScan(OperationQueue& queue, FatFreeSpaceScan& scan, infra::Duration idleDelay, const infra::Function<void(Result result)>& onFailed);
         FatBackgroundScan(const FatBackgroundScan& other) = delete;
         FatBackgroundScan& operator=(const FatBackgroundScan& other) = delete;
         ~FatBackgroundScan();
 
-        void Start();
-        void Stop();
-        void Idle();
+        void Start() override;
+        void Stop() override;
+        void ForegroundClaiming() override;
+        void ForegroundReleased() override;
+        bool Scheduled() const override;
 
     private:
+        void Idle();
         void Claim();
         void Step();
         void Release();
@@ -95,6 +101,7 @@ namespace fs
 
     private:
         OperationQueue::BackgroundClaimer claimer;
+        IdleTimer idleTimer;
         FatFreeSpaceScan& scan;
         infra::Function<void(Result result)> onFailed;
         Machine::WithStorage<2> machine;

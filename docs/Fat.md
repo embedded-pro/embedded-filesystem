@@ -6,6 +6,7 @@
 Its on-disk format is the standard one, so media written by the device can be used on Windows, Linux and macOS, and media prepared on a PC can be used by the device.
 SD cards and eMMC contain a controller that performs wear leveling, bad-block management and error correction, so the FAT filesystem adds none of these.
 Instead, it is designed to give the card the access pattern its controller handles best: large, aligned, sequential writes, and a discard for clusters that are no longer used.
+`fs::FatReader` reads the same volumes for products that never write, with a fraction of the flash and the RAM, as described under [Read-only volume](#read-only-volume), and `fs::FatLite` writes files on them with one sector buffer, as described under [Lite volume](#lite-volume).
 
 ## Scope
 
@@ -29,7 +30,7 @@ A name may start with a space or a dot.
 Names are compared case-insensitively for ASCII letters, as on Windows, and byte by byte otherwise; a path component matches either the long or the short name of an entry.
 
 A name that fits the 8.3 format, with a base and an extension that are each all lower case or all upper case, is stored as a short entry only, with the lower-case flags that Windows NT introduced.
-Every other name is stored in long name entries, followed by a short alias:
+Every other name is stored in long name entries, followed by a short alias, or completes with `unsupported` when `fs::FatFeatures::longNames` is left out:
 
 1. The basis of the alias is the name in upper case, without spaces and leading dots; every character that a short name cannot hold, including `+`, `,`, `;`, `=`, `[`, `]` and every non-ASCII character, becomes `_`.
 2. Its base is the part before the last dot, cut to 8 characters, and its extension the part after the last dot, cut to 3.
@@ -278,6 +279,67 @@ The fixed root directory of FAT12 and FAT16 holds 512 entries; on FAT32, FSINFO 
 The boot sector has the volume label `NO NAME` and the volume ID given in `FatFormatConfig`.
 Formatting writes the MBR, the boot sector, FSINFO and their backups, the FAT with zeros except its first two entries, and the root directory with zeros, then discards the rest of the device and flushes it.
 
+## Read-only volume
+
+`fs::FatReader`, in `fs/fat/reader`, is a FAT volume that only reads, for a product that never writes to its card, such as a bootloader that loads an image or a device that plays files.
+It mounts, looks up, lists and reads with the parts of `fs::FatFileSystem` that read, so it validates a volume as described under [Mount](#mount), compares and reports names as described under [Names](#names) and [Directory entries](#directory-entries), and bounds every walk and reports what it finds as described under [Corruption](#corruption); both accept the same volumes and report the same names.
+A removed medium faults it in the same way.
+It leaves out:
+
+* every change: `Write`, `Truncate`, `ExpectSize`, `Remove`, `Rename`, `MakeDirectory` and `Open` in a mode other than `read` complete with `readOnly`, and `Usage` completes with `unsupported`, as FatFs built read-only has no free-space query either;
+* the sector cache: one buffer of one sector holds the sector that the last step read, of the boot sector, the FAT or a directory, so a mount reads the first sector of the device and, in a partition, its boot sector, and nothing else;
+* the extent cache: a read continues the cluster chain from the cluster it reached last, and a `Seek` back follows the chain again from the start of the file;
+* the background scan of the FAT and the closed files.
+
+A read copies a partial sector from the sector buffer and reads whole sectors straight into the buffer of the caller, at most one cluster per request.
+
+```cpp
+hal::BlockDevice& sdCard = ...;
+fs::FatReader::WithStorage<2> reader{ sdCard };
+```
+
+The template arguments of `fs::FatReader::WithStorage<Files, Directories, Limits>` are the number of open files, the number of open directory handles, 1 by default, and an optional `fs::PathLimits`, the longest name and the longest path in UTF-8 bytes, 255 each by default.
+The longest name also sizes the buffer that holds a name while it is reported, as `FatLimits::maxNameBytes` does for `fs::FatFileSystem`.
+On a Cortex-M4, F-1 measures 19.1 KB of flash and 2.0 KB of RAM for `fs::FatReader::WithStorage<1>`, against 61.0 KB and 7.8 KB for `fs::FatFileSystem` with the same calls and 5.8 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+
+## Lite volume
+
+`fs::FatLite`, in `fs/fat/lite`, is a FAT volume that writes files with one sector buffer, for a product that creates, appends to and rewrites files, such as a data logger, and needs the smallest image that writes.
+It mounts, looks up, lists and reads with the parts of `fs::FatReader`, and it writes:
+
+* `Open` in every mode of [Architecture.md](Architecture.md#open-modes); it creates a name that fits the 8.3 format with each part all lower or all upper case as a short entry with the lower-case flags, and completes with `unsupported` for any other name, as `fs::FatFeatures::longNames` does;
+* `Write`, `Seek`, `Truncate`, `Sync` and `Close`, and the commit of a file whose last reference is released.
+
+It leaves out:
+
+* `MakeDirectory`, `Remove`, `Rename`, `ExpectSize` and `Usage`, which complete with `unsupported` on a mounted volume, and with `notMounted` otherwise;
+* the sector cache: its one sector buffer holds the sector of the FAT, of a directory or of a file that the last step read or changed, and a changed sector is written back, to every copy of the FAT for a sector of the FAT, before another sector is loaded; whole sectors of a file go straight to or from the buffer of the caller, at most one cluster per request;
+* the extent cache, the closed files, the background scan, the allocation units and the discard;
+* the timestamps, as `fs::FatFeatures::timestamps` does, and the clean-shutdown bit, so that a PC does not check the volume after a power loss, and FSINFO at mount, as `fs::FatFeatures::cleanShutdown` does.
+
+Free clusters are found with a cursor that starts at cluster 2 at each mount and moves past every cluster it takes, wrapping around at the end of the volume; it never takes a FAT12 cluster whose entry straddles two sectors.
+A full directory other than the fixed root of FAT12 and FAT16 grows by one cluster of zeros.
+`Unmount` commits the open files, writes FSINFO with an unknown free count and the cursor as the next-free hint when the FAT changed, and flushes the device.
+
+Every write goes through `fs::FlushBarrier` with the ranks of [Sector cache](#sector-cache), so the directory entry that refers to clusters is written only after a flush of their data and their FAT entries:
+
+| Operation     | Order                                                                                                                                           |
+|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| Write, `Sync` | The FAT entry of each new cluster, a flush when the link to it is in another FAT sector, the link, the data, then at `Sync` the directory entry |
+| Create        | When the directory is full, a cluster of zeros and its FAT entries, then the short entry                                                        |
+| `Truncate`    | The directory entry with the new size, flush, the end of chain at the new last cluster, flush, the FAT entries of the cut clusters freed, flush |
+| `Unmount`     | The directory entries of the open files, FSINFO when the FAT changed, flush                                                                     |
+
+A power loss leaves the states of [Behaviour on power loss](#behaviour-on-power-loss), except that a write interrupted before the directory entry may leave its new clusters allocated, and linked to the end of the file, without being part of it, which a PC check reclaims.
+
+```cpp
+hal::BlockDevice& sdCard = ...;
+fs::FatLite::WithStorage<2> lite{ sdCard };
+```
+
+The template arguments of `fs::FatLite::WithStorage<Files, Directories, Limits>` are those of `fs::FatReader::WithStorage`.
+On a Cortex-M4, F-1 measures 31.2 KB of flash and 2.6 KB of RAM for `fs::FatLite::WithStorage<1>`, against 45.7 KB and 7.4 KB for `fs::FatFileSystem` with every `fs::FatFeatures` left out and 7.4 KB and 1.1 KB for `fatfs/minimal`, which also removes, renames and makes directories, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+
 ## Configuration
 
 ```cpp
@@ -285,7 +347,7 @@ hal::BlockDevice& sdCard = ...;
 fs::FatFileSystem::WithStorage<4, 8> fatVolume{ sdCard, fs::FatConfig{ .blocksPerAllocationUnit = 8192, .timerServiceId = infra::localTimeTimerServiceId } };
 ```
 
-The template arguments of `fs::FatFileSystem::WithStorage<Files, CacheSectors, Limits>` are the number of open files, the number of sectors in the cache, and an optional `fs::FatLimits` with the other sizes:
+The template arguments of `fs::FatFileSystem::WithStorage<Files, CacheSectors, Limits, Features>` are the number of open files, the number of sectors in the cache, an optional `fs::FatLimits` with the other sizes and an optional `fs::FatFeatures`:
 
 | `fs::FatLimits`  | Default | Sizes                                                         |
 |------------------|---------|---------------------------------------------------------------|
@@ -295,6 +357,24 @@ The template arguments of `fs::FatFileSystem::WithStorage<Files, CacheSectors, L
 | `closedFiles`    | 2       | The closed files whose last run is remembered                 |
 | `freeRuns`       | 8       | The cache of free runs                                        |
 | `maxNameBytes`   | 255     | The longest name in UTF-8 bytes, and the buffer that holds it |
+
+`fs::FatFeatures` leaves out what a product does not need, so that its code is not linked: calls it never makes, which then complete with `unsupported` on a mounted volume, and with `notMounted` otherwise, before their paths are validated, and work that it can do without.
+Every feature is in by default.
+
+| `fs::FatFeatures` | Leaves out                                                                                                                                                                                                                                                           |
+|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `makeDirectory`   | `MakeDirectory`                                                                                                                                                                                                                                                      |
+| `remove`          | `Remove`                                                                                                                                                                                                                                                             |
+| `rename`          | `Rename`                                                                                                                                                                                                                                                             |
+| `expectSize`      | `ExpectSize`                                                                                                                                                                                                                                                         |
+| `usage`           | `Usage`                                                                                                                                                                                                                                                              |
+| `openDirectory`   | `OpenDirectory`, and the directory handles that `FatLimits::directories` sizes                                                                                                                                                                                       |
+| `backgroundScan`  | The count of the free clusters while the volume is idle: `Usage` counts them on its first call, and until then a file opened for appending starts at the allocation cursor instead of in a whole free allocation unit                                                |
+| `timestamps`      | The time of entries: every entry is dated 1980-01-01 00:00:00, as with a clock that is not set                                                                                                                                                                       |
+| `cleanShutdown`   | The clean-shutdown bit of the FAT: the volume never marks itself dirty, so a PC cannot tell that it was removed without `Unmount`, and a FAT32 mount reads neither FSINFO nor the FAT, so `Usage` and the allocation do not start from its counts                    |
+| `longNames`       | The creation of long names: `Open`, `MakeDirectory` and `Rename` complete with `unsupported` for a name that is not 8.3 with each part all lower or all upper case, while long names already on the volume are still found, read, renamed to short names and removed |
+
+F-1 measures the volume with every feature left out as `embedded-filesystem/fat-minimal`.
 
 `fs::FatConfig` holds the settings that need no storage:
 
@@ -317,5 +397,7 @@ FatFs needs less, 1652 bytes with one open file as F-1 measures, because it work
 
 The FAT filesystem is tested on `hal::BlockDeviceStub` from EmIL and on `fs::SparseBlockDevice`, which holds FAT32 volumes of tens of megabytes in a few kilobytes, with volumes created by `fs::FatFormatter` and arranged with `fs::FatImageBuilder` in memory.
 Interoperability tests create images with `mkfs.fat`, write them with the library, check them with `fsck.fat` and read them back with `mtools`, and the reverse.
+`fs::FatReader` has tests of its own in `fs/fat/reader/test`, on the same devices and volumes, and the interoperability tests read the images of `mkfs.fat` and `mtools` with both volumes.
+`fs::FatLite` has tests of its own in `fs/fat/lite/test`, among them one that fails every device request of a scenario in turn; the interoperability tests check the images it writes with `fsck.fat` and `mtools`, and the power-cut sweep runs its writes too.
 The power-cut sweep and the metrics W-2, R-2 and M-1 to M-3 cover the behaviour described above.
 See [Testing.md](Testing.md) and [Metrics.md](Metrics.md).

@@ -14,13 +14,24 @@ from typing import Any
 
 EMPTY = "empty"
 METRICS = "memory_metrics.json"
+LINK_TIME_OPTIMIZATION = "-lto"
 IMAGES = {
     "fat": "embedded-filesystem/fat",
     "nor": "embedded-filesystem/nor",
+    "fat_reads": "embedded-filesystem/fat-reads",
+    "nor_reads": "embedded-filesystem/nor-reads",
+    "fat_read_only": "embedded-filesystem/fat-read-only",
+    "fat_minimal": "embedded-filesystem/fat-minimal",
+    "fat_lite": "embedded-filesystem/fat-lite",
+    "nor_minimal": "embedded-filesystem/nor-minimal",
+    "nor_lite": "embedded-filesystem/nor-lite",
     "fatfs_default": "fatfs/default",
     "fatfs_tuned": "fatfs/tuned",
+    "fatfs_minimal": "fatfs/minimal",
+    "fatfs_read_only": "fatfs/read-only",
     "littlefs_default": "littlefs/default",
     "littlefs_ram_matched": "littlefs/ram-matched",
+    "littlefs_read_only": "littlefs/read-only",
 }
 
 
@@ -73,11 +84,18 @@ def core_results(directory: Path) -> list[dict[str, Any]]:
     return results
 
 
+def parameters(core: str, toolchain: str, configuration: str) -> dict[str, Any]:
+    device: dict[str, Any] = {"toolchain": toolchain, "configuration": configuration}
+    if core.endswith(LINK_TIME_OPTIMIZATION):
+        device["linkTimeOptimization"] = "true"
+    return device
+
+
 def fragment(reports: Path, toolchain: str, configuration: str) -> dict[str, Any]:
     cores = sorted(path for path in reports.glob("*") if path.is_dir()) if reports.is_dir() else []
     if not cores:
         raise FootprintError(f"no reports in {reports}")
-    devices = {core.name: {"toolchain": toolchain, "configuration": configuration} for core in cores}
+    devices = {core.name: parameters(core.name, toolchain, configuration) for core in cores}
     results = [entry for core in cores for entry in core_results(core)]
     return {"devices": devices, "results": results}
 

@@ -53,7 +53,7 @@ These presets turn it on, and what it builds depends on the configuration:
 | Configuration            | Presets                                                                                 | Built                                                                                                                                                                  |
 |--------------------------|-----------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Host                     | `host`, `host-single-Debug`, `host-single-MinSizeRel`, `coverage`, `Windows`, `metrics` | The libraries of `validation/firmware`, and their tests with `EMFS_BUILD_TESTS`; with `EMFS_BUILD_METRICS`, the conversion of the committed runs into report fragments |
-| Cortex-M without a board | `cortex-m4`, `cortex-m7`, `cortex-m33`                                                  | The reference images of F-1                                                                                                                                            |
+| Cortex-M without a board | `cortex-m4`, `cortex-m7`, `cortex-m33`, `cortex-m4-lto`                                 | The reference images of F-1                                                                                                                                            |
 | ST board                 | `stm32h757-cm7`, `stm32h757-cm4`, `stm32h745-cm7`, `stm32h745-cm4`                      | hal-st, and the validation firmware for the Cortex-M7 or the parked image for the Cortex-M4                                                                            |
 
 hal-st is fetched with FetchContent in `validation/CMakeLists.txt` only, and only when `EMFS_STANDALONE` and `EMFS_BUILD_VALIDATION` are on and `TARGET_MCU_VENDOR` is `st`.
@@ -63,11 +63,11 @@ As a subproject, hal-st uses the EmIL of embedded-filesystem, not its own pin; b
 The startup code of hal-st is assembly, so the top-level `CMakeLists.txt` enables the ASM language when validation is built for an ST board; nothing else outside `validation/` refers to hal-st.
 
 FatFs and littlefs, which F-1 and F-2 build for Cortex-M, are pinned in `cmake/emfs_third_party.cmake`, which the top level includes when `metrics/` or `validation/` is built, so that both use the same versions.
-The file fetches the sources and builds their C code as `third_party.fatfs_default` and `third_party.fatfs_tuned`, with their generated `ffconf.h`, and `third_party.littlefs`.
+The file fetches the sources and builds their C code as `third_party.fatfs_default`, `third_party.fatfs_tuned`, `third_party.fatfs_minimal` and `third_party.fatfs_read_only`, with their generated `ffconf.h`, and `third_party.littlefs` and `third_party.littlefs_read_only`, with `LFS_READONLY`.
 The glue stays with each user: the host shims in `metrics/baselines`, and in `validation/firmware/baselines` the blocking adapters an EmIL application would need, which wait for the completions of the device with `infra::EventDispatcher::ExecuteUntil`:
 
 * `validation::FatFsDisk`, the `disk_*` functions of FatFs over a `hal::BlockDevice`, one library per variant;
-* `validation::LittleFsFlash`, the callbacks of littlefs over a `hal::Flash`.
+* `validation::LittleFsFlash`, the callbacks of littlefs over a `hal::Flash`, one library per variant.
 
 The board presets follow those of hal-st:
 
@@ -352,19 +352,32 @@ Both are reported until the first runs show their spread, and a later step sets 
 
 ## F-1 reference images
 
-`validation/footprint` builds one reference image per subject for the Cortex-M4, Cortex-M7 and Cortex-M33 presets, the target `validation.footprint`:
+`validation/footprint` builds one reference image per subject for the presets `cortex-m4`, `cortex-m7` and `cortex-m33`, and for `cortex-m4-lto`, the Cortex-M4 with link-time optimization, the target `validation.footprint`:
 
-| Image                                          | Subject                   | Configuration                                                                                                        |
-|------------------------------------------------|---------------------------|----------------------------------------------------------------------------------------------------------------------|
-| `validation.footprint.empty`                   |                           | The platform alone                                                                                                   |
-| `validation.footprint.fat`                     | `embedded-filesystem/fat` | `fs::FatFileSystem::WithStorage<1, 8>`, the allocation unit of `sd-card-256m`, and `fs::FatFormatter`                |
-| `validation.footprint.nor`                     | `embedded-filesystem/nor` | `fs::NorFileSystem::WithStorage` with the configuration of `nor-qspi-16m` and one file                               |
-| `validation.footprint.fatfs_default`, `_tuned` | `fatfs/default`, `/tuned` | One `FIL`, through `validation::FatFsDisk`; the tuned variant with the allocation unit and a link map of 64 entries  |
-| `validation.footprint.littlefs_default`        | `littlefs/default`        | Caches of 16 bytes and one file, through `validation::LittleFsFlash`                                                 |
-| `validation.footprint.littlefs_ram_matched`    | `littlefs/ram-matched`    | Caches of one sector, the lookahead of `nor-qspi-16m`, one file and `lfs_fs_gc`, through `validation::LittleFsFlash` |
+| Image                                          | Subject                             | Configuration                                                                                                        |
+|------------------------------------------------|-------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `validation.footprint.empty`                   |                                     | The platform alone                                                                                                   |
+| `validation.footprint.fat`                     | `embedded-filesystem/fat`           | `fs::FatFileSystem::WithStorage<1, 8>`, the allocation unit of `sd-card-256m`, and `fs::FatFormatter`                |
+| `validation.footprint.nor`                     | `embedded-filesystem/nor`           | `fs::NorFileSystem::WithStorage` with the configuration of `nor-qspi-16m` and one file                               |
+| `validation.footprint.fatfs_default`, `_tuned` | `fatfs/default`, `/tuned`           | One `FIL`, through `validation::FatFsDisk`; the tuned variant with the allocation unit and a link map of 64 entries  |
+| `validation.footprint.littlefs_default`        | `littlefs/default`                  | Caches of 16 bytes and one file, through `validation::LittleFsFlash`                                                 |
+| `validation.footprint.littlefs_ram_matched`    | `littlefs/ram-matched`              | Caches of one sector, the lookahead of `nor-qspi-16m`, one file and `lfs_fs_gc`, through `validation::LittleFsFlash` |
+| `validation.footprint.fat_reads`               | `embedded-filesystem/fat-reads`     | As `fat`, without the formatter, with only the calls that read                                                       |
+| `validation.footprint.nor_reads`               | `embedded-filesystem/nor-reads`     | As `nor`, without `Format`, with only the calls that read                                                            |
+| `validation.footprint.fat_read_only`           | `embedded-filesystem/fat-read-only` | `fs::FatReader::WithStorage<1>`, with only the calls that read                                                       |
+| `validation.footprint.fat_minimal`             | `embedded-filesystem/fat-minimal`   | As `fat`, without the formatter, with every `fs::FatFeatures` left out                                               |
+| `validation.footprint.fat_lite`                | `embedded-filesystem/fat-lite`      | `fs::FatLite::WithStorage<1>`, with every call                                                                       |
+| `validation.footprint.nor_minimal`             | `embedded-filesystem/nor-minimal`   | As `nor`, with every `fs::NorFeatures` left out, `Format` among them                                                 |
+| `validation.footprint.nor_lite`                | `embedded-filesystem/nor-lite`      | `fs::NorLite::WithStorage` with the configuration of `nor-qspi-16m` and one file, with every call                    |
+| `validation.footprint.fatfs_minimal`           | `fatfs/minimal`                     | As `fatfs/default`, without long names and without `f_mkfs`                                                          |
+| `validation.footprint.fatfs_read_only`         | `fatfs/read-only`                   | `FF_FS_READONLY` with long names, with only the calls that read                                                      |
+| `validation.footprint.littlefs_read_only`      | `littlefs/read-only`                | `LFS_READONLY` with the caches of `littlefs/default`, with only the calls that read                                  |
 
 The configurations are those of the host metrics, with one open file, as their `RamBytes()` counts; `Configurations.hpp` holds them, and `metrics.baselines_test` checks that they equal the device models and the configurations of the host.
 Each image calls every operation of the API of its subject, and the formatter, on a device that does nothing, so that the linker keeps every function a product could call; `validation::footprint::Exercise` makes the calls of `fs::FileSystem` for both subjects of embedded-filesystem.
+The images of the calls that read call only `Mount`, `Open` in `read` mode, `Seek`, `Read`, `Close`, `OpenDirectory`, `Next`, `Stat` and `Unmount`, through `validation::footprint::ExerciseReads`, or the same functions of FatFs and littlefs, so that F-1 shows how much of its code a product that only reads still links.
+`fatfs/minimal` and the read-only baselines are what a smaller profile of embedded-filesystem is compared with, such as `embedded-filesystem/fat-read-only` with `fatfs/read-only`, `embedded-filesystem/fat-lite` with `fatfs/minimal` and `embedded-filesystem/nor-lite` with `littlefs/default`.
+FatFs and littlefs built read-only have no free-space query, so the images of the calls that read leave out `Usage`.
 The volumes and their buffers are static, so that their RAM is counted, in `infra::StaticStorage`, so that the destructors a product never runs are not linked; the formatter of `fs/fat`, the work area of `f_mkfs` and the directory and entry structures of FatFs and littlefs are on the stack of `main`, as `RamBytes()` leaves them out on the host, and the buffer of the reads and writes is in the platform.
 F-1 counts the code of EmIL that a subject uses and the empty image does not, such as `infra::SharedPtr`, `infra::ClaimableResource` and the timers of the idle work of NOR, since a product that has none of the subjects does not link it either.
 
@@ -372,7 +385,10 @@ Every image holds the same platform, `validation::footprint::Platform`: the inte
 The empty image holds the platform alone, and F-1 is the difference between the report of the image of a subject and that of the empty image, so that it is what the subject adds to an EmIL application, its glue included; `--baseline-elf` adds `memory_diff.md` to each report, the symbols that differ.
 The images need no board: they are linked with `Footprint.ld`, a generic linker script with one `MEMORY` block for the flash and one for the RAM, `Startup.cpp`, a minimal vector table and reset handler, and the system call stubs of `hal.cortex_m.runtime`, in `MinSizeRel`.
 
-`validation/footprint/measure.sh <directory>` runs `cortex-memory-budget`, pinned by hash in `requirements.txt`, on every image of the three presets, with `memory_budget.json`, into `<directory>/reports`, and `python3 -m emfs_validation.footprint` turns the reports into the F-1 fragment, `<directory>/fragments/footprint.json`.
+`validation/footprint/measure.sh <directory>` runs `cortex-memory-budget`, pinned by hash in `requirements.txt`, on every image of the four presets, with `memory_budget.json`, into `<directory>/reports`, and `python3 -m emfs_validation.footprint` turns the reports into the F-1 fragment, `<directory>/fragments/footprint.json`.
+Each image is also linked with a map, `validation.footprint.<image>.elf.map`, and `measure.sh` runs `python3 -m emfs_validation.attribution` on the maps of every preset, into `<directory>/attribution/<preset>.md`.
+It lists what each image adds to the empty image by library, by object and by kind of code: the callbacks of `infra::Function`, the state machines of `services::TableStateMachine`, virtual tables and `std::variant`.
+A change thereby shows which part of a subject it made larger or smaller; the attribution is no metric, and its totals leave out the alignment between output sections.
 Each subject has two results per core, the flash and the RAM it adds, each with the RAM in `ramBytes`, and each core is a device with the compiler, as the `.comment` of the images names it, and the configuration as its parameters:
 
 ```json
@@ -387,6 +403,8 @@ Each subject has two results per core, the flash and the RAM it adds, each with 
 }
 ```
 
+The images of `cortex-m4-lto` are the device `cortex-m4-lto`, whose parameters add `"linkTimeOptimization": true`.
+Link-time optimization is a choice of the product that links the library, so F-1 reports it next to the plain build instead of in its place; the preset does not treat warnings as errors, since the other presets build the same code with them.
 The `Footprint` job of the metrics workflow builds the images, measures them and uploads the directory as the artifact `footprint`; the `Metrics` job downloads it and passes `-DEMFS_METRICS_EXTRA_FRAGMENTS=<directory>/fragments`, so F-1 is reported next to the baselines and held to the 5 % rule like any reported metric.
 When the `Footprint` job fails, the `Metrics` job still runs, and the report lacks F-1.
 

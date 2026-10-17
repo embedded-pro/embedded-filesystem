@@ -1,7 +1,9 @@
 #ifndef FS_NOR_NOR_BACKGROUND_HPP
 #define FS_NOR_NOR_BACKGROUND_HPP
 
+#include "fs/common/IdleTimer.hpp"
 #include "fs/common/OperationQueue.hpp"
+#include "fs/nor/NorBackgroundWork.hpp"
 #include "services/fsm/StateMachineDefinition.hpp"
 #include "services/fsm/TableStateMachine.hpp"
 #include <array>
@@ -66,6 +68,7 @@ namespace fs
     using NorBackgroundEvent = std::variant<NorBackgroundStart, NorBackgroundStop, NorBackgroundIdle, NorBackgroundGranted, NorBackgroundUnitDone, NorBackgroundUrge>;
 
     class NorBackground
+        : public NorBackgroundWork
     {
     public:
         using Machine = services::TableStateMachine<NorBackgroundState, NorBackgroundEvent, NorBackground>;
@@ -74,18 +77,20 @@ namespace fs
         static constexpr std::array<Machine::Transition, 9> Rows();
         static constexpr Machine::Rules Rules();
 
-        explicit NorBackground(NorVolume& volume);
+        NorBackground(NorVolume& volume, infra::Duration idleDelay);
         NorBackground(const NorBackground& other) = delete;
         NorBackground& operator=(const NorBackground& other) = delete;
         ~NorBackground();
 
-        void Start();
-        void Stop();
-        void Idle();
-        void Urge();
-        void CallReleased();
+        void Start() override;
+        void Stop() override;
+        void Urge() override;
+        void ForegroundClaiming() override;
+        void ForegroundReleased() override;
+        bool Scheduled() const override;
 
     private:
+        void Idle();
         bool HasWork() const;
         bool CheckpointDue() const;
         bool FallbackDue() const;
@@ -102,6 +107,7 @@ namespace fs
     private:
         NorVolume& volume;
         OperationQueue::BackgroundClaimer claimer;
+        IdleTimer idleTimer;
         bool erasing{ false };
         bool urgent{ false };
         Machine::WithStorage<2> machine;

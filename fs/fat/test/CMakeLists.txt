@@ -34,6 +34,7 @@ target_sources(fs.fat_test PRIVATE
     TestFatEntrySetWriter.cpp
     TestFatExpectSize.cpp
     TestFatExtentCache.cpp
+    TestFatFeatures.cpp
     TestFatFileSystem.cpp
     TestFatFormatLayout.cpp
     TestFatFormatter.cpp

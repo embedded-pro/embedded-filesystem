@@ -1,5 +1,5 @@
 #include "fs/nor/NorDirectoryKey.hpp"
-#include "infra/util/Crc.hpp"
+#include "fs/common/Crc32.hpp"
 
 namespace fs
 {
@@ -12,9 +12,7 @@ namespace fs
 
     uint32_t NorDirectoryKey(infra::BoundedConstString name)
     {
-        infra::Crc32 crc;
-        crc.Update(infra::StringAsByteRange(name));
-        return (crc.Result() & hashMask) << indexBits;
+        return (Crc32Of(infra::StringAsByteRange(name)) & hashMask) << indexBits;
     }
 
     uint32_t NorLastDirectoryKey(uint32_t key)

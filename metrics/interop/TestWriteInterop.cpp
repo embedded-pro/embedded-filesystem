@@ -1,4 +1,5 @@
 #include "fs/fat/FatFileSystem.hpp"
+#include "fs/fat/lite/FatLite.hpp"
 #include "infra/timer/test_helper/ClockFixture.hpp"
 #include "metrics/fat/FatChecker.hpp"
 #include "metrics/interop/InteropTools.hpp"
@@ -85,11 +86,32 @@ public:
         return result.value_or(fs::Result::deviceError);
     }
 
+    void ExpectFsckAndStrictCheck()
+    {
+        auto fsck = Run("fsck.fat -n " + image);
+        EXPECT_EQ(0, fsck.exitCode) << fsck.output;
+
+        std::ifstream stream{ image, std::ios::binary };
+        auto check = metrics::CheckFatImage([&stream](uint32_t sector)
+            {
+                std::vector<uint8_t> contents(512);
+                stream.seekg(std::streamoff{ sector } * 512);
+                stream.read(reinterpret_cast<char*>(contents.data()), 512);
+                return contents;
+            },
+            metrics::FatCheckMode::strict);
+        EXPECT_EQ(std::nullopt, check.problem);
+    }
+
+    template<class Volume>
+    void ExpectAppendedFileReadsBack();
+
     std::filesystem::path directory;
     std::string image;
 };
 
-TEST_P(WriteInterop, appended_file_passes_fsck_and_reads_back_with_mtools)
+template<class Volume>
+void WriteInterop::ExpectAppendedFileReadsBack()
 {
     auto original = Pattern(3000, 1);
     std::ofstream{ directory / "log.bin", std::ios::binary }.write(reinterpret_cast<const char*>(original.data()), static_cast<std::streamsize>(original.size()));
@@ -98,7 +120,7 @@ TEST_P(WriteInterop, appended_file_passes_fsck_and_reads_back_with_mtools)
 
     metrics::ImageBlockDevice device{ metrics::BlocksInImage(image) };
     device.LoadFrom(image);
-    fs::FatFileSystem::WithStorage<1, 8> volume{ device };
+    Volume volume{ device };
     ASSERT_EQ(fs::Result::success, Wait([&volume](const infra::Function<void(fs::Result)>& onDone)
                                        {
                                            volume.Mount(onDone);
@@ -134,25 +156,91 @@ TEST_P(WriteInterop, appended_file_passes_fsck_and_reads_back_with_mtools)
                                            volume.Unmount(onDone);
                                        }));
     device.Save(image);
-
-    auto fsck = Run("fsck.fat -n " + image);
-    EXPECT_EQ(0, fsck.exitCode) << fsck.output;
-
-    std::ifstream stream{ image, std::ios::binary };
-    auto check = metrics::CheckFatImage([&stream](uint32_t sector)
-        {
-            std::vector<uint8_t> contents(512);
-            stream.seekg(std::streamoff{ sector } * 512);
-            stream.read(reinterpret_cast<char*>(contents.data()), 512);
-            return contents;
-        },
-        metrics::FatCheckMode::strict);
-    EXPECT_EQ(std::nullopt, check.problem);
+    ExpectFsckAndStrictCheck();
 
     ASSERT_EQ(0, Run("mcopy -n -i " + image + " ::/log.bin '" + (directory / "back.bin").string() + "'").exitCode);
     std::ifstream back{ directory / "back.bin", std::ios::binary };
     std::vector<uint8_t> read{ std::istreambuf_iterator<char>(back), std::istreambuf_iterator<char>() };
     EXPECT_EQ(expected, read);
+}
+
+TEST_P(WriteInterop, appended_file_passes_fsck_and_reads_back_with_mtools)
+{
+    ExpectAppendedFileReadsBack<fs::FatFileSystem::WithStorage<1, 8>>();
+}
+
+TEST_P(WriteInterop, a_file_appended_by_the_lite_volume_passes_fsck_and_reads_back_with_mtools)
+{
+    ExpectAppendedFileReadsBack<fs::FatLite::WithStorage<1>>();
+}
+
+TEST_P(WriteInterop, files_the_lite_volume_creates_truncates_and_writes_list_in_mtools_and_pass_fsck)
+{
+    ASSERT_EQ(0, Run("mkfs.fat -C " + GetParam().options + " " + image + " " + std::to_string(GetParam().kibibytes)).exitCode);
+    ASSERT_EQ(0, Run("mmd -i " + image + " ::/dir").exitCode);
+
+    metrics::ImageBlockDevice device{ metrics::BlocksInImage(image) };
+    device.LoadFrom(image);
+    fs::FatLite::WithStorage<1> volume{ device };
+    ASSERT_EQ(fs::Result::success, Wait([&volume](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           volume.Mount(onDone);
+                                       }));
+
+    std::vector<std::string> names{ "/readme.txt", "/DATA.BIN", "/log" };
+    for (uint32_t index = 0; index != 40; ++index)
+        names.push_back("/dir/file" + std::to_string(index) + ".dat");
+
+    auto contents = Pattern(5000, 3);
+    for (const auto& name : names)
+    {
+        infra::SharedPtr<fs::File> file;
+        volume.Open(infra::BoundedConstString(name.data(), name.size()), fs::OpenMode::readWrite, [&file](fs::Result result, infra::SharedPtr<fs::File> opened)
+            {
+                EXPECT_EQ(fs::Result::success, result);
+                file = opened;
+            });
+        ExecuteAllActions();
+        ASSERT_NE(nullptr, file) << name;
+
+        EXPECT_EQ(fs::Result::success, Wait([&file, &contents](const infra::Function<void(fs::Result)>& onDone)
+                                           {
+                                               file->Write(infra::MakeRange(contents), onDone);
+                                           }));
+        file->Seek(1234);
+        EXPECT_EQ(fs::Result::success, Wait([&file](const infra::Function<void(fs::Result)>& onDone)
+                                           {
+                                               file->Truncate(onDone);
+                                           }));
+        EXPECT_EQ(fs::Result::success, Wait([&file](const infra::Function<void(fs::Result)>& onDone)
+                                           {
+                                               file->Close(onDone);
+                                           }));
+    }
+
+    EXPECT_EQ(fs::Result::success, Wait([&volume](const infra::Function<void(fs::Result)>& onDone)
+                                       {
+                                           volume.Unmount(onDone);
+                                       }));
+    device.Save(image);
+    ExpectFsckAndStrictCheck();
+
+    std::set<std::string> listed;
+    for (const auto* folder : { "::/", "::/dir/" })
+    {
+        auto listing = Run(std::string("mdir -b -/ -i ") + image + " " + folder);
+        ASSERT_EQ(0, listing.exitCode) << listing.output;
+        std::istringstream lines{ listing.output };
+        for (std::string line; std::getline(lines, line);)
+            if (line.starts_with("::") && !line.ends_with("/"))
+                listed.insert(line.substr(2));
+    }
+    EXPECT_EQ(std::set<std::string>(names.begin(), names.end()), listed);
+
+    ASSERT_EQ(0, Run("mcopy -n -i " + image + " ::/dir/file39.dat '" + (directory / "back.bin").string() + "'").exitCode);
+    std::ifstream back{ directory / "back.bin", std::ios::binary };
+    std::vector<uint8_t> read{ std::istreambuf_iterator<char>(back), std::istreambuf_iterator<char>() };
+    EXPECT_EQ(std::vector<uint8_t>(contents.begin(), contents.begin() + 1234), read);
 }
 
 TEST_P(WriteInterop, created_files_list_in_mtools_and_pass_fsck)

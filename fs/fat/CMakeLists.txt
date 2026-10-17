@@ -19,6 +19,7 @@ target_sources(fs.fat PRIVATE
     FatAllocator.hpp
     FatBackgroundScan.cpp
     FatBackgroundScan.hpp
+    FatBackgroundWork.hpp
     FatBootSector.cpp
     FatBootSector.hpp
     FatBytes.cpp
@@ -67,6 +68,7 @@ target_sources(fs.fat PRIVATE
     FatGeometry.cpp
     FatGeometry.hpp
     FatLifecycle.hpp
+    FatLongNames.hpp
     FatMakeDirectory.cpp
     FatMakeDirectory.hpp
     FatMount.cpp
@@ -81,6 +83,7 @@ target_sources(fs.fat PRIVATE
     FatOpenDirectory.hpp
     FatOpenFile.cpp
     FatOpenFile.hpp
+    FatOperations.hpp
     FatParentDirectory.cpp
     FatParentDirectory.hpp
     FatPartitionTable.cpp
@@ -133,6 +136,8 @@ target_sources(fs.fat PRIVATE
     Utf8.hpp
 )
 
+add_subdirectory(lite)
+add_subdirectory(reader)
 add_subdirectory(test_doubles)
 
 if (EMFS_BUILD_TESTS)

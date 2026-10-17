@@ -11,7 +11,7 @@ They find the repository from their own location, so they run from any directory
 - clang-format and cppcheck on the C++ sources changed since `base`;
 - the line coverage of `fs/` and of the libraries of `validation/firmware`, listing every file that is not fully covered;
 - the cortex-m4, cortex-m7 and cortex-m33 builds, and the four board presets of the validation;
-- the reference images of F-1 in `MinSizeRel`, measured with `validation/footprint/measure.sh` into `build/footprint`, with `cortex-memory-budget` in a virtual environment in `build/footprint-venv` that it creates the first time;
+- the reference images of F-1 in `MinSizeRel`, also with link-time optimization on `cortex-m4-lto`, measured with `validation/footprint/measure.sh` into `build/footprint`, with `cortex-memory-budget` in a virtual environment in `build/footprint-venv` that it creates the first time;
 - ruff, the unit tests and the scenarios on the fake firmware of the host package of the validation, in a virtual environment in `build/validation-host` that it creates the first time;
 - the unit tests of the metrics harness, without the metrics themselves;
 - clang-tidy's `bugprone-branch-clone` and the scans below, on the changed sources.

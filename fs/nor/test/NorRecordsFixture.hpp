@@ -15,9 +15,9 @@
 
 namespace fs
 {
-    template<NorConfig Config, uint32_t Sectors, uint32_t SectorSize, std::size_t Files = 1>
+    template<NorConfig Config, uint32_t Sectors, uint32_t SectorSize, std::size_t Files = 1, NorFeatures Features = NorFeatures{}>
     class NorRecordsFixture
-        : public NorVolumeFixture<Config, Sectors, SectorSize, Files>
+        : public NorVolumeFixture<Config, Sectors, SectorSize, Files, Features>
     {
     public:
         static constexpr uint32_t recordBytes = NorInodeRecordBytes(Config);

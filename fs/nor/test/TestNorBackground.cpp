@@ -1,5 +1,6 @@
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/OperationQueue.hpp"
+#include "fs/nor/NorFileSystem.hpp"
 #include "fs/nor/NorVolume.hpp"
 #include "fs/nor/test/NorFilesFixture.hpp"
 #include "fs/nor/test/NorRecordsFixture.hpp"
@@ -27,6 +28,7 @@ namespace
     public:
         NorBackgroundTest()
         {
+            volume.AttachBackground(background);
             auto& state = volume.State();
             state.geometry = fs::MakeNorGeometry(twoSectors, flash);
             state.blocks.Reset(22);
@@ -75,9 +77,24 @@ namespace
         std::array<uint8_t, 256> journal{};
         std::array<uint8_t, 15 * 512> nodes{};
         std::array<fs::NorNodeCache::Slot, 15> slots{};
-        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots) }, twoSectors, 10ms };
+        static constexpr fs::NorOperations operations = fs::NorOperationsFor<fs::NorFeatures{}>();
+        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots), operations }, twoSectors };
+        fs::NorBackground background{ volume, 10ms };
         fs::OperationQueue::Claimer foreground{ volume.Queue() };
     };
+}
+
+TEST_F(NorBackgroundTest, is_scheduled_during_the_idle_delay_after_a_foreground_call)
+{
+    EXPECT_FALSE(background.Scheduled());
+
+    FinishForegroundCall();
+    EXPECT_TRUE(background.Scheduled());
+
+    foreground.Claim([] {});
+    EXPECT_FALSE(background.Scheduled());
+    ExecuteAllActions();
+    foreground.Release();
 }
 
 TEST_F(NorBackgroundTest, does_nothing_before_the_idle_delay)

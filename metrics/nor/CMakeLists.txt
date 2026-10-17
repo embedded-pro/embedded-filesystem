@@ -2,6 +2,7 @@ add_library(metrics.nor STATIC)
 
 target_link_libraries(metrics.nor PUBLIC
     fs.nor
+    fs.nor_lite
     infra.util
     metrics.device
     metrics.power_cut

@@ -6,9 +6,10 @@
 #include "fs/common/OperationQueue.hpp"
 #include "fs/common/Path.hpp"
 #include "fs/interfaces/Result.hpp"
-#include "fs/nor/NorBackground.hpp"
+#include "fs/nor/NorBackgroundWork.hpp"
 #include "fs/nor/NorBlockAllocator.hpp"
 #include "fs/nor/NorBlockEraser.hpp"
+#include "fs/nor/NorBlockStates.hpp"
 #include "fs/nor/NorCheckpointWriter.hpp"
 #include "fs/nor/NorConfig.hpp"
 #include "fs/nor/NorCounters.hpp"
@@ -22,16 +23,20 @@
 #include "fs/nor/NorFormatter.hpp"
 #include "fs/nor/NorInodeRead.hpp"
 #include "fs/nor/NorJournalWriter.hpp"
+#include "fs/nor/NorLayout.hpp"
 #include "fs/nor/NorMakeDirectory.hpp"
 #include "fs/nor/NorMapFetch.hpp"
 #include "fs/nor/NorMount.hpp"
 #include "fs/nor/NorNameLookup.hpp"
+#include "fs/nor/NorNodeBlocks.hpp"
 #include "fs/nor/NorNodeCache.hpp"
 #include "fs/nor/NorNodeCollector.hpp"
 #include "fs/nor/NorOpen.hpp"
 #include "fs/nor/NorOpenDirectory.hpp"
+#include "fs/nor/NorOperations.hpp"
 #include "fs/nor/NorPathWalk.hpp"
 #include "fs/nor/NorRead.hpp"
+#include "fs/nor/NorRecord.hpp"
 #include "fs/nor/NorRecordApply.hpp"
 #include "fs/nor/NorRemove.hpp"
 #include "fs/nor/NorRename.hpp"
@@ -42,10 +47,11 @@
 #include "fs/nor/NorWearLeveler.hpp"
 #include "fs/nor/NorWrite.hpp"
 #include "hal/interfaces/Flash.hpp"
-#include "infra/timer/Timer.hpp"
 #include "infra/util/ByteRange.hpp"
 #include "infra/util/IntrusiveList.hpp"
 #include "infra/util/MemoryRange.hpp"
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <variant>
 
@@ -64,6 +70,7 @@ namespace fs
         infra::ByteRange journalBuffer;
         infra::ByteRange nodeStorage;
         infra::MemoryRange<NorNodeCache::Slot> nodeSlots;
+        const NorOperations& operations;
     };
 
     using NorOperation = std::variant<std::monostate, NorFormatter, NorMount, NorReplay, NorUnmount, NorStat, NorOpenDirectory, NorOpen, NorRead, NorWrite, NorMakeDirectory, NorRemove, NorRename>;
@@ -71,7 +78,7 @@ namespace fs
     class NorVolume
     {
     public:
-        NorVolume(const NorVolumeParts& parts, const NorConfig& config, infra::Duration idleDelay);
+        NorVolume(const NorVolumeParts& parts, const NorConfig& config);
         NorVolume(const NorVolume& other) = delete;
         NorVolume& operator=(const NorVolume& other) = delete;
         ~NorVolume();
@@ -97,7 +104,6 @@ namespace fs
         NorRecordApply& RecordApply();
         NorNodeCollector& Collector();
         NorWearLeveler& Leveler();
-        NorBackground& Background();
         NorCheckpointWriter& Checkpoints();
         NorJournalWriter& Journal();
         NorFileFlush& FileFlush();
@@ -107,13 +113,16 @@ namespace fs
         infra::IntrusiveList<NorFile>& OpenFiles();
         infra::IntrusiveList<NorDirectory>& OpenDirectories();
         OperationQueue& Queue();
-        const OperationQueue& Queue() const;
         NorOperation& Operation();
+        const NorOperations& Operations() const;
 
         uint32_t Generation() const;
         bool Available(uint32_t handleGeneration) const;
         void MarkMounted();
         void MarkUnmounted();
+        void AttachBackground(NorBackgroundWork& work);
+        void UrgeBackground();
+        bool Idle() const;
 
         template<class Callback>
         void Defer(const Callback& onDone, Result result);
@@ -121,6 +130,7 @@ namespace fs
     private:
         hal::Flash& flash;
         DeferredCompletions& deferred;
+        const NorOperations& operations;
         NorConfig config;
         NorVolumeState state;
         NorCounters counters;
@@ -148,11 +158,26 @@ namespace fs
         infra::IntrusiveList<NorFile> openFiles;
         infra::IntrusiveList<NorDirectory> openDirectories;
         OperationQueue queue;
-        NorBackground background{ *this };
+        NorBackgroundWork* background{ nullptr };
         NorOperation operation;
         uint32_t generation{ 0 };
         bool mounted{ false };
     };
+
+    namespace detail
+    {
+        template<NorConfig Config, std::size_t Completions>
+        struct NorVolumeStorage
+        {
+            std::array<uint8_t, NorBlockStateBytes(Config.maxBlocks)> blockStateStorage{};
+            std::array<uint8_t, Config.maxBlocks> eraseCountStorage{};
+            std::array<uint8_t, NorNodeBlockBytes(Config.maxBlocks)> nodeBlockStorage{};
+            std::array<uint8_t, RoundUpTo(static_cast<uint32_t>(NorLargestRecordBytes(Config.inlineBytes, Config.maxNameBytes)), Config.programUnit)> journalStorage{};
+            std::array<uint8_t, Config.cachedNodes * Config.nodeSize> nodeStorage{};
+            std::array<NorNodeCache::Slot, Config.cachedNodes> nodeSlotStorage{};
+            DeferredCompletions::WithMaxSize<Completions> deferredStorage;
+        };
+    }
 
     template<class Callback>
     void NorVolume::Defer(const Callback& onDone, Result result)

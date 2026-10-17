@@ -54,7 +54,7 @@ namespace fs
 
         loaded = ParseNorCheckpointFixedPart(fixedPart);
         crcOffset = norCheckpointFixedBytes + static_cast<uint32_t>(bitmapBytes);
-        crc = infra::Crc32{};
+        crc = Crc32{};
         crc.Update(fixedPart);
         position = norCheckpointFixedBytes;
         ReadForCrc();

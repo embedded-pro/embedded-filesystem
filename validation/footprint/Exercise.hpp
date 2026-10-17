@@ -7,6 +7,7 @@
 namespace validation::footprint
 {
     void Exercise(fs::FileSystem& fileSystem, infra::ByteRange buffer);
+    void ExerciseReads(fs::FileSystem& fileSystem, infra::ByteRange buffer);
 }
 
 #endif

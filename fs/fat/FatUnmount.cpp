@@ -63,7 +63,7 @@ namespace fs
             return;
         }
 
-        volume.DirtyFlag().MarkClean([this](Result result)
+        volume.MarkClean([this](Result result)
             {
                 Flush(result);
             });

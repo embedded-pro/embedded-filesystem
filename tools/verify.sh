@@ -15,7 +15,7 @@ heading host
 configure host
 cmake --build --preset host-Debug -j "$jobs" 2>&1 | grep -E 'error|warning: ' | head
 ctest --preset host 2>&1 | grep -E 'tests passed|Failed'
-for test in build/host/fs/*/test/Debug/fs.*_test build/host/validation/firmware/*/test/Debug/validation.*_test; do
+for test in build/host/fs/*/test/Debug/fs.*_test build/host/fs/*/*/test/Debug/fs.*_test build/host/validation/firmware/*/test/Debug/validation.*_test; do
     echo "$(basename "$test"): $("$test" --gtest_brief=1 2>&1 | tail -1)"
 done
 
@@ -54,8 +54,9 @@ for preset in stm32h757-cm7 stm32h757-cm4 stm32h745-cm7 stm32h745-cm4; do
 done
 
 heading "footprint"
-for core in m4 m7 m33; do
-    echo "cortex-$core MinSizeRel images: $(cmake --build --preset "cortex-$core-MinSizeRel" --target validation.footprint -j "$jobs" 2>&1 | grep -cE 'error:|FAILED:') errors"
+for preset in cortex-m4 cortex-m7 cortex-m33 cortex-m4-lto; do
+    configure "$preset"
+    echo "$preset MinSizeRel images: $(cmake --build --preset "$preset-MinSizeRel" --target validation.footprint -j "$jobs" 2>&1 | grep -cE 'error:|FAILED:') errors"
 done
 budget=build/footprint-venv
 stamp=$(sha256sum validation/footprint/requirements.txt | cut -d' ' -f1)

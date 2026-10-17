@@ -31,4 +31,9 @@ namespace fs
 
         return FatDateTime{ Date(parts.years, parts.months, parts.days), Time(parts.hours, parts.minutes, parts.seconds) };
     }
+
+    FatDateTime FatNow(uint32_t timerServiceId)
+    {
+        return ToFatDateTime(infra::Now(timerServiceId));
+    }
 }

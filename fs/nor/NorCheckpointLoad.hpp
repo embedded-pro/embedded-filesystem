@@ -1,6 +1,7 @@
 #ifndef FS_NOR_NOR_CHECKPOINT_LOAD_HPP
 #define FS_NOR_NOR_CHECKPOINT_LOAD_HPP
 
+#include "fs/common/Crc32.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorCheckpoint.hpp"
 #include "fs/nor/NorHeaderScan.hpp"
@@ -8,7 +9,6 @@
 #include "hal/interfaces/Flash.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/ByteRange.hpp"
-#include "infra/util/Crc.hpp"
 #include "infra/util/Function.hpp"
 #include <cstdint>
 #include <optional>
@@ -52,7 +52,7 @@ namespace fs
         NorCheckpoint loaded;
         uint32_t crcOffset{ 0 };
         uint32_t position{ 0 };
-        infra::Crc32 crc;
+        Crc32 crc;
         std::optional<uint32_t> previous;
         uint64_t previousSequence{ 0 };
         infra::AutoResetFunction<void()> onRead;

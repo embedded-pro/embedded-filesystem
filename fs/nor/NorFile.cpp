@@ -87,6 +87,12 @@ namespace fs
             return;
         }
 
+        if (volume.Operations().overwrite == nullptr && state.mode != OpenMode::append && state.position != state.size)
+        {
+            volume.Defer(onDone, volume.Available(generation) ? Result::unsupported : Result::notMounted);
+            return;
+        }
+
         writeData = data;
         this->onDone = onDone;
         Claim(Call::write);
@@ -97,6 +103,12 @@ namespace fs
         if (Pending() || !state.Writable())
         {
             volume.Defer(onDone, Unwritable());
+            return;
+        }
+
+        if (volume.Operations().truncate == nullptr)
+        {
+            volume.Defer(onDone, volume.Available(generation) ? Result::unsupported : Result::notMounted);
             return;
         }
 
@@ -204,7 +216,7 @@ namespace fs
                                   })
                 .Start();
         else if (call == Call::truncate)
-            volume.FileTruncate().Truncate(state, state.position, [this](Result result)
+            volume.Operations().truncate(volume, state, state.position, [this](Result result)
                 {
                     Done(result);
                 });

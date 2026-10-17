@@ -62,6 +62,24 @@ def test_every_core_is_a_device_with_the_toolchain_and_the_configuration(tmp_pat
     }
 
 
+def test_a_core_built_with_link_time_optimization_says_so(tmp_path):
+    write_reports(tmp_path, ("cortex-m4", "cortex-m4-lto"))
+
+    report = fragment(tmp_path, "arm-none-eabi-gcc 15.2.1", "MinSizeRel")
+
+    expected = {"toolchain": "arm-none-eabi-gcc 15.2.1", "configuration": "MinSizeRel", "linkTimeOptimization": "true"}
+    assert report["devices"]["cortex-m4-lto"] == expected
+    assert "linkTimeOptimization" not in report["devices"]["cortex-m4"]
+
+
+def test_every_parameter_of_a_core_is_text_as_the_merge_of_the_metrics_reads_it(tmp_path):
+    write_reports(tmp_path, ("cortex-m4", "cortex-m4-lto"))
+
+    report = fragment(tmp_path, "arm-none-eabi-gcc 15.2.1", "MinSizeRel")
+
+    assert all(isinstance(value, str) for device in report["devices"].values() for value in device.values())
+
+
 def test_a_core_without_the_empty_image_is_an_error(tmp_path):
     write_report(tmp_path, "cortex-m4", "fat", 7000, 2600)
 
@@ -106,7 +124,7 @@ def test_the_command_writes_the_fragment(tmp_path, capsys):
     assert main(arguments) == 0
 
     assert len(json.loads(output.read_text(encoding="utf-8"))["results"]) == 2 * len(IMAGES) * len(CORES)
-    assert "2 cores, 24 results" in capsys.readouterr().out
+    assert "2 cores, 64 results" in capsys.readouterr().out
 
 
 def test_the_command_reports_an_error(tmp_path, capsys):

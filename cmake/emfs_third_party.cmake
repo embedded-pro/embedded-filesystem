@@ -63,23 +63,45 @@ emfs_add_fatfs_variant(tuned OPTIONS ${EMFS_FATFS_NEEDED_OPTIONS}
     FF_USE_TRIM=1
 )
 
-add_library(third_party.littlefs ${EMFS_EXCLUDE_FROM_ALL} STATIC)
-
-target_include_directories(third_party.littlefs SYSTEM PUBLIC
-    "$<BUILD_INTERFACE:${littlefs_SOURCE_DIR}>"
+# F-1 compares the profiles of embedded-filesystem without long names, formatting or writing with these
+emfs_add_fatfs_variant(minimal OPTIONS
+    FF_USE_MKFS=0
+    FF_USE_LFN=0
+    FF_CODE_PAGE=437
+    FF_FS_NORTC=1
+)
+emfs_add_fatfs_variant(read_only OPTIONS
+    FF_FS_READONLY=1
+    FF_USE_MKFS=0
+    FF_USE_LFN=1
+    FF_CODE_PAGE=437
 )
 
-target_compile_definitions(third_party.littlefs PUBLIC
-    LFS_NO_MALLOC
-    LFS_NO_DEBUG
-    LFS_NO_WARN
-    LFS_NO_ERROR
-)
+function(emfs_add_littlefs_variant target)
+    cmake_parse_arguments(PARSE_ARGV 1 LITTLEFS "" "" "DEFINITIONS")
 
-set_target_properties(third_party.littlefs PROPERTIES COMPILE_WARNING_AS_ERROR Off)
-target_compile_options(third_party.littlefs PRIVATE -w)
+    add_library(${target} ${EMFS_EXCLUDE_FROM_ALL} STATIC)
 
-target_sources(third_party.littlefs PRIVATE
-    ${littlefs_SOURCE_DIR}/lfs.c
-    ${littlefs_SOURCE_DIR}/lfs_util.c
-)
+    target_include_directories(${target} SYSTEM PUBLIC
+        "$<BUILD_INTERFACE:${littlefs_SOURCE_DIR}>"
+    )
+
+    target_compile_definitions(${target} PUBLIC
+        LFS_NO_MALLOC
+        LFS_NO_DEBUG
+        LFS_NO_WARN
+        LFS_NO_ERROR
+        ${LITTLEFS_DEFINITIONS}
+    )
+
+    set_target_properties(${target} PROPERTIES COMPILE_WARNING_AS_ERROR Off)
+    target_compile_options(${target} PRIVATE -w)
+
+    target_sources(${target} PRIVATE
+        ${littlefs_SOURCE_DIR}/lfs.c
+        ${littlefs_SOURCE_DIR}/lfs_util.c
+    )
+endfunction()
+
+emfs_add_littlefs_variant(third_party.littlefs)
+emfs_add_littlefs_variant(third_party.littlefs_read_only DEFINITIONS LFS_READONLY)

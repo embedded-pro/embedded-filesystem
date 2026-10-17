@@ -5,9 +5,13 @@
 
 namespace fs
 {
-    NorBackground::NorBackground(NorVolume& volume)
+    NorBackground::NorBackground(NorVolume& volume, infra::Duration idleDelay)
         : volume(volume)
         , claimer(volume.Queue())
+        , idleTimer(claimer, idleDelay, [this]
+              {
+                  Idle();
+              })
         , machine(*this, services::Validated<NorBackground>())
     {
         machine.Start<NorBackgroundStopped>();
@@ -27,21 +31,33 @@ namespace fs
         machine.Dispatch(NorBackgroundStop{});
     }
 
-    void NorBackground::Idle()
-    {
-        machine.Dispatch(NorBackgroundIdle{});
-    }
-
     void NorBackground::Urge()
     {
         if (!claimer.IsClaimed() && volume.Leveler().FallbackDue())
             urgent = true;
     }
 
-    void NorBackground::CallReleased()
+    void NorBackground::ForegroundClaiming()
+    {
+        idleTimer.ForegroundClaiming();
+    }
+
+    void NorBackground::ForegroundReleased()
     {
         if (FallbackDue())
             machine.Dispatch(NorBackgroundUrge{});
+
+        idleTimer.ForegroundReleased();
+    }
+
+    bool NorBackground::Scheduled() const
+    {
+        return idleTimer.Armed();
+    }
+
+    void NorBackground::Idle()
+    {
+        machine.Dispatch(NorBackgroundIdle{});
     }
 
     bool NorBackground::HasWork() const

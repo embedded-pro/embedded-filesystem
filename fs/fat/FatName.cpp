@@ -1,18 +1,18 @@
 #include "fs/fat/FatName.hpp"
 #include "fs/fat/Utf8.hpp"
 #include <algorithm>
-#include <string_view>
+#include <array>
 
 namespace fs
 {
     namespace
     {
         constexpr std::size_t maxUnits = 255;
-        constexpr std::string_view reserved{ R"("*/:<>?\|)" };
+        constexpr std::array<char32_t, 9> reserved{ '"', '*', '/', ':', '<', '>', '?', '\\', '|' };
 
         bool IsReserved(char32_t codePoint)
         {
-            return codePoint < 0x20 || codePoint == 0x7f || (codePoint < 0x80 && reserved.find(static_cast<char>(codePoint)) != std::string_view::npos);
+            return codePoint < 0x20 || codePoint == 0x7f || std::ranges::find(reserved, codePoint) != reserved.end();
         }
 
         bool HasReservedCharacter(infra::BoundedConstString name)

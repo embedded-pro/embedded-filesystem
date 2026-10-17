@@ -123,6 +123,12 @@ namespace fs
             return;
         }
 
+        if (volume.Operations().expectSize == nullptr)
+        {
+            volume.Defer(onDone, volume.Available(generation) ? Result::unsupported : volume.Unavailable());
+            return;
+        }
+
         expectedSize = size;
         this->onDone = onDone;
         Claim(Call::expectSize);
@@ -241,12 +247,11 @@ namespace fs
 
     void FatFile::StartExpectSize()
     {
-        volume.Operation().emplace<FatExpectSize>(volume, state, extents, expectedSize, [this](Result result)
-                              {
-                                  volume.Report(result);
-                                  Done(result);
-                              })
-            .Start();
+        volume.Operations().expectSize(volume, state, extents, expectedSize, [this](Result result)
+            {
+                volume.Report(result);
+                Done(result);
+            });
     }
 
     void FatFile::StartSync()

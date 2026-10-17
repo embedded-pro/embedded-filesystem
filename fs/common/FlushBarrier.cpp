@@ -9,6 +9,8 @@ namespace fs
         : device(device)
     {}
 
+    FlushBarrier::~FlushBarrier() = default;
+
     hal::BlockDevice& FlushBarrier::Device() const
     {
         return device;
