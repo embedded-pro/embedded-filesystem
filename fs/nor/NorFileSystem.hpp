@@ -5,10 +5,12 @@
 #include "fs/common/HandlePool.hpp"
 #include "fs/common/OperationQueue.hpp"
 #include "fs/interfaces/FileSystem.hpp"
+#include "fs/nor/NorBackground.hpp"
 #include "fs/nor/NorBlockStates.hpp"
 #include "fs/nor/NorConfig.hpp"
 #include "fs/nor/NorDirectory.hpp"
 #include "fs/nor/NorFile.hpp"
+#include "fs/nor/NorForegroundLeveling.hpp"
 #include "fs/nor/NorFormatter.hpp"
 #include "fs/nor/NorLifecycle.hpp"
 #include "fs/nor/NorNodeCache.hpp"
@@ -58,7 +60,7 @@ namespace fs
         void Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone) override;
 
     protected:
-        NorFileSystem(const NorVolumeParts& parts, const NorConfig& config, infra::Duration idleDelay);
+        NorFileSystem(const NorVolumeParts& parts, const NorConfig& config);
         NorFileSystem(const NorFileSystem& other) = delete;
         NorFileSystem& operator=(const NorFileSystem& other) = delete;
         ~NorFileSystem();
@@ -127,6 +129,30 @@ namespace fs
         void StartNorOverwrite(NorVolume& volume, NorOpenFile& file, infra::ConstByteRange data, const infra::Function<void(Result result)>& onDone);
         void StartNorOpenDirectory(NorVolume& volume, NorOpenDirectoryCall&& call, const NorDirectoryAllocation& allocate, const infra::Function<void(Result result)>& onFinished);
 
+        template<bool Enabled>
+        struct NorBackgroundStorage
+        {
+            NorBackgroundStorage(NorVolume& volume, infra::Duration)
+                : leveling(volume)
+            {
+                volume.AttachBackground(leveling);
+            }
+
+            NorForegroundLeveling leveling;
+        };
+
+        template<>
+        struct NorBackgroundStorage<true>
+        {
+            NorBackgroundStorage(NorVolume& volume, infra::Duration idleDelay)
+                : background(volume, idleDelay)
+            {
+                volume.AttachBackground(background);
+            }
+
+            NorBackground background;
+        };
+
         template<bool Enabled, std::size_t Directories>
         struct NorDirectoryStorage
         {
@@ -193,7 +219,8 @@ namespace fs
 
     public:
         explicit WithStorage(hal::Flash& flash, infra::Duration idleDelay = defaultIdleDelay)
-            : NorFileSystem(NorVolumeParts{ flash, this->deferredStorage, infra::MakeRange(this->blockStateStorage), infra::MakeRange(this->eraseCountStorage), infra::MakeRange(this->nodeBlockStorage), infra::MakeRange(this->journalStorage), infra::MakeRange(this->nodeStorage), infra::MakeRange(this->nodeSlotStorage), operations }, Config, idleDelay)
+            : NorFileSystem(NorVolumeParts{ flash, this->deferredStorage, infra::MakeRange(this->blockStateStorage), infra::MakeRange(this->eraseCountStorage), infra::MakeRange(this->nodeBlockStorage), infra::MakeRange(this->journalStorage), infra::MakeRange(this->nodeStorage), infra::MakeRange(this->nodeSlotStorage), operations }, Config)
+            , background(Volume(), idleDelay)
         {
             for (std::size_t index = 0; index != Config.pathOperations; ++index)
                 pathSlots.emplace_back(Volume().Queue());
@@ -218,6 +245,7 @@ namespace fs
         typename infra::BoundedVector<NorPathSlot>::template WithMaxSize<Config.pathOperations> pathSlots;
         detail::NorDirectoryStorage<Features.openDirectory, Config.directories> directories{ Volume() };
         HandlePool<NorFile::WithBuffer<NorFileBufferBytes(Config)>, Files> files{ Volume() };
+        detail::NorBackgroundStorage<Features.background> background;
     };
 
     constexpr std::array<NorFileSystem::Machine::Transition, 9> NorFileSystem::Rows()

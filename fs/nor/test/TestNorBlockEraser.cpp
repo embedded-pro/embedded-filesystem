@@ -229,7 +229,7 @@ namespace
         std::array<uint8_t, 15 * 512> nodes{};
         std::array<fs::NorNodeCache::Slot, 15> slots{};
         static constexpr fs::NorOperations operations = fs::NorOperationsFor<fs::NorFeatures{}>();
-        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots), operations }, twoSectors, std::chrono::milliseconds(10) };
+        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots), operations }, twoSectors };
         testing::StrictMock<infra::MockCallback<void()>> stepped;
     };
 }

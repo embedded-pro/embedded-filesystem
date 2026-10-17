@@ -21,6 +21,7 @@ target_sources(fs.nor PRIVATE
     NorBTree.hpp
     NorBackground.cpp
     NorBackground.hpp
+    NorBackgroundWork.hpp
     NorBlockStates.cpp
     NorBlockStates.hpp
     NorCheckpoint.cpp
@@ -57,6 +58,8 @@ target_sources(fs.nor PRIVATE
     NorFile.hpp
     NorFileSystem.cpp
     NorFileSystem.hpp
+    NorForegroundLeveling.cpp
+    NorForegroundLeveling.hpp
     NorFormatter.cpp
     NorFormatter.hpp
     NorGeometry.cpp

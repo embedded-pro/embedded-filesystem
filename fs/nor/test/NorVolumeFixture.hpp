@@ -87,16 +87,16 @@ namespace fs
         hal::Flash& flash;
     };
 
-    template<NorConfig Config, std::size_t Files = 1>
+    template<NorConfig Config, std::size_t Files = 1, NorFeatures Features = NorFeatures{}>
     class ExposedNorFileSystem
-        : public NorFileSystem::WithStorage<Config, Files>
+        : public NorFileSystem::WithStorage<Config, Files, Features>
     {
     public:
-        using NorFileSystem::WithStorage<Config, Files>::WithStorage;
+        using NorFileSystem::WithStorage<Config, Files, Features>::WithStorage;
         using NorFileSystem::Volume;
     };
 
-    template<NorConfig Config, uint32_t Sectors, uint32_t SectorSize, std::size_t Files = 1>
+    template<NorConfig Config, uint32_t Sectors, uint32_t SectorSize, std::size_t Files = 1, NorFeatures Features = NorFeatures{}>
     class NorVolumeFixture
         : public testing::Test
         , public infra::ClockFixture
@@ -252,7 +252,7 @@ namespace fs
         RecordingFlash device{ flash };
         NorFlashStubImage image{ flash };
         std::optional<NorImageBuilder> builder;
-        ExposedNorFileSystem<Config, Files> fileSystem{ device };
+        ExposedNorFileSystem<Config, Files, Features> fileSystem{ device };
     };
 }
 

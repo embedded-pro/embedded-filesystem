@@ -3,6 +3,7 @@
 
 #include "fs/common/IdleTimer.hpp"
 #include "fs/common/OperationQueue.hpp"
+#include "fs/nor/NorBackgroundWork.hpp"
 #include "services/fsm/StateMachineDefinition.hpp"
 #include "services/fsm/TableStateMachine.hpp"
 #include <array>
@@ -67,6 +68,7 @@ namespace fs
     using NorBackgroundEvent = std::variant<NorBackgroundStart, NorBackgroundStop, NorBackgroundIdle, NorBackgroundGranted, NorBackgroundUnitDone, NorBackgroundUrge>;
 
     class NorBackground
+        : public NorBackgroundWork
     {
     public:
         using Machine = services::TableStateMachine<NorBackgroundState, NorBackgroundEvent, NorBackground>;
@@ -80,11 +82,11 @@ namespace fs
         NorBackground& operator=(const NorBackground& other) = delete;
         ~NorBackground();
 
-        void Start();
-        void Stop();
-        void Urge();
-        void ForegroundClaiming();
-        void ForegroundReleased();
+        void Start() override;
+        void Stop() override;
+        void Urge() override;
+        void ForegroundClaiming() override;
+        void ForegroundReleased() override;
 
     private:
         void Idle();

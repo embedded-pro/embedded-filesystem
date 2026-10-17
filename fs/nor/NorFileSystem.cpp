@@ -11,8 +11,8 @@ namespace fs
         constexpr uint32_t superblocks = 2;
     }
 
-    NorFileSystem::NorFileSystem(const NorVolumeParts& parts, const NorConfig& config, infra::Duration idleDelay)
-        : volume(parts, config, idleDelay)
+    NorFileSystem::NorFileSystem(const NorVolumeParts& parts, const NorConfig& config)
+        : volume(parts, config)
         , lifecycleClaimer(volume.Queue())
         , lifecycle(*this, services::Validated<NorFileSystem>())
     {

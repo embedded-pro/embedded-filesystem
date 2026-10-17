@@ -74,7 +74,7 @@ namespace fs
             {
                 volume.State().blocks.Set(block, NorBlockState::pending);
                 ++volume.Counters().allocatedBlocks;
-                volume.Background().Urge();
+                volume.UrgeBackground();
                 volume.Eraser().Refill([this]
                     {
                         onDone(block);

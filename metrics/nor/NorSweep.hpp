@@ -100,6 +100,7 @@ namespace metrics
             infra::BoundedVector<fs::NorPathSlot>::WithMaxSize<8> pathSlots;
             fs::HandlePool<fs::NorDirectory, 1> directories{ Volume() };
             fs::HandlePool<fs::NorFile::WithBuffer<256>, 1> files{ Volume() };
+            fs::NorBackground background{ Volume(), defaultIdleDelay };
         };
 
         template<class Start>

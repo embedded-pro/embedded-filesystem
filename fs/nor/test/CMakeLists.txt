@@ -32,6 +32,7 @@ target_sources(fs.nor_test PRIVATE
     TestNorFiles.cpp
     TestNorFileSystem.cpp
     TestNorFileWrite.cpp
+    TestNorForegroundLeveling.cpp
     TestNorFormatter.cpp
     TestNorGeometry.cpp
     TestNorImageBuilder.cpp

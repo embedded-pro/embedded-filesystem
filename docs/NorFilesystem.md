@@ -473,6 +473,11 @@ After each unit, the background releases the queue when a foreground operation w
 The fallback claims the queue as soon as a call releases it, as described under [Static wear leveling](#static-wear-leveling), and does not wait for the idle delay.
 The machine starts when the volume is mounted and stops when it is unmounted; a claim that still waits then is withdrawn.
 
+A volume built with `NorFeatures::background` left out does no work while it is idle, and links neither this machine nor a timer.
+A free block is then erased by the call that needs it, or by the refill of a call that leaves the pool below the watermark, and a checkpoint is written when the journal or the cache is full and at `Unmount`.
+Static wear leveling makes its moves in `fs::NorForegroundLeveling` instead, a `services::TableStateMachine` with the states `Stopped`, `Waiting`, `Claiming` and `Moving`: after the first call of a mount and after every call that allocated a block, when a move is due and the free blocks can hold twice the node blocks of a checkpoint, it claims the queue ahead of every waiting call and makes one move, as the fallback does.
+So the moves keep the rate of the background, the first one after a mount included, and the next call waits for the move.
+
 ## Power-fail safety
 
 A state change becomes visible only through a committed record or a committed checkpoint, both protected by a CRC.
@@ -571,6 +576,7 @@ Every feature is in by default.
 | `format`          | `Format`, so the flash is formatted before                                                                          |
 | `overwrite`       | Writing before the end of a file: a `Write` at a position before the end of a file that is not opened for appending |
 | `openDirectory`   | `OpenDirectory`, and the directory handles that `NorConfig::directories` sizes                                      |
+| `background`      | The work while the volume is idle, as described under [Background work](#background-work)                          |
 
 A volume mounts whatever a volume with every feature wrote, so leaving a feature out never changes the format on flash; F-1 measures the volume with every feature left out as `embedded-filesystem/nor-minimal`.
 

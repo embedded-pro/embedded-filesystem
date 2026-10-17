@@ -128,8 +128,10 @@ namespace metrics
 
     NorSweepVolume::FileSystem::FileSystem(hal::Flash& flash, const fs::NorConfig& config)
         : NorSweepVolumeStorage(config)
-        , fs::NorFileSystem(fs::NorVolumeParts{ flash, deferred, infra::MakeRange(blockStates), infra::MakeRange(eraseCounts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(nodeSlots), operations }, config, defaultIdleDelay)
+        , fs::NorFileSystem(fs::NorVolumeParts{ flash, deferred, infra::MakeRange(blockStates), infra::MakeRange(eraseCounts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(nodeSlots), operations }, config)
     {
+        Volume().AttachBackground(background);
+
         for (std::size_t index = 0; index != config.pathOperations; ++index)
             pathSlots.emplace_back(Volume().Queue());
 

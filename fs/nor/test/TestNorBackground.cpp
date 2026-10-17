@@ -28,6 +28,7 @@ namespace
     public:
         NorBackgroundTest()
         {
+            volume.AttachBackground(background);
             auto& state = volume.State();
             state.geometry = fs::MakeNorGeometry(twoSectors, flash);
             state.blocks.Reset(22);
@@ -77,7 +78,8 @@ namespace
         std::array<uint8_t, 15 * 512> nodes{};
         std::array<fs::NorNodeCache::Slot, 15> slots{};
         static constexpr fs::NorOperations operations = fs::NorOperationsFor<fs::NorFeatures{}>();
-        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots), operations }, twoSectors, 10ms };
+        fs::NorVolume volume{ fs::NorVolumeParts{ flash, deferred, infra::MakeRange(states), infra::MakeRange(counts), infra::MakeRange(nodeBlocks), infra::MakeRange(journal), infra::MakeRange(nodes), infra::MakeRange(slots), operations }, twoSectors };
+        fs::NorBackground background{ volume, 10ms };
         fs::OperationQueue::Claimer foreground{ volume.Queue() };
     };
 }

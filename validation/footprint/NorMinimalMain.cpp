@@ -5,7 +5,7 @@
 
 namespace
 {
-    constexpr fs::NorFeatures minimal{ .makeDirectory = false, .remove = false, .rename = false, .truncate = false, .format = false, .overwrite = false, .openDirectory = false };
+    constexpr fs::NorFeatures minimal{ .makeDirectory = false, .remove = false, .rename = false, .truncate = false, .format = false, .overwrite = false, .openDirectory = false, .background = false };
 }
 
 int main()

@@ -6,7 +6,7 @@
 #include "fs/common/OperationQueue.hpp"
 #include "fs/common/Path.hpp"
 #include "fs/interfaces/Result.hpp"
-#include "fs/nor/NorBackground.hpp"
+#include "fs/nor/NorBackgroundWork.hpp"
 #include "fs/nor/NorBlockAllocator.hpp"
 #include "fs/nor/NorBlockEraser.hpp"
 #include "fs/nor/NorCheckpointWriter.hpp"
@@ -43,7 +43,6 @@
 #include "fs/nor/NorWearLeveler.hpp"
 #include "fs/nor/NorWrite.hpp"
 #include "hal/interfaces/Flash.hpp"
-#include "infra/timer/Timer.hpp"
 #include "infra/util/ByteRange.hpp"
 #include "infra/util/IntrusiveList.hpp"
 #include "infra/util/MemoryRange.hpp"
@@ -73,7 +72,7 @@ namespace fs
     class NorVolume
     {
     public:
-        NorVolume(const NorVolumeParts& parts, const NorConfig& config, infra::Duration idleDelay);
+        NorVolume(const NorVolumeParts& parts, const NorConfig& config);
         NorVolume(const NorVolume& other) = delete;
         NorVolume& operator=(const NorVolume& other) = delete;
         ~NorVolume();
@@ -99,7 +98,6 @@ namespace fs
         NorRecordApply& RecordApply();
         NorNodeCollector& Collector();
         NorWearLeveler& Leveler();
-        NorBackground& Background();
         NorCheckpointWriter& Checkpoints();
         NorJournalWriter& Journal();
         NorFileFlush& FileFlush();
@@ -116,6 +114,8 @@ namespace fs
         bool Available(uint32_t handleGeneration) const;
         void MarkMounted();
         void MarkUnmounted();
+        void AttachBackground(NorBackgroundWork& work);
+        void UrgeBackground();
 
         template<class Callback>
         void Defer(const Callback& onDone, Result result);
@@ -151,7 +151,7 @@ namespace fs
         infra::IntrusiveList<NorFile> openFiles;
         infra::IntrusiveList<NorDirectory> openDirectories;
         OperationQueue queue;
-        NorBackground background;
+        NorBackgroundWork* background{ nullptr };
         NorOperation operation;
         uint32_t generation{ 0 };
         bool mounted{ false };

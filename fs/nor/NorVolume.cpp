@@ -5,7 +5,7 @@
 
 namespace fs
 {
-    NorVolume::NorVolume(const NorVolumeParts& parts, const NorConfig& config, infra::Duration idleDelay)
+    NorVolume::NorVolume(const NorVolumeParts& parts, const NorConfig& config)
         : flash(parts.flash)
         , deferred(parts.deferred)
         , operations(parts.operations)
@@ -17,13 +17,14 @@ namespace fs
         , queue(
               [this]
               {
-                  background.ForegroundClaiming();
+                  if (background != nullptr)
+                      background->ForegroundClaiming();
               },
               [this]
               {
-                  background.ForegroundReleased();
+                  if (background != nullptr)
+                      background->ForegroundReleased();
               })
-        , background(*this, idleDelay)
     {}
 
     NorVolume::~NorVolume() = default;
@@ -134,11 +135,6 @@ namespace fs
         return leveler;
     }
 
-    NorBackground& NorVolume::Background()
-    {
-        return background;
-    }
-
     NorCheckpointWriter& NorVolume::Checkpoints()
     {
         return checkpoints;
@@ -211,13 +207,15 @@ namespace fs
         counters = NorCounters{};
         collector.Reset();
         leveler.Reset();
-        background.Start();
+        if (background != nullptr)
+            background->Start();
     }
 
     void NorVolume::MarkUnmounted()
     {
         mounted = false;
-        background.Stop();
+        if (background != nullptr)
+            background->Stop();
         eraser.Reset();
 
         while (!openFiles.empty())
@@ -225,5 +223,16 @@ namespace fs
 
         while (!openDirectories.empty())
             openDirectories.front().Detach();
+    }
+
+    void NorVolume::AttachBackground(NorBackgroundWork& work)
+    {
+        background = &work;
+    }
+
+    void NorVolume::UrgeBackground()
+    {
+        if (background != nullptr)
+            background->Urge();
     }
 }
