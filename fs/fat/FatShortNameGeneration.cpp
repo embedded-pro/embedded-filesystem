@@ -1,6 +1,6 @@
 #include "fs/fat/FatShortNameGeneration.hpp"
 #include "fs/fat/Utf8.hpp"
-#include "infra/util/CrcCcittCalculator.hpp"
+#include "infra/util/Crc.hpp"
 #include <algorithm>
 #include <string_view>
 
@@ -211,7 +211,7 @@ namespace fs
 
     ShortNameBytes HashedAlias(const ShortNameBytes& basis, infra::BoundedConstString name)
     {
-        infra::CrcCcittCalculator crc;
+        infra::Crc16CcittFalseBitwise crc;
         crc.Update(infra::StringAsByteRange(name));
         auto value = crc.Result();
 
