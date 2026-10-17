@@ -127,11 +127,9 @@ namespace validation
     {
         static_cast<void>(subject->Idle());
 
-        auto now = cycles.Cycles();
-        auto idleNow = idle.IdleCycles();
-        callSamples.Add(BusyCycles(now - startCycles, idleNow - startIdle));
-        startCycles = now;
-        startIdle = idleNow;
+        callSamples.Add(BusyCycles(cycles.Cycles() - startCycles, idle.IdleCycles() - startIdle));
+        startCycles = cycles.Cycles();
+        startIdle = idle.IdleCycles();
 
         if (callSamples.Size() == plan.calibration / plan.pollInterval)
         {
