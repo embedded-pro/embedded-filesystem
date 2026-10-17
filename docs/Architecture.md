@@ -85,6 +85,7 @@ A queue must outlive the claims on it, so its claimers are declared after it; a 
 
 Background work, such as erasing obsolete NOR blocks or scanning the FAT for free clusters, runs only when the queue is empty and after a configurable idle delay.
 The idle delay starts when a foreground operation releases the queue and no other operation is waiting, so a volume without work never wakes the processor.
+The timer of the idle delay, `fs::IdleTimer`, belongs to the background work, so a volume built without background work links no timer.
 Background work claims the queue like an operation, and checks before every device request whether a foreground operation is waiting; if one is, it releases the queue and continues after the next idle delay.
 The queue notifies the volume of each release of a foreground operation, which the fallback of static wear leveling on NOR volumes uses to claim the queue ahead of waiting operations, as described in [NorFilesystem.md](NorFilesystem.md#static-wear-leveling).
 A foreground operation that arrives while background work is running therefore waits for at most one device request, for instance one sector erase, or on a NOR volume for one checkpoint or one block move, which run as one unit; W-6 in [Metrics.md](Metrics.md) measures this.
@@ -304,7 +305,8 @@ Each one is sized at compile time:
 | Building block                                      | Sized by                                                                  | RAM                                                  |
 |-----------------------------------------------------|---------------------------------------------------------------------------|------------------------------------------------------|
 | `fs::PathLimits`                                    | The longest name and the longest path in UTF-8 bytes, 255 by default      | None: paths are not copied                           |
-| `fs::OperationQueue`                                | Claimed by the handles and the path-operation slots of the volume         | A claimable resource, an idle timer and its callback |
+| `fs::OperationQueue`                                | Claimed by the handles and the path-operation slots of the volume         | A claimable resource and two callbacks               |
+| `fs::IdleTimer`                                     | One per background work, which starts it when the queue empties           | A timer and its callback                             |
 | `fs::DeferredCompletions::WithMaxSize<N>`           | N completions with `busy` that wait for the event dispatcher              | N completions                                        |
 | `fs::HandlePool<Handle, N>`                         | N handles, constructed once with the volume                               | N handles                                            |
 | `fs::SectorCache::WithStorage<Sectors, SectorSize>` | Sectors buffers of SectorSize bytes, 512 by default; see [Fat.md](Fat.md) | Sectors buffers and their entries                    |

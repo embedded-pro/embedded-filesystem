@@ -156,15 +156,15 @@ namespace fs
         template<bool Enabled>
         struct FatBackgroundStorage
         {
-            explicit FatBackgroundStorage(FatVolume&)
+            FatBackgroundStorage(FatVolume&, infra::Duration)
             {}
         };
 
         template<>
         struct FatBackgroundStorage<true>
         {
-            explicit FatBackgroundStorage(FatVolume& volume)
-                : scan(volume.Queue(), volume.FreeSpace(), [&volume](Result result)
+            FatBackgroundStorage(FatVolume& volume, infra::Duration idleDelay)
+                : scan(volume.Queue(), volume.FreeSpace(), idleDelay, [&volume](Result result)
                       {
                           volume.Report(result);
                       })
@@ -221,6 +221,7 @@ namespace fs
         explicit WithStorage(hal::BlockDevice& device, const FatConfig& config = {})
             : Storage(device)
             , FatFileSystem(FatVolumeParts{ device, this->barrierStorage, this->cacheStorage, this->deferredStorage, infra::MakeRange(this->nameStorage), infra::MakeRange(this->closedStorage), infra::MakeRange(this->freeRunStorage), CacheSectors, operations }, config)
+            , background(Volume(), config.idleDelay)
         {
             for (std::size_t index = 0; index != Limits.pathOperations; ++index)
                 pathSlots.emplace_back(Volume().Queue());
@@ -245,7 +246,7 @@ namespace fs
         typename infra::BoundedVector<FatPathSlot>::template WithMaxSize<Limits.pathOperations> pathSlots;
         detail::FatDirectoryStorage<Features.openDirectory, Limits.directories> directories{ Volume() };
         HandlePool<FatFile::WithExtents<Limits.extentsPerFile>, Files> files{ Volume() };
-        detail::FatBackgroundStorage<Features.backgroundScan> background{ Volume() };
+        detail::FatBackgroundStorage<Features.backgroundScan> background;
     };
 
     constexpr std::array<FatFileSystem::Machine::Transition, 7> FatFileSystem::Rows()

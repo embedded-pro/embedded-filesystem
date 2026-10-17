@@ -1,16 +1,13 @@
 #include "fs/common/OperationQueue.hpp"
-#include "infra/timer/test_helper/ClockFixture.hpp"
+#include "infra/event/test_helper/EventDispatcherFixture.hpp"
 #include "infra/util/test_helper/MockCallback.hpp"
 #include "gmock/gmock.h"
-#include <chrono>
-
-using namespace std::chrono_literals;
 
 namespace
 {
     class OperationQueueTest
         : public testing::Test
-        , public infra::ClockFixture
+        , public infra::EventDispatcherFixture
     {
     public:
         void Grant(fs::OperationQueue::Claimer& claimer, int id)
@@ -36,12 +33,8 @@ namespace
             ExecuteAllActions();
         }
 
-        testing::StrictMock<infra::MockCallback<void()>> idle;
         testing::StrictMock<infra::MockCallback<void(int)>> granted;
-        fs::OperationQueue queue{ 100ms, [this]
-            {
-                idle.callback();
-            } };
+        fs::OperationQueue queue;
         fs::OperationQueue::Claimer first{ queue };
         fs::OperationQueue::Claimer second{ queue };
         fs::OperationQueue::Claimer third{ queue };
@@ -99,54 +92,6 @@ TEST_F(OperationQueueTest, release_grants_next_claim_from_the_event_dispatcher)
     ExecuteAllActions();
 }
 
-TEST_F(OperationQueueTest, no_idle_notification_without_operations)
-{
-    ForwardTime(1s);
-}
-
-TEST_F(OperationQueueTest, idle_notification_after_idle_delay_once_queue_is_empty)
-{
-    ClaimAndGrantFirst();
-
-    first.Release();
-
-    EXPECT_CALL(idle, callback()).With(After(100ms));
-    ForwardTime(1s);
-}
-
-TEST_F(OperationQueueTest, no_idle_notification_while_claims_are_pending)
-{
-    ClaimAndGrantFirst();
-    Grant(second, 2);
-
-    first.Release();
-
-    EXPECT_CALL(granted, callback(2));
-    ForwardTime(1s);
-}
-
-TEST_F(OperationQueueTest, claim_during_idle_delay_cancels_idle_notification)
-{
-    ClaimAndGrantFirst();
-    first.Release();
-    ForwardTime(50ms);
-
-    Grant(second, 2);
-
-    EXPECT_CALL(granted, callback(2));
-    ForwardTime(1s);
-}
-
-TEST_F(OperationQueueTest, idle_notification_is_given_once_per_idle_period)
-{
-    ClaimAndGrantFirst();
-    first.Release();
-
-    EXPECT_CALL(idle, callback());
-    ForwardTime(1s);
-    ForwardTime(1s);
-}
-
 TEST_F(OperationQueueTest, background_claim_is_granted_in_order_with_foreground_claims)
 {
     GrantBackground();
@@ -187,33 +132,6 @@ TEST_F(OperationQueueTest, background_release_grants_waiting_foreground_claim)
     ExecuteAllActions();
 }
 
-TEST_F(OperationQueueTest, background_release_does_not_arm_idle_notification)
-{
-    GrantBackground();
-    EXPECT_CALL(granted, callback(0));
-    ExecuteAllActions();
-
-    background.Release();
-
-    ForwardTime(1s);
-}
-
-TEST_F(OperationQueueTest, foreground_release_after_background_yield_arms_idle_notification)
-{
-    GrantBackground();
-    EXPECT_CALL(granted, callback(0));
-    ExecuteAllActions();
-    Grant(first, 1);
-    background.Release();
-
-    EXPECT_CALL(granted, callback(1)).WillOnce([this]
-        {
-            first.Release();
-        });
-    EXPECT_CALL(idle, callback());
-    ForwardTime(1s);
-}
-
 TEST_F(OperationQueueTest, releasing_a_queued_claim_withdraws_it)
 {
     ClaimAndGrantFirst();
@@ -223,8 +141,7 @@ TEST_F(OperationQueueTest, releasing_a_queued_claim_withdraws_it)
     first.Release();
 
     EXPECT_FALSE(second.IsQueued());
-    EXPECT_CALL(idle, callback());
-    ForwardTime(1s);
+    EXPECT_FALSE(background.ShouldYield());
 }
 
 TEST_F(OperationQueueTest, counts_the_releases_of_granted_foreground_claims)
@@ -245,7 +162,7 @@ TEST_F(OperationQueueTest, counts_the_releases_of_granted_foreground_claims)
 TEST_F(OperationQueueTest, notifies_each_release_of_a_granted_foreground_claim)
 {
     testing::StrictMock<infra::MockCallback<void()>> released;
-    fs::OperationQueue notifying{ 100ms, [] {}, [&released]
+    fs::OperationQueue notifying{ nullptr, [&released]
         {
             released.callback();
         } };
@@ -291,7 +208,31 @@ TEST_F(OperationQueueTest, releasing_a_queued_background_claim_withdraws_it)
 
     background.Release();
     first.Release();
+    ExecuteAllActions();
 
-    EXPECT_CALL(idle, callback());
-    ForwardTime(1s);
+    EXPECT_FALSE(background.IsClaimed());
+    EXPECT_FALSE(background.ShouldYield());
+}
+
+TEST_F(OperationQueueTest, notifies_each_foreground_claim)
+{
+    testing::StrictMock<infra::MockCallback<void()>> claiming;
+    fs::OperationQueue notifying{ [&claiming]
+        {
+            claiming.callback();
+        } };
+    fs::OperationQueue::Claimer foreground{ notifying };
+    fs::OperationQueue::BackgroundClaimer inBackground{ notifying };
+    fs::OperationQueue::BackgroundClaimer urgent{ notifying };
+
+    EXPECT_CALL(claiming, callback());
+    foreground.Claim([] {});
+    testing::Mock::VerifyAndClearExpectations(&claiming);
+
+    inBackground.Claim([] {});
+    urgent.ClaimUrgent([] {});
+    ExecuteAllActions();
+    foreground.Release();
+    urgent.Release();
+    inBackground.Release();
 }

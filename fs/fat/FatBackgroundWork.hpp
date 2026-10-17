@@ -14,7 +14,8 @@ namespace fs
     public:
         virtual void Start() = 0;
         virtual void Stop() = 0;
-        virtual void Idle() = 0;
+        virtual void ForegroundClaiming() = 0;
+        virtual void ForegroundReleased() = 0;
     };
 }
 

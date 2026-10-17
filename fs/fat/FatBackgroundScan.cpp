@@ -2,8 +2,12 @@
 
 namespace fs
 {
-    FatBackgroundScan::FatBackgroundScan(OperationQueue& queue, FatFreeSpaceScan& scan, const infra::Function<void(Result result)>& onFailed)
+    FatBackgroundScan::FatBackgroundScan(OperationQueue& queue, FatFreeSpaceScan& scan, infra::Duration idleDelay, const infra::Function<void(Result result)>& onFailed)
         : claimer(queue)
+        , idleTimer(claimer, idleDelay, [this]
+              {
+                  Idle();
+              })
         , scan(scan)
         , onFailed(onFailed)
         , machine(*this, services::Validated<FatBackgroundScan>())
@@ -21,6 +25,16 @@ namespace fs
     void FatBackgroundScan::Stop()
     {
         machine.Dispatch(FatScanStop{});
+    }
+
+    void FatBackgroundScan::ForegroundClaiming()
+    {
+        idleTimer.ForegroundClaiming();
+    }
+
+    void FatBackgroundScan::ForegroundReleased()
+    {
+        idleTimer.ForegroundReleased();
     }
 
     void FatBackgroundScan::Idle()

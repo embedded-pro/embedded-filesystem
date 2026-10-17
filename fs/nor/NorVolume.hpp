@@ -151,7 +151,7 @@ namespace fs
         infra::IntrusiveList<NorFile> openFiles;
         infra::IntrusiveList<NorDirectory> openDirectories;
         OperationQueue queue;
-        NorBackground background{ *this };
+        NorBackground background;
         NorOperation operation;
         uint32_t generation{ 0 };
         bool mounted{ false };

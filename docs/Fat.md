@@ -300,7 +300,7 @@ fs::FatReader::WithStorage<2> reader{ sdCard };
 
 The template arguments of `fs::FatReader::WithStorage<Files, Directories, Limits>` are the number of open files, the number of open directory handles, 1 by default, and an optional `fs::PathLimits`, the longest name and the longest path in UTF-8 bytes, 255 each by default.
 The longest name also sizes the buffer that holds a name while it is reported, as `FatLimits::maxNameBytes` does for `fs::FatFileSystem`.
-On a Cortex-M4, F-1 measures 19.1 KB of flash and 2.0 KB of RAM for `fs::FatReader::WithStorage<1>`, against 60.6 KB and 7.8 KB for `fs::FatFileSystem` with the same calls and 5.8 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+On a Cortex-M4, F-1 measures 19.1 KB of flash and 2.0 KB of RAM for `fs::FatReader::WithStorage<1>`, against 60.8 KB and 7.8 KB for `fs::FatFileSystem` with the same calls and 5.8 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 
 ## Lite volume
 
@@ -338,7 +338,7 @@ fs::FatLite::WithStorage<2> lite{ sdCard };
 ```
 
 The template arguments of `fs::FatLite::WithStorage<Files, Directories, Limits>` are those of `fs::FatReader::WithStorage`.
-On a Cortex-M4, F-1 measures 31.1 KB of flash and 2.6 KB of RAM for `fs::FatLite::WithStorage<1>`, against 46.5 KB and 7.4 KB for `fs::FatFileSystem` with every `fs::FatFeatures` left out and 7.4 KB and 1.1 KB for `fatfs/minimal`, which also removes, renames and makes directories, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+On a Cortex-M4, F-1 measures 31.1 KB of flash and 2.6 KB of RAM for `fs::FatLite::WithStorage<1>`, against 45.6 KB and 7.4 KB for `fs::FatFileSystem` with every `fs::FatFeatures` left out and 7.4 KB and 1.1 KB for `fatfs/minimal`, which also removes, renames and makes directories, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 
 ## Configuration
 

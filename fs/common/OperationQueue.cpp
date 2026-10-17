@@ -2,10 +2,9 @@
 
 namespace fs
 {
-    OperationQueue::OperationQueue(infra::Duration idleDelay, const infra::Function<void()>& onIdle, const infra::Function<void()>& onReleased)
-        : idleDelay(idleDelay)
-        , onIdle(onIdle)
-        , onReleased(onReleased)
+    OperationQueue::OperationQueue(const infra::Function<void()>& onForegroundClaiming, const infra::Function<void()>& onForegroundReleased)
+        : onForegroundClaiming(onForegroundClaiming)
+        , onForegroundReleased(onForegroundReleased)
     {}
 
     uint32_t OperationQueue::ForegroundReleases() const
@@ -15,21 +14,16 @@ namespace fs
 
     void OperationQueue::ForegroundClaiming()
     {
-        idleTimer.Cancel();
+        if (onForegroundClaiming)
+            onForegroundClaiming();
     }
 
     void OperationQueue::ForegroundReleased()
     {
         ++foregroundReleases;
 
-        if (onReleased)
-            onReleased();
-
-        if (!resource.ClaimsPending())
-            idleTimer.Start(idleDelay, [this]
-                {
-                    onIdle();
-                });
+        if (onForegroundReleased)
+            onForegroundReleased();
     }
 
     OperationQueue::Claimer::Claimer(OperationQueue& queue)

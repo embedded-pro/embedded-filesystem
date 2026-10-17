@@ -15,14 +15,15 @@ namespace fs
         , nodeStorage(parts.nodeStorage)
         , cache(parts.flash, parts.nodeSlots, parts.nodeStorage)
         , queue(
-              idleDelay, [this]
+              [this]
               {
-                  background.Idle();
+                  background.ForegroundClaiming();
               },
               [this]
               {
-                  background.CallReleased();
+                  background.ForegroundReleased();
               })
+        , background(*this, idleDelay)
     {}
 
     NorVolume::~NorVolume() = default;

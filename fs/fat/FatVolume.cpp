@@ -28,10 +28,16 @@ namespace fs
         , chainFree(parts.cache, transfers, state, tableWriter, freeSpace, config.discard)
         , dirtyFlag(parts.cache, state)
         , closedFiles(parts.closedFiles)
-        , queue(config.idleDelay, [this]
+        , queue(
+              [this]
               {
                   if (background != nullptr)
-                      background->Idle();
+                      background->ForegroundClaiming();
+              },
+              [this]
+              {
+                  if (background != nullptr)
+                      background->ForegroundReleased();
               })
     {}
 

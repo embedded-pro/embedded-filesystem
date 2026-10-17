@@ -22,6 +22,8 @@ target_sources(fs.common PRIVATE
     FlushBarrier.hpp
     HandlePool.cpp
     HandlePool.hpp
+    IdleTimer.cpp
+    IdleTimer.hpp
     LittleEndian.cpp
     LittleEndian.hpp
     OperationQueue.cpp

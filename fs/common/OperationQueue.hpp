@@ -2,7 +2,6 @@
 #define FS_COMMON_OPERATION_QUEUE_HPP
 
 #include "infra/event/ClaimableResource.hpp"
-#include "infra/timer/Timer.hpp"
 #include "infra/util/Function.hpp"
 #include <cstdint>
 
@@ -14,7 +13,7 @@ namespace fs
         class Claimer;
         class BackgroundClaimer;
 
-        OperationQueue(infra::Duration idleDelay, const infra::Function<void()>& onIdle, const infra::Function<void()>& onReleased = nullptr);
+        explicit OperationQueue(const infra::Function<void()>& onForegroundClaiming = nullptr, const infra::Function<void()>& onForegroundReleased = nullptr);
         OperationQueue(const OperationQueue& other) = delete;
         OperationQueue& operator=(const OperationQueue& other) = delete;
         ~OperationQueue() = default;
@@ -27,10 +26,8 @@ namespace fs
 
     private:
         infra::ClaimableResource resource;
-        infra::Duration idleDelay;
-        infra::Function<void()> onIdle;
-        infra::Function<void()> onReleased;
-        infra::TimerSingleShot idleTimer;
+        infra::Function<void()> onForegroundClaiming;
+        infra::Function<void()> onForegroundReleased;
         uint32_t foregroundReleases{ 0 };
     };
 
