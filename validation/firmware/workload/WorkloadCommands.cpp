@@ -29,11 +29,15 @@ namespace validation
         if (found == nullptr)
             return services::HilStatus::unsupported;
 
-        if (pending.Busy() || runner.Running())
+        if (Claimed(*found))
             return services::HilStatus::busy;
 
         target = found;
         operation = pending.Start(formatTimeout);
+        target->flash.OnTimeout([this]
+            {
+                FormatTimedOut();
+            });
         runner.Release([this]
             {
                 target->volume.Format([this](fs::Result result)
@@ -82,10 +86,16 @@ namespace validation
         if (request.parameters.fillPercent != 0 && !request.workload->Fills())
             return services::HilStatus::range;
 
-        if (pending.Busy() || runner.Running())
+        if (Claimed(*request.target))
             return services::HilStatus::busy;
 
         return services::HilStatus::done;
+    }
+
+    // After a timeout the volume may go on with what timed out, so it takes no command until the board is reset
+    bool WorkloadCommands::Claimed(const WorkloadTarget& candidate) const
+    {
+        return pending.Busy() || runner.Running() || runner.Interrupted() || timedOut || candidate.flash.InUse();
     }
 
     const WorkloadTarget* WorkloadCommands::FindTarget(infra::BoundedConstString name) const
@@ -111,10 +121,18 @@ namespace validation
         if (!pending.Complete(operation))
             return;
 
+        target->flash.OnTimeout(nullptr);
         if (result == fs::Result::success)
             context.response.Ok();
         else
             context.response.Error(services::HilStatus::failed);
+    }
+
+    void WorkloadCommands::FormatTimedOut()
+    {
+        timedOut = true;
+        if (pending.Complete(operation))
+            context.response.Error(services::HilStatus::timeout);
     }
 
     void WorkloadCommands::Begin()

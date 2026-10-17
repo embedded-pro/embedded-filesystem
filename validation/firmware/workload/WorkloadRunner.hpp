@@ -103,6 +103,7 @@ namespace validation
         void PrintWindow(const char* log, const std::optional<WindowTotals>& window);
         void PrintStart() const;
         void PrintFailure() const;
+        void PrintDone() const;
         std::optional<VolumeCounts> VolumeNow() const;
 
     private:

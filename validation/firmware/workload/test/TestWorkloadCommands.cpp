@@ -72,7 +72,7 @@ TEST_F(WorkloadCommandsTest, run_starts_the_workload_at_the_default_scale_withou
     EXPECT_EQ("EVT workload id=1 device=qspi subject=embedded-filesystem/nor workload=L2 fill=0 scale=16 ramBytes=1000\r\n", Output());
 
     finish();
-    EXPECT_EQ("\r\nOK\r\n", Output());
+    EXPECT_EQ("\r\nEVT workload.done id=2 device=qspi subject=embedded-filesystem/nor workload=L2 fill=0\r\n\r\nOK\r\n", Output());
 }
 
 TEST_F(WorkloadCommandsTest, run_takes_a_fill_level_and_a_scale)
@@ -145,7 +145,9 @@ TEST_F(WorkloadCommandsTest, a_workload_with_a_call_that_failed_answers_failed)
 
     Execute("wl.run qspi L2");
 
-    EXPECT_THAT(Output(), testing::EndsWith("result=notFound\r\nERR failed\r\n"));
+    auto output = Output();
+    EXPECT_THAT(output, testing::HasSubstr("result=notFound\r\n"));
+    EXPECT_THAT(output, testing::EndsWith("EVT workload.done id=4 device=qspi subject=embedded-filesystem/nor workload=L2 fill=0\r\nERR failed\r\n"));
 }
 
 TEST_F(WorkloadCommandsTest, a_workload_unmounts_the_volume_it_leaves_mounted_before_it_answers)
@@ -187,6 +189,45 @@ TEST_F(WorkloadCommandsTest, a_workload_that_a_request_outlasts_answers_timeout)
 
     EXPECT_THAT(Output(), testing::EndsWith("result=timeout\r\n\r\nERR timeout\r\n"));
     read();
+
+    for (const char* command : { "wl.run qspi L2", "fs.format qspi" })
+    {
+        Execute(command);
+        EXPECT_EQ("ERR busy\r\n", Output()) << command;
+    }
+}
+
+TEST_F(WorkloadCommandsTest, a_device_that_a_benchmark_uses_is_busy)
+{
+    flash.OnTimeout([] {});
+
+    for (const char* command : { "wl.run qspi L2", "fs.format qspi" })
+    {
+        Execute(command);
+        EXPECT_EQ("ERR busy\r\n", Output()) << command;
+    }
+
+    flash.OnTimeout(nullptr);
+}
+
+TEST_F(WorkloadCommandsTest, a_format_that_a_request_outlasts_answers_timeout_and_takes_no_command_until_a_reset)
+{
+    infra::Function<void()> read;
+    std::array<uint8_t, 4> buffer{};
+    EXPECT_CALL(device, ReadBuffer(_, 0, _)).WillOnce(testing::SaveArg<2>(&read));
+    EXPECT_CALL(volume, Format(_)).WillOnce([this, &buffer](const auto&)
+        {
+            flash.ReadBuffer(infra::MakeRange(buffer), 0, [] {});
+        });
+    Execute("fs.format qspi");
+
+    ForwardTime(100ms);
+    EXPECT_EQ("\r\nERR timeout\r\n", Output());
+    read();
+    ForwardTime(100ms);
+
+    Execute("fs.format qspi");
+    EXPECT_EQ("ERR busy\r\n", Output());
 }
 
 TEST_F(WorkloadCommandsTest, format_formats_the_volume_of_the_device)
@@ -196,9 +237,12 @@ TEST_F(WorkloadCommandsTest, format_formats_the_volume_of_the_device)
     Execute("fs.format qspi");
     EXPECT_EQ("", Output());
 
+    EXPECT_TRUE(flash.InUse());
+
     formatted(fs::Result::success);
 
     EXPECT_EQ("\r\nOK\r\n", Output());
+    EXPECT_FALSE(flash.InUse());
 }
 
 TEST_F(WorkloadCommandsTest, a_format_that_fails_answers_failed)

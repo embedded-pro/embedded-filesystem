@@ -96,6 +96,11 @@ namespace validation
         return static_cast<bool>(onDone);
     }
 
+    bool CountingFlash::InUse() const
+    {
+        return Busy() || onTimeout != nullptr;
+    }
+
     uint32_t CountingFlash::PagesSpanned(uint32_t address, std::size_t size) const
     {
         if (size == 0)
@@ -112,8 +117,10 @@ namespace validation
         requestNs = &totalNs;
         guardTimer.Start(guardDuration, [this]
             {
-                if (onTimeout)
-                    onTimeout();
+                // A copy, since the handler may replace itself
+                auto handler = onTimeout;
+                if (handler)
+                    handler();
             });
         startCycles = cycles.Cycles();
 

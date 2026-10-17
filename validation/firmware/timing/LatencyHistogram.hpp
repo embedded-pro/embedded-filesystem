@@ -8,7 +8,7 @@
 
 namespace validation
 {
-    // Four buckets per octave of nanoseconds, so that the host merges the histograms of phases into a percentile within 19 %
+    // Four buckets per octave of nanoseconds, so that the host merges the histograms of phases into a percentile within 25 %
     class LatencyHistogram
     {
     public:

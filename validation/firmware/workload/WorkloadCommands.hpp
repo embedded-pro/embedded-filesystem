@@ -29,7 +29,7 @@ namespace validation
     {
     public:
         static constexpr infra::Duration formatTimeout = std::chrono::minutes(30);
-        static constexpr infra::Duration runTimeout = std::chrono::hours(2);
+        static constexpr infra::Duration runTimeout = std::chrono::hours(4);
         static constexpr uint32_t defaultScale = 16;
         static constexpr uint32_t maximumScale = 1024;
         static constexpr uint32_t maximumFill = 99;
@@ -51,7 +51,9 @@ namespace validation
         services::HilStatus ParseRun(const services::HilArguments& arguments, Request& request) const;
         const WorkloadTarget* FindTarget(infra::BoundedConstString name) const;
         Workload* FindWorkload(infra::BoundedConstString name) const;
+        bool Claimed(const WorkloadTarget& candidate) const;
         void Formatted(fs::Result result);
+        void FormatTimedOut();
         void Begin();
         void Finished();
         void Interrupted();
@@ -66,6 +68,7 @@ namespace validation
         Workload* workload{ nullptr };
         WorkloadParameters parameters;
         uint32_t operation{ 0 };
+        bool timedOut{ false };
         std::array<Command, 2> commands;
     };
 }

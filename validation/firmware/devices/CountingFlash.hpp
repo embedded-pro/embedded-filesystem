@@ -58,6 +58,7 @@ namespace validation
         const FlashCounts& Counts() const;
         uint32_t LastCycles() const;
         bool Busy() const;
+        bool InUse() const;
 
     private:
         uint32_t PagesSpanned(uint32_t address, std::size_t size) const;

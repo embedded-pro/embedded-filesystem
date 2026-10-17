@@ -409,6 +409,31 @@ TEST_F(WorkloadRunnerTest, a_request_that_outlasts_its_guard_interrupts_the_work
     pending(fs::Result::success);
 }
 
+TEST_F(WorkloadRunnerTest, end_marks_the_run_as_done)
+{
+    Begin();
+
+    EXPECT_THAT(End(), testing::EndsWith("EVT workload.done id=3 device=qspi subject=embedded-filesystem/nor workload=L2 fill=50\r\n"));
+}
+
+TEST_F(WorkloadRunnerTest, an_interrupted_run_keeps_the_device_and_reports_once)
+{
+    Begin();
+    EXPECT_CALL(fileSystem, Mount(_)).WillOnce(testing::SaveArg<0>(&pending));
+    runner.Mount(Done());
+    EXPECT_CALL(interrupted, callback());
+    ForwardTime(validation::WorkloadRunner::callLimit);
+    Output();
+
+    EXPECT_TRUE(flash.InUse());
+    ReadFromDevice();
+    ForwardTime(100ms);
+    deviceDone();
+
+    EXPECT_EQ("", Output());
+    EXPECT_TRUE(flash.InUse());
+}
+
 TEST_F(WorkloadRunnerTest, a_call_that_outlasts_its_limit_interrupts_the_workload)
 {
     Begin();

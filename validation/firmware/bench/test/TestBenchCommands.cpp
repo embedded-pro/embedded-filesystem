@@ -159,6 +159,19 @@ TEST_F(BenchCommandsTest, check_answers_failed_on_a_device_with_a_missing_addres
     EXPECT_EQ("\r\nERR failed\r\n", Output());
 }
 
+TEST_F(BenchCommandsTest, a_device_that_a_workload_uses_is_busy)
+{
+    flash.OnTimeout([] {});
+
+    for (const char* command : { "bench.read ram size=16 n=1", "dev.check ram" })
+    {
+        Execute(command);
+        EXPECT_EQ("ERR busy\r\n", Output()) << command;
+    }
+
+    flash.OnTimeout(nullptr);
+}
+
 TEST_F(BenchCommandsTest, check_takes_one_present_device_and_waits_for_a_running_benchmark)
 {
     Execute("dev.check");

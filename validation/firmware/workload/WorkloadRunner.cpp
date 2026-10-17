@@ -33,13 +33,12 @@ namespace validation
 
     void WorkloadRunner::Begin(WorkloadVolume& volume, CountingFlash& flash, const WorkloadContext& context, const infra::Function<void()>& onInterrupted)
     {
-        really_assert(!running);
+        really_assert(!running && !interrupted);
         this->volume = &volume;
         this->flash = &flash;
         this->context = context;
         this->onInterrupted = onInterrupted;
         running = true;
-        interrupted = false;
         failure.reset();
         earlierMounts = VolumeCounts{};
         window = PhaseWindow::none;
@@ -59,6 +58,7 @@ namespace validation
         PrintWindow("first", firstLog.Window());
         PrintWindow("second", secondLog.Window());
         PrintFailure();
+        PrintDone();
         flash->OnTimeout(nullptr);
         running = false;
     }
@@ -357,8 +357,12 @@ namespace validation
         stream << result;
     }
 
+    // The device stays claimed until the board is reset, since the request or the call that timed out may still complete
     void WorkloadRunner::Interrupt()
     {
+        if (interrupted)
+            return;
+
         interrupted = true;
         callTimer.Cancel();
         idleTimer.Cancel();
@@ -368,7 +372,6 @@ namespace validation
         failure->operation = call.operation;
         failure->result = "timeout";
         PrintFailure();
-        flash->OnTimeout(nullptr);
         running = false;
         onInterrupted();
     }
@@ -419,6 +422,15 @@ namespace validation
             .Add("phase", failure->phase)
             .Add("op", OperationName(failure->operation))
             .Add("result", failure->result);
+    }
+
+    void WorkloadRunner::PrintDone() const
+    {
+        results.Record("workload.done")
+            .Add("device", context.device)
+            .Add("subject", context.subject)
+            .Add("workload", context.workload)
+            .Add("fill", context.fill);
     }
 
     std::optional<VolumeCounts> WorkloadRunner::VolumeNow() const

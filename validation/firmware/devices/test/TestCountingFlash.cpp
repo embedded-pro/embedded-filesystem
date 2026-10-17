@@ -214,3 +214,36 @@ TEST(FlashCountsTest, subtracts_and_adds_every_count)
     EXPECT_EQ((validation::FlashCounts{ 10, 10, 10, 10, 10, 10, 10, 10, 10, 10 }), later - earlier);
     EXPECT_EQ((validation::FlashCounts{ 12, 14, 16, 18, 20, 22, 24, 26, 28, 30 }), later + earlier);
 }
+
+TEST_F(CountingFlashTest, is_in_use_while_a_request_is_pending_or_a_timeout_is_watched)
+{
+    EXPECT_FALSE(counting.InUse());
+    counting.OnTimeout([] {});
+    EXPECT_TRUE(counting.InUse());
+    counting.OnTimeout(nullptr);
+    EXPECT_FALSE(counting.InUse());
+
+    EXPECT_CALL(flash, ReadBuffer(testing::_, 0, testing::_)).WillOnce(testing::SaveArg<2>(&pending));
+    counting.ReadBuffer(infra::MakeRange(buffer), 0, Done());
+    EXPECT_TRUE(counting.InUse());
+    Complete();
+
+    EXPECT_FALSE(counting.InUse());
+}
+
+TEST_F(CountingFlashTest, a_timeout_action_may_replace_itself)
+{
+    counting.OnTimeout([this]
+        {
+            counting.OnTimeout(nullptr);
+            timedOut.callback();
+        });
+    EXPECT_CALL(flash, ReadBuffer(testing::_, 0, testing::_)).WillOnce(testing::SaveArg<2>(&pending));
+    counting.ReadBuffer(infra::MakeRange(buffer), 0, Done());
+
+    EXPECT_CALL(timedOut, callback());
+    ForwardTime(1ms);
+    Complete();
+
+    EXPECT_FALSE(counting.InUse());
+}
