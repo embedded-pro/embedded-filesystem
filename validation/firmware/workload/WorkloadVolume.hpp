@@ -18,9 +18,17 @@ namespace validation
         uint64_t checkpoints{};
         uint64_t movedBlocks{};
 
-        VolumeCounts operator-(const VolumeCounts& earlier) const;
-        VolumeCounts operator+(const VolumeCounts& other) const;
         bool operator==(const VolumeCounts& other) const = default;
+
+        friend VolumeCounts operator-(const VolumeCounts& later, const VolumeCounts& earlier)
+        {
+            return { later.allocatedSectors - earlier.allocatedSectors, later.erasedBlocks - earlier.erasedBlocks, later.checkpoints - earlier.checkpoints, later.movedBlocks - earlier.movedBlocks };
+        }
+
+        friend VolumeCounts operator+(const VolumeCounts& left, const VolumeCounts& right)
+        {
+            return { left.allocatedSectors + right.allocatedSectors, left.erasedBlocks + right.erasedBlocks, left.checkpoints + right.checkpoints, left.movedBlocks + right.movedBlocks };
+        }
     };
 
     class WorkloadVolume

@@ -4,20 +4,6 @@
 
 namespace validation
 {
-    FlashCounts FlashCounts::operator-(const FlashCounts& earlier) const
-    {
-        return { readRequests - earlier.readRequests, bytesRead - earlier.bytesRead, readNs - earlier.readNs,
-            programRequests - earlier.programRequests, bytesProgrammed - earlier.bytesProgrammed, pagesProgrammed - earlier.pagesProgrammed, programNs - earlier.programNs,
-            eraseRequests - earlier.eraseRequests, sectorsErased - earlier.sectorsErased, eraseNs - earlier.eraseNs };
-    }
-
-    FlashCounts FlashCounts::operator+(const FlashCounts& other) const
-    {
-        return { readRequests + other.readRequests, bytesRead + other.bytesRead, readNs + other.readNs,
-            programRequests + other.programRequests, bytesProgrammed + other.bytesProgrammed, pagesProgrammed + other.pagesProgrammed, programNs + other.programNs,
-            eraseRequests + other.eraseRequests, sectorsErased + other.sectorsErased, eraseNs + other.eraseNs };
-    }
-
     CountingFlash::CountingFlash(hal::Flash& flash, uint32_t pageSize, const CycleCounter& cycles, uint32_t clockHz, const FlashGuard& guard)
         : flash(flash)
         , pageSize(pageSize)

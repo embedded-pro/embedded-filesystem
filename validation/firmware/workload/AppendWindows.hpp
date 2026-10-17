@@ -26,8 +26,12 @@ namespace validation
         VolumeCounts volume;
 
         void Add(const AppendCall& call);
-        WindowTotals operator+(const WindowTotals& other) const;
         bool operator==(const WindowTotals& other) const = default;
+
+        friend WindowTotals operator+(const WindowTotals& left, const WindowTotals& right)
+        {
+            return { left.appends + right.appends, left.device + right.device, left.volume + right.volume };
+        }
     };
 
     // The calls after a checkpoint until the fourth checkpoint after it, as metrics::LastCheckpointPeriods selects them on

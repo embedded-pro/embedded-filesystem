@@ -12,11 +12,6 @@ namespace validation
         volume = volume + call.volume;
     }
 
-    WindowTotals WindowTotals::operator+(const WindowTotals& other) const
-    {
-        return { appends + other.appends, device + other.device, volume + other.volume };
-    }
-
     void LastPeriods::Clear()
     {
         marks.fill(Mark{});
@@ -38,15 +33,17 @@ namespace validation
     std::optional<WindowTotals> LastPeriods::Window() const
     {
         auto boundary = Boundary();
-        if (!boundary)
+        if (!boundary.has_value())
             return std::nullopt;
 
         WindowTotals window;
         uint64_t checkpoints = 0;
-        for (auto age = *boundary; age != 0 && checkpoints < periods; --age)
+        auto age = *boundary;
+        while (age != 0 && checkpoints < periods)
         {
-            window = window + MarkAt(age - 1).since;
-            checkpoints += MarkAt(age - 1).checkpoints;
+            --age;
+            window = window + MarkAt(age).since;
+            checkpoints += MarkAt(age).checkpoints;
         }
 
         return window;

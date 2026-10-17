@@ -49,7 +49,6 @@ target_sources(validation.workload PRIVATE
     WorkloadOperation.hpp
     WorkloadRunner.cpp
     WorkloadRunner.hpp
-    WorkloadVolume.cpp
     WorkloadVolume.hpp
 )
 

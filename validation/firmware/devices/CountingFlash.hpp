@@ -22,9 +22,21 @@ namespace validation
         uint64_t sectorsErased{};
         uint64_t eraseNs{};
 
-        FlashCounts operator-(const FlashCounts& earlier) const;
-        FlashCounts operator+(const FlashCounts& other) const;
         bool operator==(const FlashCounts& other) const = default;
+
+        friend FlashCounts operator-(const FlashCounts& later, const FlashCounts& earlier)
+        {
+            return { later.readRequests - earlier.readRequests, later.bytesRead - earlier.bytesRead, later.readNs - earlier.readNs,
+                later.programRequests - earlier.programRequests, later.bytesProgrammed - earlier.bytesProgrammed, later.pagesProgrammed - earlier.pagesProgrammed, later.programNs - earlier.programNs,
+                later.eraseRequests - earlier.eraseRequests, later.sectorsErased - earlier.sectorsErased, later.eraseNs - earlier.eraseNs };
+        }
+
+        friend FlashCounts operator+(const FlashCounts& left, const FlashCounts& right)
+        {
+            return { left.readRequests + right.readRequests, left.bytesRead + right.bytesRead, left.readNs + right.readNs,
+                left.programRequests + right.programRequests, left.bytesProgrammed + right.bytesProgrammed, left.pagesProgrammed + right.pagesProgrammed, left.programNs + right.programNs,
+                left.eraseRequests + right.eraseRequests, left.sectorsErased + right.sectorsErased, left.eraseNs + right.eraseNs };
+        }
     };
 
     struct FlashGuard
