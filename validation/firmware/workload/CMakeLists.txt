@@ -18,9 +18,29 @@ target_sources(validation.workload PRIVATE
     AppendWindows.hpp
     CountRecords.cpp
     CountRecords.hpp
+    DataLogger.cpp
+    DataLogger.hpp
+    FileWriter.cpp
+    FileWriter.hpp
+    LogAppender.cpp
+    LogAppender.hpp
+    MountScaling.cpp
+    MountScaling.hpp
     NorWorkloadVolume.hpp
     PhaseTotals.cpp
     PhaseTotals.hpp
+    RandomOverwrite.cpp
+    RandomOverwrite.hpp
+    ReadPatterns.cpp
+    ReadPatterns.hpp
+    SequentialWrite.cpp
+    SequentialWrite.hpp
+    SmallFiles.cpp
+    SmallFiles.hpp
+    VolumeFiller.cpp
+    VolumeFiller.hpp
+    Workload.cpp
+    Workload.hpp
     WorkloadOperation.cpp
     WorkloadOperation.hpp
     WorkloadRunner.cpp
