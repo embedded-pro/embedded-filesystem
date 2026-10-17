@@ -1,4 +1,5 @@
 #include "validation/firmware/workload/AppendWindows.hpp"
+#include <algorithm>
 
 namespace validation
 {
@@ -18,35 +19,56 @@ namespace validation
 
     void LastPeriods::Clear()
     {
-        ring.fill(WindowTotals{});
+        marks.fill(Mark{});
+        added = 0;
         current = WindowTotals{};
-        closed = 0;
     }
 
     void LastPeriods::Add(const AppendCall& call)
     {
         current.Add(call);
-        for (uint64_t checkpoint = 0; checkpoint != call.volume.checkpoints; ++checkpoint)
-            ClosePeriod();
+        if (call.volume.checkpoints == 0)
+            return;
+
+        marks[added % marks.size()] = { call.volume.checkpoints, current };
+        ++added;
+        current = WindowTotals{};
     }
 
     std::optional<WindowTotals> LastPeriods::Window() const
     {
-        if (closed <= periods)
+        auto boundary = Boundary();
+        if (!boundary)
             return std::nullopt;
 
         WindowTotals window;
-        for (const auto& period : ring)
-            window = window + period;
+        uint64_t checkpoints = 0;
+        for (auto age = *boundary; age != 0 && checkpoints < periods; --age)
+        {
+            window = window + MarkAt(age - 1).since;
+            checkpoints += MarkAt(age - 1).checkpoints;
+        }
 
         return window;
     }
 
-    void LastPeriods::ClosePeriod()
+    const LastPeriods::Mark& LastPeriods::MarkAt(std::size_t age) const
     {
-        ring[closed % periods] = current;
-        current = WindowTotals{};
-        ++closed;
+        return marks[(added - 1 - age) % marks.size()];
+    }
+
+    std::optional<std::size_t> LastPeriods::Boundary() const
+    {
+        uint64_t checkpoints = 0;
+        for (std::size_t age = 0; age != std::min(added, marks.size()); ++age)
+        {
+            if (checkpoints >= periods)
+                return age;
+
+            checkpoints += MarkAt(age).checkpoints;
+        }
+
+        return std::nullopt;
     }
 
     PeriodsFrom::PeriodsFrom(uint32_t fileSize)

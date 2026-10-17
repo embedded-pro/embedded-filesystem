@@ -86,6 +86,32 @@ TEST(LastPeriodsTest, a_call_with_two_checkpoints_ends_two_periods)
     EXPECT_EQ(4, periods.Window()->volume.checkpoints);
 }
 
+TEST(LastPeriodsTest, the_window_starts_after_the_call_that_has_four_checkpoints_after_it_and_ends_at_the_fourth)
+{
+    validation::LastPeriods periods;
+    periods.Add(Call(WorkloadOperation::sync, 1000, 1));
+    periods.Add(Call(WorkloadOperation::write, 1));
+    periods.Add(Call(WorkloadOperation::sync, 2, 2));
+    periods.Add(Call(WorkloadOperation::write, 4));
+    periods.Add(Call(WorkloadOperation::sync, 8, 1));
+    periods.Add(Call(WorkloadOperation::write, 16));
+    periods.Add(Call(WorkloadOperation::sync, 32, 1));
+    periods.Add(Call(WorkloadOperation::write, 64));
+    periods.Add(Call(WorkloadOperation::sync, 128, 1));
+
+    EXPECT_EQ(1 + 2 + 4 + 8 + 16 + 32, periods.Window()->device.programNs);
+}
+
+TEST(LastPeriodsTest, has_no_window_without_a_call_with_a_checkpoint_before_the_last_four)
+{
+    validation::LastPeriods periods;
+    periods.Add(Call(WorkloadOperation::sync, 1000, 2));
+
+    AddPeriods(periods, 1, 3);
+
+    EXPECT_EQ(std::nullopt, periods.Window());
+}
+
 TEST(LastPeriodsTest, has_no_window_when_cleared)
 {
     validation::LastPeriods periods;

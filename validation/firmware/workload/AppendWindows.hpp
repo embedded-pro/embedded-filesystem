@@ -31,7 +31,8 @@ namespace validation
     };
 
     // The calls after a checkpoint until the fourth checkpoint after it, as metrics::LastCheckpointPeriods selects them on
-    // the host: a ring of the last checkpoint periods, since the board keeps no record per call
+    // the host at the end of the log: the board keeps no record per call, so it keeps the calls since each of the last
+    // calls with a checkpoint
     class LastPeriods
     {
     public:
@@ -42,12 +43,19 @@ namespace validation
         std::optional<WindowTotals> Window() const;
 
     private:
-        void ClosePeriod();
+        struct Mark
+        {
+            uint64_t checkpoints{ 0 };
+            WindowTotals since;
+        };
+
+        const Mark& MarkAt(std::size_t age) const;
+        std::optional<std::size_t> Boundary() const;
 
     private:
-        std::array<WindowTotals, periods> ring;
+        std::array<Mark, periods + 1> marks;
+        std::size_t added{ 0 };
         WindowTotals current;
-        std::size_t closed{ 0 };
     };
 
     // The calls after the first checkpoint once the file holds a size, until the fourth checkpoint after it, as
