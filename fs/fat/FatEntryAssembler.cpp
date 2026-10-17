@@ -170,21 +170,33 @@ namespace fs
     {
         scanned.entry = DecodeShortEntry(entry);
         scanned.shortEntry = position;
-        auto complete = LongNames && SetCompletes(scanned.entry);
-        scanned.longName = complete && NameIsValid();
 
-        if (complete)
-            ++scanned.slots;
+        if constexpr (LongNames)
+        {
+            auto complete = SetCompletes(scanned.entry);
+            scanned.longName = complete && NameIsValid();
+
+            if (complete)
+                ++scanned.slots;
+            else
+            {
+                scanned.first = position;
+                scanned.slots = 1;
+            }
+
+            if (scanned.longName)
+                scanned.name = infra::BoundedConstString(reinterpret_cast<const char*>(nameBuffer.begin() + nameBegin), nameBuffer.size() - nameBegin);
+            else
+            {
+                auto size = ShortNameToUtf8(scanned.entry.name, nameBuffer);
+                scanned.name = infra::BoundedConstString(reinterpret_cast<const char*>(nameBuffer.begin()), size);
+            }
+        }
         else
         {
+            scanned.longName = false;
             scanned.first = position;
             scanned.slots = 1;
-        }
-
-        if (scanned.longName)
-            scanned.name = infra::BoundedConstString(reinterpret_cast<const char*>(nameBuffer.begin() + nameBegin), nameBuffer.size() - nameBegin);
-        else
-        {
             auto size = ShortNameToUtf8(scanned.entry.name, nameBuffer);
             scanned.name = infra::BoundedConstString(reinterpret_cast<const char*>(nameBuffer.begin()), size);
         }

@@ -299,6 +299,17 @@ TEST_F(FatEntryAssemblerTest, without_long_names_a_set_is_its_short_entry)
     EXPECT_EQ((fs::FatEntryPosition{ 7, 2 }), shortNames.Entry().shortEntry);
 }
 
+TEST_F(FatEntryAssemblerTest, without_long_names_labels_and_dot_entries_are_skipped)
+{
+    std::array<uint8_t, fs::ShortName::maxUtf8Bytes> shortBuffer{};
+    fs::FatEntryAssembler shortNames{ infra::MakeRange(shortBuffer), &fs::FatEntryAssembler::ReadShortNames };
+    auto label = Short("VOLUME     ", 0, fs::FatAttributes::volumeId);
+    auto dot = Short(".          ", 0, fs::FatAttributes::directory);
+
+    EXPECT_EQ(fs::FatEntryAssembler::Outcome::none, shortNames.Feed(infra::MakeRange(label), fs::FatEntryPosition{ 7, 0 }));
+    EXPECT_EQ(fs::FatEntryAssembler::Outcome::none, shortNames.Feed(infra::MakeRange(dot), fs::FatEntryPosition{ 7, 1 }));
+}
+
 TEST(FatEntryInfoTest, file_reports_its_name_and_size)
 {
     fs::FatScannedEntry scanned;
