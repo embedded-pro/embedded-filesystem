@@ -6,7 +6,7 @@
 int main()
 {
     static validation::footprint::Platform platform;
-    static infra::StaticStorage<fs::FatLite::WithStorage<1>> fileSystem;
+    static infra::StaticStorage<fs::FatLite::WithStorage<1, 1, fs::PathLimits{}, fs::FatReaderFeatures{ .longNames = false }>> fileSystem;
     fileSystem.Construct(platform.blockDevice);
 
     validation::footprint::Exercise(*fileSystem, infra::MakeRange(platform.buffer));

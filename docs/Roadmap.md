@@ -138,7 +138,8 @@ Six patterns repeat across both filesystems:
    Every layer keeps its own state, and the same 68-byte entry is copied four times.
 3. A `services::TableStateMachine` per lifecycle costs about 1 KB: 1.1 KB in `fs::FatLite`, and 1.9 KB in `fs::NorLite` for its lifecycle and its leveling.
 4. Defensive breadth: the handling of media removal costs 0.9 KB, the checks of the boot sector and the geometry 1.5 KB against 0.8 KB for the whole mount of FatFs, and handles check their generation and calls are deferred with `busy`.
-5. Features that `fatfs/minimal` leaves out: reading long names and converting them to UTF-8 cost 3.4 KB.
+   A volume for fixed media would leave out only 130 B of it, because the generation checks of the handles serve unmount as well.
+5. Features that `fatfs/minimal` leaves out: reading long names costs `fs::FatLite` 844 B of flash and 216 B of RAM, which `fs::FatReaderFeatures::longNames` leaves out; converting short names to UTF-8 and validating paths stay.
 6. The on-flash machinery of NOR makes up 81 % of the code of `fs::NorLite`: 3.0 KB for the B-tree, 1.8 KB for the radix tree, 6.4 KB for the journal and the replay of records, 3.7 KB for checkpoints, 2.9 KB for garbage collection and 2.4 KB for the wear leveler.
 
 ### Sharing buffers and callbacks
@@ -154,18 +155,19 @@ Together with a single copy of the directory entry, this saves about 300 B of RA
 
 ### Steps
 
-| Step                                                                                                                                                                     | `fs::FatLite`, 31.2 KB today             | Effort           | Confidence           |
-|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|------------------|----------------------|
-| A. Scope switches: names read in 8.3 only, no media removal for fixed media, an enumerated lifecycle in the lite volumes                                                 | about 27 KB                              | days             | high, parts measured |
-| B. One continuation per operation, one directory iterator instead of the visitor chain, one copy of the entry                                                            | about 23 to 24 KB                        | one to two weeks | medium               |
-| C. A straight-line core: operations written in sequence that suspend at device calls, as C++20 coroutines with a frame arena per volume, or on a small cooperative stack | about 13 to 18 KB, twice FatFs           | weeks            | low until a spike    |
-| D. NOR only: a simpler format profile, with one kind of index and compaction of the journal instead of checkpoints                                                       | `fs::NorLite`, 60.9 KB today, much lower | months           | low                  |
+| Step                                                                                                                                                                     | `fs::FatLite`, from 31.2 KB              | Effort           | Confidence        |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|------------------|-------------------|
+| A. Scope switches: names read in 8.3 only, done; no media removal for fixed media, left out at 130 B; an enumerated lifecycle in the lite volumes, open                  | 30.4 KB with short names only            | done in part     | measured          |
+| B. One continuation per operation, one directory iterator instead of the visitor chain, one copy of the entry                                                            | about 23 to 24 KB                        | one to two weeks | medium            |
+| C. A straight-line core: operations written in sequence that suspend at device calls, as C++20 coroutines with a frame arena per volume, or on a small cooperative stack | about 13 to 18 KB, twice FatFs           | weeks            | low until a spike |
+| D. NOR only: a simpler format profile, with one kind of index and compaction of the journal instead of checkpoints                                                       | `fs::NorLite`, 60.9 KB today, much lower | months           | low               |
 
 * Only C reaches twice FatFs: it removes patterns 1 to 3 together, with no step functions, no callbacks per step and no operation objects, and local variables instead of stored state, while the event dispatcher still never blocks.
 * C and the enumerated lifecycle of A conflict with two rules of [AGENTS.md](../AGENTS.md), operations as classes with named steps and lifecycles as `services::TableStateMachine`, so the rules are decided first.
 * The coverage, the power-cut sweep and the interoperability tests check behaviour, not structure, so they carry over to a rewrite.
 * NOR needs both C and D to come near littlefs: C removes the 11 % of plumbing and the split steps of NOR, but not its format machinery.
-* The first move is a spike of one to two days that rewrites the read path of `fs::FatReader`, its mount, lookup and read, as coroutines, measured against its 19,116 bytes, to decide whether C is worth weeks of work.
+* Step A gave less than its estimate, which counted code that the rest of the volume still needs.
+* The first move is a spike of one to two days that rewrites the read path of `fs::FatReader`, its mount, lookup and read, as coroutines, measured against its 19,140 bytes, to decide whether C is worth weeks of work.
 
 ## Later
 

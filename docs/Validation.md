@@ -366,7 +366,7 @@ Both are reported until the first runs show their spread, and a later step sets 
 | `validation.footprint.nor_reads`               | `embedded-filesystem/nor-reads`     | As `nor`, without `Format`, with only the calls that read                                                            |
 | `validation.footprint.fat_read_only`           | `embedded-filesystem/fat-read-only` | `fs::FatReader::WithStorage<1>`, with only the calls that read                                                       |
 | `validation.footprint.fat_minimal`             | `embedded-filesystem/fat-minimal`   | As `fat`, without the formatter, with every `fs::FatFeatures` left out                                               |
-| `validation.footprint.fat_lite`                | `embedded-filesystem/fat-lite`      | `fs::FatLite::WithStorage<1>`, with every call                                                                       |
+| `validation.footprint.fat_lite`                | `embedded-filesystem/fat-lite`      | `fs::FatLite::WithStorage<1>`, reading only short names as `fatfs/minimal` does, with every call                     |
 | `validation.footprint.nor_minimal`             | `embedded-filesystem/nor-minimal`   | As `nor`, with every `fs::NorFeatures` left out, `Format` among them                                                 |
 | `validation.footprint.nor_lite`                | `embedded-filesystem/nor-lite`      | `fs::NorLite::WithStorage` with the configuration of `nor-qspi-16m` and one file, with every call                    |
 | `validation.footprint.fatfs_minimal`           | `fatfs/minimal`                     | As `fatfs/default`, without long names and without `f_mkfs`                                                          |
