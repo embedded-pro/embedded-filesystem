@@ -136,6 +136,7 @@ target_sources(fs.fat PRIVATE
     Utf8.hpp
 )
 
+add_subdirectory(coro)
 add_subdirectory(lite)
 add_subdirectory(reader)
 add_subdirectory(test_doubles)
