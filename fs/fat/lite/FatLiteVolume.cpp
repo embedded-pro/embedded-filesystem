@@ -43,9 +43,9 @@ namespace fs
         return Geometry().sectorsPerCluster * window.SectorSize();
     }
 
-    void FatLiteVolume::MarkMounted()
+    void FatLiteVolume::EnterMounted()
     {
-        auto& geometry = Geometry();
+        const auto& geometry = Geometry();
 
         if (geometry.mirrored && geometry.fatCopies > 1)
             window.SetMirroredRegion(SectorCache::MirroredRegion{ geometry.firstFatSector, geometry.sectorsPerFat, geometry.fatCopies });
@@ -56,7 +56,7 @@ namespace fs
         FatReaderVolume::MarkMounted();
     }
 
-    void FatLiteVolume::MarkUnmounted(Result reason)
+    void FatLiteVolume::EnterUnmounted(Result reason)
     {
         FatReaderVolume::MarkUnmounted(reason);
 

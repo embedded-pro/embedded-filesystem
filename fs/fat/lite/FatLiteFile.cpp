@@ -13,6 +13,13 @@ namespace fs
     namespace
     {
         constexpr uint32_t maxSize = std::numeric_limits<uint32_t>::max();
+
+        void MarkWritten(ShortEntry& entry)
+        {
+            entry.attributes |= FatAttributes::archive;
+            entry.writeTime = fatEpoch.time;
+            entry.writeDate = fatEpoch.date;
+        }
     }
 
     FatLiteFile::FatLiteFile(FatLiteVolume& volume)
@@ -74,11 +81,7 @@ namespace fs
                     updated.firstCluster = firstCluster;
 
                     if (written)
-                    {
-                        updated.attributes |= FatAttributes::archive;
-                        updated.writeTime = fatEpoch.time;
-                        updated.writeDate = fatEpoch.date;
-                    }
+                        MarkWritten(updated);
 
                     EncodeShortEntry(updated, raw);
                     committedFirstCluster = firstCluster;

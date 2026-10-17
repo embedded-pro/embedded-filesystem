@@ -24,17 +24,17 @@ namespace fs
     {
         lifecycle.OnEntered<FatMounted>([](FatLite& lite, FatMounted&)
             {
-                lite.volume.MarkMounted();
+                lite.volume.EnterMounted();
                 lite.Entered(Result::success);
             });
         lifecycle.OnEntered<FatFault>([](FatLite& lite, const FatFault& fault)
             {
-                lite.volume.MarkUnmounted(fault.result);
+                lite.volume.EnterUnmounted(fault.result);
                 lite.Entered(fault.result);
             });
         lifecycle.OnEntered<FatUnmounted>([](FatLite& lite, FatUnmounted&)
             {
-                lite.volume.MarkUnmounted(Result::notMounted);
+                lite.volume.EnterUnmounted(Result::notMounted);
                 lite.Entered(lite.lifecycleResult);
             });
         lifecycle.Start<FatUnmounted>();

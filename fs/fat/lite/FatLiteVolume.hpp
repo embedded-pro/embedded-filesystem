@@ -32,8 +32,8 @@ namespace fs
         infra::IntrusiveList<FatLiteFile>& OpenFiles();
         uint32_t ClusterBytes();
 
-        void MarkMounted();
-        void MarkUnmounted(Result reason);
+        void EnterMounted();
+        void EnterUnmounted(Result reason);
 
     private:
         FlushBarrier& barrier;

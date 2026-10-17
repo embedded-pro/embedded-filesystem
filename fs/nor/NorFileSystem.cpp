@@ -314,7 +314,7 @@ namespace fs
         template<class Operation, class Call>
         void StartNorOperation(NorVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished)
         {
-            volume.Operation().template emplace<Operation>(volume, std::move(call), onFinished).Start();
+            volume.Operation().template emplace<Operation>(volume, std::forward<Call>(call), onFinished).Start();
         }
 
         template void StartNorOperation<NorMakeDirectory, NorMakeDirectoryCall>(NorVolume& volume, NorMakeDirectoryCall&& call, const infra::Function<void(Result result)>& onFinished);
