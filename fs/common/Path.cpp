@@ -18,9 +18,14 @@ namespace fs
             return path.substr(1);
         }
 
+        bool IsDotName(infra::BoundedConstString name)
+        {
+            return (name.size() == 1 || name.size() == 2) && name.front() == '.' && name.back() == '.';
+        }
+
         Result ValidateName(infra::BoundedConstString name, const PathLimits& limits)
         {
-            if (name.empty() || name == "." || name == ".." || name.find('\0') != infra::BoundedConstString::npos)
+            if (name.empty() || IsDotName(name) || name.find('\0') != infra::BoundedConstString::npos)
                 return Result::invalidPath;
 
             if (name.size() > limits.maxNameBytes)
