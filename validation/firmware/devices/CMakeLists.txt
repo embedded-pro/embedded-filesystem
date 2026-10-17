@@ -7,9 +7,13 @@ target_include_directories(validation.devices PUBLIC
 target_link_libraries(validation.devices PUBLIC
     hal.interfaces
     infra.event
+    infra.timer
+    validation.timing
 )
 
 target_sources(validation.devices PRIVATE
+    CountingFlash.cpp
+    CountingFlash.hpp
     NullBlockDevice.cpp
     NullBlockDevice.hpp
     NullFlash.cpp
