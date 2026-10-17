@@ -2,10 +2,13 @@
 #define VALIDATION_FIRMWARE_BOARDS_STM32H745_BOARD_PROFILE_HPP
 
 #include "hal_st/stm32fxxx/GpioStm.hpp"
+#include "hal_st/stm32fxxx/NorFlashStm.hpp"
+#include "hal_st/stm32fxxx/QuadSpiStm.hpp"
 #include "hal_st/stm32fxxx/SdRamStm.hpp"
 #include "validation/firmware/boards/Memories.hpp"
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <utility>
 
 namespace validation::board
@@ -38,6 +41,23 @@ namespace validation::board
         { hal::Port::D, 9 }, { hal::Port::D, 10 }, { hal::Port::E, 0 }, { hal::Port::E, 1 },
         { hal::Port::H, 5 }, { hal::Port::F, 11 }, { hal::Port::G, 15 }, { hal::Port::H, 6 },
         { hal::Port::H, 7 }, { hal::Port::G, 8 } } };
+
+    // Clock, chip select and data lines 0 to 3 of bank 1 of the QUADSPI
+    inline constexpr std::array<std::pair<hal::Port, uint8_t>, 6> quadSpiPins = { { { hal::Port::F, 10 }, { hal::Port::G, 6 }, { hal::Port::D, 11 }, { hal::Port::F, 9 },
+        { hal::Port::F, 7 }, { hal::Port::F, 6 } } };
+
+    constexpr hal::QuadSpiStm::Config QuadSpiConfig()
+    {
+        hal::QuadSpiStm::Config config;
+        config.prescaler = 3;
+        config.flashSizeLog2 = 26;
+        return config;
+    }
+
+    constexpr std::optional<hal::NorFlashStm::Config> ParallelNorConfig()
+    {
+        return std::nullopt;
+    }
 
     constexpr hal::SdRamStm::Config SdRamConfig()
     {

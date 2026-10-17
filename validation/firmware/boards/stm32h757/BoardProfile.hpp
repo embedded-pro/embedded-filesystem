@@ -2,10 +2,13 @@
 #define VALIDATION_FIRMWARE_BOARDS_STM32H757_BOARD_PROFILE_HPP
 
 #include "hal_st/stm32fxxx/GpioStm.hpp"
+#include "hal_st/stm32fxxx/NorFlashStm.hpp"
+#include "hal_st/stm32fxxx/QuadSpiStm.hpp"
 #include "hal_st/stm32fxxx/SdRamStm.hpp"
 #include "validation/firmware/boards/Memories.hpp"
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <utility>
 
 namespace validation::board
@@ -28,8 +31,9 @@ namespace validation::board
         { sdRamBase, sdRamSize, MemoryType::normalCacheable },
     } };
 
-    // The pins of the FMC on the MB1246, as the demo of hal-st sets them up; A20 to A22 (PE4 to PE6) of the parallel NOR are not listed yet
-    inline constexpr std::array<std::pair<hal::Port, uint8_t>, 66> fmcPins = { { { hal::Port::F, 0 }, { hal::Port::F, 1 }, { hal::Port::F, 2 }, { hal::Port::F, 3 },
+    // The pins of the FMC on the MB1246, as the demo of hal-st sets them up, and A20 to A22 of the parallel NOR on PE4 to PE6, which the demo leaves to
+    // the audio interface, so that all 16 MiB of the parallel NOR are reachable
+    inline constexpr std::array<std::pair<hal::Port, uint8_t>, 69> fmcPins = { { { hal::Port::F, 0 }, { hal::Port::F, 1 }, { hal::Port::F, 2 }, { hal::Port::F, 3 },
         { hal::Port::F, 4 }, { hal::Port::F, 5 }, { hal::Port::F, 12 }, { hal::Port::F, 13 },
         { hal::Port::F, 14 }, { hal::Port::F, 15 }, { hal::Port::G, 0 }, { hal::Port::G, 1 },
         { hal::Port::G, 2 }, { hal::Port::G, 3 }, { hal::Port::G, 4 }, { hal::Port::G, 5 },
@@ -45,7 +49,36 @@ namespace validation::board
         { hal::Port::E, 0 }, { hal::Port::E, 1 }, { hal::Port::I, 4 }, { hal::Port::I, 5 },
         { hal::Port::D, 4 }, { hal::Port::D, 5 }, { hal::Port::D, 7 }, { hal::Port::G, 10 },
         { hal::Port::G, 8 }, { hal::Port::H, 5 }, { hal::Port::H, 6 }, { hal::Port::H, 7 },
-        { hal::Port::F, 11 }, { hal::Port::G, 15 } } };
+        { hal::Port::F, 11 }, { hal::Port::G, 15 }, { hal::Port::E, 4 }, { hal::Port::E, 5 },
+        { hal::Port::E, 6 } } };
+
+    // Clock, chip select and data lines 0 to 3 of bank 1 of the QUADSPI
+    inline constexpr std::array<std::pair<hal::Port, uint8_t>, 6> quadSpiPins = { { { hal::Port::B, 2 }, { hal::Port::G, 6 }, { hal::Port::F, 8 }, { hal::Port::F, 9 },
+        { hal::Port::F, 7 }, { hal::Port::F, 6 } } };
+
+    constexpr hal::QuadSpiStm::Config QuadSpiConfig()
+    {
+        hal::QuadSpiStm::Config config;
+        config.prescaler = 3;
+        config.flashSizeLog2 = 26;
+        return config;
+    }
+
+    constexpr std::optional<hal::NorFlashStm::Config> ParallelNorConfig()
+    {
+        hal::NorFlashStm::Config config;
+        config.oneBasedBank = 1;
+        config.numberOfSectors = 128;
+        config.sizeOfSector = 128 * 1024;
+        config.writeBufferBytes = 64;
+        config.bus.timing.addressSetup = 4;
+        config.bus.timing.addressHold = 3;
+        config.bus.timing.dataSetup = 20;
+        config.bus.timing.busTurnaround = 2;
+        config.bus.timing.clockDivision = 2;
+        config.bus.timing.dataLatency = 2;
+        return config;
+    }
 
     constexpr hal::SdRamStm::Config SdRamConfig()
     {
