@@ -27,8 +27,8 @@ def device_runs(runs: dict[tuple[str, int], WorkloadRun], model: dict[str, str] 
     return DeviceRuns("qspi", "embedded-filesystem/nor", runs, model or {})
 
 
-def run_of(phases: dict[str, Totals], windows: dict[str, Totals] | None = None, failed: bool = False) -> WorkloadRun:
-    return WorkloadRun(ram_bytes=17764, phases=phases, windows=windows or {}, failed=failed)
+def run_of(phases: dict[str, Totals], windows: dict[str, Totals] | None = None, failed: bool = False, done: bool = True) -> WorkloadRun:
+    return WorkloadRun(ram_bytes=17764, phases=phases, windows=windows or {}, failed=failed, done=done)
 
 
 def values(entries: list[dict[str, object]]) -> dict[tuple[object, ...], object]:
@@ -108,10 +108,16 @@ def test_l2_compares_an_append_into_the_full_log_with_one_into_the_second_log():
     assert results[("W-4", "L2", 10)] == 1
 
 
-def test_l2_without_both_windows_has_no_w2():
+def test_l2_without_both_windows_has_an_infinite_w2_as_on_the_host():
     runs = device_runs({("L2", 10): run_of({"L2": totals(write_calls=1, write_userBytes=64)}, {"first": totals(appends=4)})})
 
-    assert ("W-2", "L2", 10) not in values(workload_results(runs))
+    assert values(workload_results(runs))[("W-2", "L2", 10)] is None
+
+
+def test_a_run_that_did_not_end_has_no_results():
+    runs = device_runs({("L7", 0): run_of({"L7 10": totals(readNs=2_000_000)}, done=False)})
+
+    assert workload_results(runs) == []
 
 
 def test_l2_compares_an_append_on_a_full_volume_with_one_on_an_empty_one():
@@ -186,12 +192,13 @@ def test_l7_gives_the_time_of_a_mount_at_each_fill_level():
 def test_c1_compares_the_time_of_the_model_for_the_requests_of_each_phase_with_the_time_they_took():
     phase = totals(readNs=1_000_000, programNs=4_000_000, eraseNs=45_000_000, pagesProgrammed=10, sectorsErased=1, bytesRead=100_000)
     idle = totals(write_calls=1)
-    runs = device_runs({("L4", 10): run_of({"L4": phase, "L4 idle": idle}), ("L6", 0): run_of({"L6 create": phase})}, MODEL)
+    runs = device_runs({("L4", 10): run_of({"L4": phase, "L4 idle": idle, "fill": phase}), ("L6", 0): run_of({"L6 create": phase})}, MODEL)
 
     results = values(workload_results(runs))
 
     model_ns = 10 * 400_000 + 45_000_000 + 100_000 * 1e9 / 50_000_000
     assert results[("C-1", "L4", 10)] == pytest.approx(abs(model_ns - 50_000_000) / 50_000_000)
+    assert results[("C-1", "L4 fill", 10)] == pytest.approx(abs(model_ns - 50_000_000) / 50_000_000)
     assert results[("C-1", "L6 create", None)] == pytest.approx(abs(model_ns - 50_000_000) / 50_000_000)
     assert ("C-1", "L4 idle", 10) not in results
 
@@ -225,6 +232,7 @@ def test_a_transcript_of_a_workload_becomes_its_metrics(tmp_path: Path):
         "EVT workload id=2 device=qspi subject=embedded-filesystem/nor workload=L1 fill=0 scale=16 ramBytes=17764",
         phase_line(3, "L1", "L1,4096,64", rest="programNs=1000000 bytesProgrammed=4096 pagesProgrammed=16"),
         "EVT phase id=3 write.calls=64 write.userBytes=4096",
+        "EVT workload.done id=4 device=qspi subject=embedded-filesystem/nor workload=L1 fill=0",
     ]
 
     fragment = convert_run(write_run(tmp_path / "2026_10_20", lines), {f"{BOARD}/qspi": MODEL})
@@ -246,6 +254,7 @@ def test_the_last_run_of_a_workload_replaces_earlier_ones_and_phases_of_the_same
         start.format(4),
         phase_line(5, "L7", "L7,10", rest="readNs=1000000"),
         phase_line(6, "L7", "L7,10", rest="readNs=2000000"),
+        "EVT workload.done id=7 device=qspi subject=embedded-filesystem/nor workload=L7 fill=0",
     ]
 
     fragment = convert_run(write_run(tmp_path / "2026_10_20", lines), {})
@@ -258,6 +267,7 @@ def test_a_workload_that_failed_leaves_no_results(tmp_path: Path):
         DEVICE,
         phase_line(2, "L7", "L7,10", rest="readNs=9000000"),
         "EVT workload.failed id=3 device=qspi subject=embedded-filesystem/nor workload=L7 fill=0 phase=L7,10 op=mount result=timeout",
+        "EVT workload.done id=4 device=qspi subject=embedded-filesystem/nor workload=L7 fill=0",
     ]
 
     assert convert_run(write_run(tmp_path / "2026_10_20", lines), {})["results"] == []
@@ -265,8 +275,20 @@ def test_a_workload_that_failed_leaves_no_results(tmp_path: Path):
 
 def test_windows_of_a_transcript_give_w2(tmp_path: Path):
     window = "EVT window id={} device=qspi subject=embedded-filesystem/nor workload=L2 fill=50 log={} appends=4 programNs={}"
-    lines = [DEVICE, window.format(2, "first", 8_000_000), window.format(3, "second", 4_000_000)]
+    lines = [
+        DEVICE,
+        phase_line(2, "L2", "L2", 50, "write.calls=4 write.userBytes=256"),
+        window.format(3, "first", 8_000_000),
+        window.format(4, "second", 4_000_000),
+        "EVT workload.done id=5 device=qspi subject=embedded-filesystem/nor workload=L2 fill=50",
+    ]
 
     fragment = convert_run(write_run(tmp_path / "2026_10_20", lines), {})
 
-    assert [(entry["metric"], entry["fill"], entry["value"]) for entry in fragment["results"]] == [("W-2", 50, 2)]
+    assert [(entry["metric"], entry["value"]) for entry in fragment["results"] if entry["metric"] == "W-2"] == [("W-2", 2)]
+
+
+def test_a_workload_cut_off_before_its_end_leaves_no_results(tmp_path: Path):
+    lines = [DEVICE, phase_line(2, "L7", "L7,10", rest="readNs=9000000")]
+
+    assert convert_run(write_run(tmp_path / "2026_10_20", lines), {})["results"] == []

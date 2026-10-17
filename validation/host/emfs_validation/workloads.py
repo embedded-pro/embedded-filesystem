@@ -123,12 +123,18 @@ class Totals:
 
 @dataclasses.dataclass
 class WorkloadRun:
-    """The last run of a workload at a fill level on a device: its phases, same-named ones summed, and its windows."""
+    """The last run of a workload at a fill level on a device: its phases, same-named ones summed, and its windows; only a
+    run that ended, and without a failed call, counts."""
 
     ram_bytes: int = 0
     phases: dict[str, Totals] = dataclasses.field(default_factory=dict)
     windows: dict[str, Totals] = dataclasses.field(default_factory=dict)
     failed: bool = False
+    done: bool = False
+
+    @property
+    def counts(self) -> bool:
+        return self.done and not self.failed
 
     def phase(self, name: str) -> Totals | None:
         return self.phases.get(name)
@@ -151,10 +157,10 @@ class DeviceRuns:
 
     def run(self, workload: str, fill: int) -> WorkloadRun | None:
         run = self.runs.get((workload, fill))
-        return None if run is None or run.failed else run
+        return run if run is not None and run.counts else None
 
     def completed(self) -> Iterator[tuple[str, int, WorkloadRun]]:
-        return ((workload, fill, run) for (workload, fill), run in self.runs.items() if not run.failed)
+        return ((workload, fill, run) for (workload, fill), run in self.runs.items() if run.counts)
 
     def sector_erase_ns(self) -> float:
         """The mean erase of a sector over the whole run, which stands in for the typical erase of a model on the host."""
@@ -231,13 +237,14 @@ def append_time_ns(window: Totals | None, sector_erase_ns: float) -> float | Non
 
 
 def data_logger(results: Results, run: WorkloadRun, fill: int, sector_erase_ns: float) -> None:
+    log = run.phase("L2")
+    if log is None:
+        return
     first = append_time_ns(run.windows.get("first"), sector_erase_ns)
     second = append_time_ns(run.windows.get("second"), sector_erase_ns)
-    if first is not None and second is not None:
-        results.add("W-2", "L2", "ratio", "lower", quotient(first, second, 1), run.ram_bytes, fill)
-    log = run.phase("L2")
-    if log is not None:
-        results.add("W-4", "L2", "ratio", "lower", quotient(log.count("bytesProgrammed"), log.user_bytes("write"), 0), run.ram_bytes, fill)
+    ratio = math.inf if first is None or second is None else quotient(first, second, 1)
+    results.add("W-2", "L2", "ratio", "lower", ratio, run.ram_bytes, fill)
+    results.add("W-4", "L2", "ratio", "lower", quotient(log.count("bytesProgrammed"), log.user_bytes("write"), 0), run.ram_bytes, fill)
 
 
 def per_append_ns(run: WorkloadRun | None, sector_erase_ns: float) -> float | None:
@@ -320,12 +327,13 @@ def model_error(results: Results) -> None:
     model = results.runs.model
     if "typical.pageProgramNs" not in model:
         return
-    for _, fill, run in results.runs.completed():
+    for workload, fill, run in results.runs.completed():
         for name, totals in run.phases.items():
             measured = totals.device_ns()
             if measured != 0:
                 error = abs(model_time_ns(totals, model) - measured) / measured
-                results.add("C-1", name, "ratio", "lower", error, run.ram_bytes, fill if fill != 0 else None)
+                phase = name if name.startswith(workload) else f"{workload} {name}"
+                results.add("C-1", phase, "ratio", "lower", error, run.ram_bytes, fill if fill != 0 else None)
 
 
 def latency_bound(results: Results) -> None:

@@ -342,7 +342,8 @@ def test_the_records_of_wl_run_convert_into_the_metrics_of_the_workloads(board, 
     terminal.command("dev.info qspi")
     for workload in ("L1", "L2 fill=10", "L2 fill=50", "L2 fill=90", "L3 fill=50", "L6", "L7"):
         terminal.command(f"wl.run qspi {workload}")
-    events = [event.raw for kind in ("device", "workload", "phase", "window") for event in terminal.drain_events(kind)]
+    kinds = ("device", "workload", "phase", "window", "workload.done")
+    events = [event.raw for kind in kinds for event in terminal.drain_events(kind)]
     run = tmp_path / "2026_10_20"
     run.mkdir()
     (run / "transcript.log").write_text("\n".join(events) + "\n", encoding="utf-8")

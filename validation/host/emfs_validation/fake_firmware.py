@@ -246,6 +246,7 @@ class FakeFirmware:
         if workload == "L2":
             for log, program_ns in (("first", 8000000), ("second", 7600000)):
                 self._record("window", f"{context} log={log} appends=4 programNs={program_ns} eraseNs=0 allocatedSectors=0 checkpoints=4")
+        self._record("workload.done", context)
         return "OK"
 
     @staticmethod

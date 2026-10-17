@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
@@ -12,8 +14,10 @@ PROGRAM_REPETITIONS = 256
 ERASE_REPETITIONS = 16
 READ_SIZES = (256, 1024, 4096, 16384, 65536)
 READ_REPETITIONS = 64
-# Above the timeout of 2 hours of the firmware for a workload
-WORKLOAD_TIMEOUT = 7260.0
+# Above the timeout of 4 hours of the firmware for a workload
+WORKLOAD_TIMEOUT = 14460.0
+# The firmware reads the geometry of the QSPI flash after a reset, in milliseconds
+PRESENT_AFTER_RESET = 5.0
 WORKLOAD_RUNS = (
     ("L1", 0),
     ("L2", 10),
@@ -28,7 +32,7 @@ WORKLOAD_RUNS = (
     ("L6", 0),
     ("L7", 0),
 )
-WORKLOAD_EVENTS = ("workload", "phase", "window", "workload.failed")
+WORKLOAD_EVENTS = ("workload", "phase", "window", "workload.failed", "workload.done")
 
 scenarios("nor.feature")
 
@@ -111,6 +115,21 @@ def run_workloads(terminal, board, context, device):
         response = terminal.command(command, timeout=WORKLOAD_TIMEOUT, check=False)
         events = {kind: terminal.drain_events(kind) for kind in WORKLOAD_EVENTS}
         context["runs"].append((workload, fill, response, events))
+        if not response.ok:
+            reset_board(terminal, board, device)
+
+
+def reset_board(terminal, board, device):
+    """After a workload that failed or timed out, the firmware takes no workload until the board is reset."""
+    terminal.drain_events("boot")
+    terminal.send_nowait("reset")
+    terminal.wait_boot(board.command_timeout)
+    terminal.sync()
+    deadline = time.monotonic() + PRESENT_AFTER_RESET
+    while device not in terminal.command("dev.list").values["devices"].split(",") and time.monotonic() < deadline:
+        time.sleep(0.1)
+    terminal.drain_events("device")
+    assert terminal.command(f"dev.info {device}").ok
 
 
 @then("every workload prints its phases and no failure")
@@ -120,6 +139,7 @@ def prints_phases(context):
         assert [(event.values["workload"], int(event.values["fill"])) for event in events["workload"]] == [(workload, fill)]
         assert any("phase" in event.values for event in events["phase"]), f"{workload} at {fill} %"
         assert events["workload.failed"] == []
+        assert len(events["workload.done"]) == 1
 
 
 @then("the data logger prints the windows of both logs")

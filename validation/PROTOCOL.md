@@ -98,7 +98,7 @@ The benchmarks run on `qspi` and `fmc`, `n` times, from 1 to 1024, and measure e
 `dev.check` checks the address and data lines of a device: it erases sector 0 and every sector at a power of two, programs a page that names the sector into each, reads them all back and erases them; a missing or stuck address line maps two of these sectors onto one, and a faulty data line changes what reads back, so either answers `ERR failed`.
 
 What they program is erased when they end, and they erase what the device held before.
-A device that is not present answers `ERR unsupported`, a count or a size out of range, or programs that do not fit on the device, `ERR range`, and a benchmark while one runs `ERR busy`.
+A device that is not present answers `ERR unsupported`, a count or a size out of range, or programs that do not fit on the device, `ERR range`, and a benchmark while one runs, or while a workload or a format uses the device, `ERR busy`.
 A request that does not complete within its guard answers `ERR timeout`, and the device stays busy until the request completes: a read 100 ms, a program 20 ms per page, and an erase 2 s per sector on `qspi` and 8 s on `fmc`.
 `hal::NorFlashStm` has limits of its own, 1 s for a page and 10 s for a sector, past which it aborts the firmware, so a request of `fmc` that never completes ends in a reset of the board.
 A benchmark that does not end within 30 minutes answers `ERR timeout` too.
@@ -115,10 +115,10 @@ EVT bench id=<number> device=<device> op=<program|erase|read> size=<bytes> n=<co
 
 ## Workloads
 
-| Command                                                         | Answer                                                         |
-|-----------------------------------------------------------------|----------------------------------------------------------------|
-| `fs.format <device>`                                            | `OK`, or `ERR failed`                                          |
-| `wl.run <device> <workload> [fill=<percent>] [scale=<divisor>]` | `EVT workload`, `EVT phase` per phase, `EVT window`, then `OK` |
+| Command                                                         | Answer                                                                              |
+|-----------------------------------------------------------------|-------------------------------------------------------------------------------------|
+| `fs.format <device>`                                            | `OK`, or `ERR failed`                                                               |
+| `wl.run <device> <workload> [fill=<percent>] [scale=<divisor>]` | `EVT workload`, `EVT phase` per phase, `EVT window`, `EVT workload.done`, then `OK` |
 
 The workloads run on the NOR volume of `qspi` and of `fmc`, as `docs/Validation.md` describes:
 
@@ -126,16 +126,18 @@ The workloads run on the NOR volume of `qspi` and of `fmc`, as `docs/Validation.
 * `wl.run` runs `L1`, `L2`, `L3`, `L4`, `L6` or `L7` of `docs/Metrics.md`, formatting the volume first, with the sizes of the files divided by `scale`, from 1 to 1024, 16 by default; `L4` keeps its 200 files;
 * `fill`, from 0 to 99, fills the volume to a level before `L2`, `L3` and `L4`, as the host does; `L7` fills to 10, 50 and 90 % itself, and the other workloads take no fill.
 
-The volume is unmounted when a workload ends, so that no background work of the volume runs into a later benchmark.
-A device that is not present or a workload that is unknown answers `ERR unsupported`, a fill or a scale out of range, or a fill for a workload without one, `ERR range`, and a command while a workload runs `ERR busy`.
-A workload in which a call fails prints `EVT workload.failed` at its end and answers `ERR failed`; a request that does not complete within its guard, or a call that does not complete within 10 minutes, ends the workload with `EVT workload.failed` and `ERR timeout`, and the board is reset before the next one.
-A workload that does not end within 2 hours, and a format within 30 minutes, answers `ERR timeout` too.
+The volume is unmounted when a workload ends, so that no background work of the volume runs into a later benchmark, and `EVT workload.done` marks the end; the host counts only a run that has it.
+A device that is not present or a workload that is unknown answers `ERR unsupported`, a fill or a scale out of range, or a fill for a workload without one, `ERR range`, and a command while a workload, a format or a benchmark uses the device `ERR busy`.
+A workload in which a call fails prints `EVT workload.failed` before `EVT workload.done` and answers `ERR failed`.
+A request that does not complete within its guard, or a call that does not complete within 10 minutes, ends the workload with `EVT workload.failed` and `ERR timeout`, as a request past its guard ends a format with `ERR timeout`; what timed out may still complete and go on, so `wl.run` and `fs.format` answer `ERR busy`, and the benchmarks on that device too, until the board is reset.
+A workload that does not end within 4 hours, and a format within 30 minutes, answers `ERR timeout` too.
 
 ```text
 EVT workload id=<number> device=<device> subject=embedded-filesystem/nor workload=<workload> fill=<percent> scale=<divisor> ramBytes=<bytes>
 EVT phase id=<number> device=<device> subject=<subject> workload=<workload> phase=<phase> fill=<percent> ramBytes=<bytes> elapsedNs=<ns> <counts> <operations>
 EVT window id=<number> device=<device> subject=<subject> workload=L2 fill=<percent> log=<first|second> appends=<count> <counts>
 EVT workload.failed id=<number> device=<device> subject=<subject> workload=<workload> fill=<percent> phase=<phase> op=<operation> result=<result>
+EVT workload.done id=<number> device=<device> subject=<subject> workload=<workload> fill=<percent>
 ```
 
 | Key                                                                                                                                                      | Value                                                                                                                                                                                                                                                                                  |

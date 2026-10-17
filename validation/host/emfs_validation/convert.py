@@ -247,6 +247,11 @@ def convert_workload_failed(fragment: Fragment, record: Record) -> None:
     fragment.workload_run(record).failed = True
 
 
+def convert_workload_done(fragment: Fragment, record: Record) -> None:
+    """The end of a run of a workload; a run without one, cut off by a reset or by the end of the transcript, leaves no results."""
+    fragment.workload_run(record).done = True
+
+
 CONVERTERS: dict[str, Callable[[Fragment, Record], None]] = {
     "device": convert_device,
     "bench": convert_bench,
@@ -256,6 +261,7 @@ CONVERTERS: dict[str, Callable[[Fragment, Record], None]] = {
     "phase": convert_phase,
     "window": convert_window,
     "workload.failed": convert_workload_failed,
+    "workload.done": convert_workload_done,
 }
 
 
