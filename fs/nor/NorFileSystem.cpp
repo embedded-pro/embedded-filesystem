@@ -126,6 +126,11 @@ namespace fs
             Start(NorUsageCall{ onDone });
     }
 
+    bool NorFileSystem::Idle() const
+    {
+        return volume.Idle();
+    }
+
     NorVolume& NorFileSystem::Volume()
     {
         return volume;
@@ -306,6 +311,16 @@ namespace fs
 
     namespace detail
     {
+        template<class Operation, class Call>
+        void StartNorOperation(NorVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished)
+        {
+            volume.Operation().template emplace<Operation>(volume, std::move(call), onFinished).Start();
+        }
+
+        template void StartNorOperation<NorMakeDirectory, NorMakeDirectoryCall>(NorVolume& volume, NorMakeDirectoryCall&& call, const infra::Function<void(Result result)>& onFinished);
+        template void StartNorOperation<NorRemove, NorRemoveCall>(NorVolume& volume, NorRemoveCall&& call, const infra::Function<void(Result result)>& onFinished);
+        template void StartNorOperation<NorRename, NorRenameCall>(NorVolume& volume, NorRenameCall&& call, const infra::Function<void(Result result)>& onFinished);
+
         void StartNorTruncate(NorVolume& volume, NorOpenFile& file, uint32_t size, const infra::Function<void(Result result)>& onDone)
         {
             volume.FileTruncate().Truncate(file, size, onDone);

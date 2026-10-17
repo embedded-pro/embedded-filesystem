@@ -104,6 +104,11 @@ namespace fs
         volume.Defer(onDone, IsMounted() ? Result::unsupported : Unavailable());
     }
 
+    bool FatReader::Idle() const
+    {
+        return volume.Idle();
+    }
+
     FatReaderVolume& FatReader::Volume()
     {
         return volume;

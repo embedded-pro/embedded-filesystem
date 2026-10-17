@@ -230,6 +230,11 @@ namespace fs
         background = &work;
     }
 
+    bool NorVolume::Idle() const
+    {
+        return queue.Idle() && (background == nullptr || !background->Scheduled());
+    }
+
     void NorVolume::UrgeBackground()
     {
         if (background != nullptr)

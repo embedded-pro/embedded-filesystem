@@ -63,6 +63,16 @@ TEST_F(NorForegroundLevelingTest, the_first_call_after_a_mount_moves_a_block_whe
     EXPECT_EQ(target, BlockInVolume(file, 0));
 }
 
+TEST_F(NorForegroundLevelingTest, the_volume_is_idle_as_soon_as_the_move_after_a_call_is_done)
+{
+    SpreadTheWear();
+
+    EXPECT_EQ(fs::Result::success, StatOfFile());
+
+    EXPECT_EQ(1, Volume().Counters().movedBlocks);
+    EXPECT_TRUE(this->fileSystem.Idle());
+}
+
 TEST_F(NorForegroundLevelingTest, makes_no_move_while_the_spread_is_within_the_threshold)
 {
     EXPECT_EQ(fs::Result::success, StatOfFile());

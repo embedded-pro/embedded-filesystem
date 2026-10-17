@@ -12,6 +12,19 @@ from emfs_validation.board import Board
 CTRL_C = 0x03
 PROMPT = "> "
 MAXIMUM_DELAY_MS = 600000
+DEFAULT_CYCLE_RUNS = 100
+MAXIMUM_CYCLE_RUNS = 200
+CYCLE_OPERATIONS = ("format", "mount", "open", "list", "read", "overwrite", "create", "append", "write", "rename", "remove", "unmount")
+RAM_DEVICES = {
+    "ramflash": "kind=nor sectors=1024 sectorSize=4096 memory=sdram",
+    "ramblock": "kind=block blocks=4096 blockSize=512 memory=sdram",
+}
+CYCLE_SUBJECTS = {
+    "embedded-filesystem/fat": ("ramblock", 7712, 3),
+    "embedded-filesystem/nor": ("ramflash", 13504, 4),
+    "fatfs/tuned": ("ramblock", 1888, 1),
+    "littlefs/ram-matched": ("ramflash", 12628, 2),
+}
 
 
 class FakeFirmware:
@@ -23,6 +36,7 @@ class FakeFirmware:
         self._input = bytearray()
         self._output = bytearray()
         self._reset_cause = "pin"
+        self._next_record = 1
         self.closed = False
         self._boot("pin")
 
@@ -72,6 +86,8 @@ class FakeFirmware:
             return f"OK commit={self.commit} cm4={'stopped' if self.cortex_m4_stopped else 'running'}"
         if name == "delay" and len(arguments) == 1:
             return self._delay(arguments[0])
+        if name == "cycles.run":
+            return self._cycles(arguments)
         return "ERR usage"
 
     @staticmethod
@@ -80,11 +96,39 @@ class FakeFirmware:
             return "ERR usage"
         return "OK" if int(argument) <= MAXIMUM_DELAY_MS else "ERR range"
 
+    def _cycles(self, arguments: list[str]) -> str:
+        positional = [argument for argument in arguments if "=" not in argument]
+        keys = dict(argument.split("=", 1) for argument in arguments if "=" in argument)
+        if len(positional) != 1 or keys.keys() - {"n"}:
+            return "ERR usage"
+        runs = keys.get("n", str(DEFAULT_CYCLE_RUNS))
+        if not runs.isdigit():
+            return "ERR usage"
+        if not 1 <= int(runs) <= MAXIMUM_CYCLE_RUNS:
+            return "ERR range"
+        if positional[0] not in CYCLE_SUBJECTS:
+            return "ERR unsupported"
+        device, ram_bytes, background = CYCLE_SUBJECTS[positional[0]]
+        self._record("device", f"device={device} {RAM_DEVICES[device]}")
+        for index, operation in enumerate(CYCLE_OPERATIONS):
+            median = 1000 + 100 * index
+            self._record(
+                "cycles",
+                f"subject={positional[0]} device={device} op={operation} n={runs} ramBytes={ram_bytes} "
+                f"minCycles={median - 50} medianCycles={median} maxCycles={median + 400} settledCycles={median * background}",
+            )
+        return "OK"
+
+    def _record(self, kind: str, pairs: str) -> None:
+        self._print(f"EVT {kind} id={self._next_record} {pairs}\r\n")
+        self._next_record += 1
+
     def _identity(self, reset: str) -> str:
         return f"board={self.board.name} family={self.board.family} sysclk={self.board.sysclk} reset={reset}"
 
     def _boot(self, reset: str) -> None:
         self._reset_cause = reset
+        self._next_record = 1
         self._print(f"{PROMPT}\r\nEVT boot {self._identity(reset)}\r\n")
 
     def _answer(self, line: str) -> None:

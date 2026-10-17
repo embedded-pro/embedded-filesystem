@@ -35,6 +35,7 @@ namespace fs
         FatPathWalk& Walk();
 
         uint32_t Generation() const;
+        bool Idle() const;
         bool Available() const;
         bool Available(uint32_t handleGeneration) const;
         Result Unavailable() const;

@@ -52,6 +52,11 @@ namespace fs
         return generation;
     }
 
+    bool FatReaderVolume::Idle() const
+    {
+        return !queue.IsClaimed() && !queue.ClaimsPending();
+    }
+
     bool FatReaderVolume::Available() const
     {
         return mounted;

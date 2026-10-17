@@ -79,6 +79,20 @@ TEST_F(FatReaderTest, calls_before_mount_are_not_mounted)
     ExpectUnmount(fs::Result::notMounted);
 }
 
+TEST_F(FatReaderTest, is_idle_unless_a_call_waits_or_runs)
+{
+    EXPECT_TRUE(volume.Idle());
+
+    StartMount();
+    EXPECT_FALSE(volume.Idle());
+    ExecuteFirstAction();
+    EXPECT_FALSE(volume.Idle());
+
+    EXPECT_CALL(mountDone, callback(fs::Result::success));
+    ExecuteAllActions();
+    EXPECT_TRUE(volume.Idle());
+}
+
 TEST_F(FatReaderTest, mount_completes_from_the_event_dispatcher)
 {
     StartMount();

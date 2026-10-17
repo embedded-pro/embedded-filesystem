@@ -84,6 +84,19 @@ namespace
     };
 }
 
+TEST_F(NorBackgroundTest, is_scheduled_during_the_idle_delay_after_a_foreground_call)
+{
+    EXPECT_FALSE(background.Scheduled());
+
+    FinishForegroundCall();
+    EXPECT_TRUE(background.Scheduled());
+
+    foreground.Claim([] {});
+    EXPECT_FALSE(background.Scheduled());
+    ExecuteAllActions();
+    foreground.Release();
+}
+
 TEST_F(NorBackgroundTest, does_nothing_before_the_idle_delay)
 {
     FinishForegroundCall();

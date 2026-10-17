@@ -18,4 +18,9 @@ namespace fs
         if (!claimer.ShouldYield())
             timer.Start(delay, onIdle);
     }
+
+    bool IdleTimer::Armed() const
+    {
+        return timer.Armed();
+    }
 }

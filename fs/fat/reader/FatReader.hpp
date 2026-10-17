@@ -50,6 +50,7 @@ namespace fs
         void Rename(infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone) override;
         void MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone) override;
         void Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone) override;
+        bool Idle() const override;
 
     protected:
         FatReader(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, DeferredCompletions& deferred, const PathLimits& limits);

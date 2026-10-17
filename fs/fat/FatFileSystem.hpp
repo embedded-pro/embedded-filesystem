@@ -51,6 +51,7 @@ namespace fs
         void Rename(infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone) override;
         void MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone) override;
         void Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone) override;
+        bool Idle() const override;
 
     protected:
         FatFileSystem(const FatVolumeParts& parts, const FatConfig& config);
@@ -113,10 +114,7 @@ namespace fs
         };
 
         template<class Operation, class Call>
-        void StartFatOperation(FatVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished)
-        {
-            volume.Operation().template emplace<Operation>(volume, std::move(call), onFinished).Start();
-        }
+        void StartFatOperation(FatVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished);
 
         void StartFatExpectSize(FatVolume& volume, FatOpenFile& file, FatExtentCache& extents, uint32_t size, const infra::Function<void(Result result)>& onDone);
         void StartFatOpenDirectory(FatVolume& volume, FatOpenDirectoryCall&& call, const FatDirectoryAllocation& allocate, const infra::Function<void(Result result)>& onFinished);
@@ -163,14 +161,7 @@ namespace fs
         template<>
         struct FatBackgroundStorage<true>
         {
-            FatBackgroundStorage(FatVolume& volume, infra::Duration idleDelay)
-                : scan(volume.Queue(), volume.FreeSpace(), idleDelay, [&volume](Result result)
-                      {
-                          volume.Report(result);
-                      })
-            {
-                volume.AttachBackground(scan);
-            }
+            FatBackgroundStorage(FatVolume& volume, infra::Duration idleDelay);
 
             FatBackgroundScan scan;
         };

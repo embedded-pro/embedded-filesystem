@@ -37,6 +37,11 @@ namespace fs
         idleTimer.ForegroundReleased();
     }
 
+    bool FatBackgroundScan::Scheduled() const
+    {
+        return idleTimer.Armed();
+    }
+
     void FatBackgroundScan::Idle()
     {
         machine.Dispatch(FatScanIdle{});

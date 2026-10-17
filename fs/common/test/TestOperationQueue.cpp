@@ -236,3 +236,108 @@ TEST_F(OperationQueueTest, notifies_each_foreground_claim)
     urgent.Release();
     inBackground.Release();
 }
+
+TEST_F(OperationQueueTest, is_idle_without_claims)
+{
+    EXPECT_TRUE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_not_idle_while_a_claim_waits_to_be_granted)
+{
+    Grant(first, 1);
+
+    EXPECT_FALSE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_not_idle_while_a_claim_is_granted)
+{
+    ClaimAndGrantFirst();
+
+    EXPECT_FALSE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_idle_as_soon_as_its_last_claim_is_released)
+{
+    ClaimAndGrantFirst();
+    first.Release();
+
+    EXPECT_TRUE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_not_idle_while_a_background_claim_is_queued_or_granted)
+{
+    GrantBackground();
+    EXPECT_FALSE(queue.Idle());
+
+    EXPECT_CALL(granted, callback(0));
+    ExecuteAllActions();
+    EXPECT_FALSE(queue.Idle());
+
+    background.Release();
+    EXPECT_TRUE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_not_idle_while_an_urgent_background_claim_is_queued)
+{
+    background.ClaimUrgent([] {});
+
+    EXPECT_FALSE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_idle_once_queued_claims_are_withdrawn)
+{
+    Grant(first, 1);
+    GrantBackground();
+
+    first.Release();
+    background.Release();
+
+    EXPECT_TRUE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, a_second_release_does_not_count_the_claim_twice)
+{
+    Grant(first, 1);
+    Grant(second, 2);
+    first.Release();
+    first.Release();
+
+    EXPECT_FALSE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_idle_once_claimers_with_outstanding_claims_are_destroyed)
+{
+    {
+        fs::OperationQueue::Claimer foreground{ queue };
+        fs::OperationQueue::BackgroundClaimer inBackground{ queue };
+        foreground.Claim([] {});
+        inBackground.Claim([] {});
+    }
+
+    EXPECT_TRUE(queue.Idle());
+}
+
+TEST_F(OperationQueueTest, is_idle_once_claimers_granted_and_queued_again_are_destroyed)
+{
+    {
+        fs::OperationQueue::Claimer foreground{ queue };
+        Grant(foreground, 1);
+        EXPECT_CALL(granted, callback(1));
+        ExecuteAllActions();
+        foreground.Claim([] {});
+    }
+    ExecuteAllActions();
+
+    {
+        fs::OperationQueue::BackgroundClaimer inBackground{ queue };
+        inBackground.Claim([this]
+            {
+                granted.callback(0);
+            });
+        EXPECT_CALL(granted, callback(0));
+        ExecuteAllActions();
+        inBackground.ClaimUrgent([] {});
+    }
+
+    EXPECT_TRUE(queue.Idle());
+}

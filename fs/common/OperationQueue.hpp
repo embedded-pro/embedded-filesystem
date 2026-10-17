@@ -19,16 +19,19 @@ namespace fs
         ~OperationQueue() = default;
 
         uint32_t ForegroundReleases() const;
+        bool Idle() const;
 
     private:
         void ForegroundClaiming();
         void ForegroundReleased();
+        void Withdrawn();
 
     private:
         infra::ClaimableResource resource;
         infra::Function<void()> onForegroundClaiming;
         infra::Function<void()> onForegroundReleased;
         uint32_t foregroundReleases{ 0 };
+        uint32_t outstandingClaims{ 0 };
     };
 
     class OperationQueue::Claimer
@@ -37,7 +40,7 @@ namespace fs
         explicit Claimer(OperationQueue& queue);
         Claimer(const Claimer& other) = delete;
         Claimer& operator=(const Claimer& other) = delete;
-        ~Claimer() = default;
+        ~Claimer();
 
         void Claim(const infra::Function<void()>& onGranted);
         void Release();
@@ -55,7 +58,7 @@ namespace fs
         explicit BackgroundClaimer(OperationQueue& queue);
         BackgroundClaimer(const BackgroundClaimer& other) = delete;
         BackgroundClaimer& operator=(const BackgroundClaimer& other) = delete;
-        ~BackgroundClaimer() = default;
+        ~BackgroundClaimer();
 
         void Claim(const infra::Function<void()>& onGranted);
         void ClaimUrgent(const infra::Function<void()>& onGranted);

@@ -50,6 +50,11 @@ namespace fs
         idleTimer.ForegroundReleased();
     }
 
+    bool NorBackground::Scheduled() const
+    {
+        return idleTimer.Armed();
+    }
+
     void NorBackground::Idle()
     {
         machine.Dispatch(NorBackgroundIdle{});

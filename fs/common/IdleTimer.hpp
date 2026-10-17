@@ -17,6 +17,7 @@ namespace fs
 
         void ForegroundClaiming();
         void ForegroundReleased();
+        bool Armed() const;
 
     private:
         const OperationQueue::BackgroundClaimer& claimer;

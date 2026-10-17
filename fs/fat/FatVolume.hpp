@@ -113,6 +113,7 @@ namespace fs
         void MarkUnmounted(Result reason);
         void Report(Result result) const;
         void AttachBackground(FatBackgroundWork& work);
+        bool Idle() const;
         void MarkDirty(const infra::Function<void(Result result)>& onDone);
         void MarkClean(const infra::Function<void(Result result)>& onDone);
 

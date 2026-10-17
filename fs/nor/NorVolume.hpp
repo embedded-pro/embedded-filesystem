@@ -122,6 +122,7 @@ namespace fs
         void MarkUnmounted();
         void AttachBackground(NorBackgroundWork& work);
         void UrgeBackground();
+        bool Idle() const;
 
         template<class Callback>
         void Defer(const Callback& onDone, Result result);

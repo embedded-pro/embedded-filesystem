@@ -21,7 +21,7 @@ if (EMFS_STANDALONE)
     FetchContent_Declare(
         emil
         GIT_REPOSITORY https://github.com/embedded-pro/embedded-infra-lib.git
-        GIT_TAG        23c55c6c8f72b3ea9ed472a37d46ccca8d0bc93e # Unreleased
+        GIT_TAG        93ebdfbaff21449025ce57a3af772291842b7ea3 # Unreleased
     )
 
     set(EMIL_ENABLE_DOCKER_TOOLS Off CACHE BOOL "" FORCE)

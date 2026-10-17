@@ -86,6 +86,19 @@ TEST_F(FatLiteTest, calls_before_mount_are_not_mounted)
     ExpectDone(fs::Result::notMounted);
 }
 
+TEST_F(FatLiteTest, is_idle_unless_a_call_waits_or_runs)
+{
+    EXPECT_TRUE(volume.Idle());
+
+    volume.Mount(Done());
+    EXPECT_FALSE(volume.Idle());
+    ExecuteFirstAction();
+    EXPECT_FALSE(volume.Idle());
+
+    ExpectDone(fs::Result::success);
+    EXPECT_TRUE(volume.Idle());
+}
+
 TEST_F(FatLiteTest, calls_it_leaves_out_are_unsupported_before_their_paths_are_validated)
 {
     ExpectMount();

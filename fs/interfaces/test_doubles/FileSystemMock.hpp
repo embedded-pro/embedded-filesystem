@@ -19,6 +19,7 @@ namespace fs
         MOCK_METHOD(void, Rename, (infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone), (override));
         MOCK_METHOD(void, MakeDirectory, (infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone), (override));
         MOCK_METHOD(void, Usage, ((const infra::Function<void(Result result, VolumeUsage usage)>& onDone)), (override));
+        MOCK_METHOD(bool, Idle, (), (const, override));
     };
 }
 

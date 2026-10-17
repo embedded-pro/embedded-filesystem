@@ -16,6 +16,7 @@ namespace fs
         virtual void Stop() = 0;
         virtual void ForegroundClaiming() = 0;
         virtual void ForegroundReleased() = 0;
+        virtual bool Scheduled() const = 0;
     };
 }
 

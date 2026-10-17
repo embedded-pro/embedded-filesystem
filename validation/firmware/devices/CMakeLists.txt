@@ -14,6 +14,11 @@ target_sources(validation.devices PRIVATE
     NullBlockDevice.hpp
     NullFlash.cpp
     NullFlash.hpp
+    RamBlockDevice.cpp
+    RamBlockDevice.hpp
+    RamCompletion.hpp
+    RamFlash.cpp
+    RamFlash.hpp
 )
 
 if (EMFS_BUILD_TESTS)

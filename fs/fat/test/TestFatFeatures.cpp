@@ -223,6 +223,16 @@ TEST_F(FatWithoutBackgroundScanTest, nothing_is_read_while_the_volume_is_idle)
     EXPECT_EQ(reads, device.ReadRequests());
 }
 
+TEST_F(FatWithoutBackgroundScanTest, is_idle_as_soon_as_a_mount_completes)
+{
+    volume.Mount(Done());
+    EXPECT_FALSE(volume.Idle());
+
+    ExpectDone(fs::Result::success);
+
+    EXPECT_TRUE(volume.Idle());
+}
+
 TEST_F(FatWithoutBackgroundScanTest, usage_counts_the_free_clusters_on_its_first_call)
 {
     volume.Mount(Done());

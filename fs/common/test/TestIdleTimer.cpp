@@ -60,6 +60,31 @@ namespace
 TEST_F(IdleTimerTest, no_idle_notification_without_operations)
 {
     ForwardTime(1s);
+
+    EXPECT_FALSE(idleTimer.Armed());
+}
+
+TEST_F(IdleTimerTest, is_armed_during_the_idle_delay_after_a_foreground_release)
+{
+    ClaimAndGrantFirst();
+    first.Release();
+
+    EXPECT_TRUE(idleTimer.Armed());
+    EXPECT_CALL(idle, callback());
+    ForwardTime(100ms);
+    EXPECT_FALSE(idleTimer.Armed());
+}
+
+TEST_F(IdleTimerTest, a_foreground_claim_disarms_it)
+{
+    ClaimAndGrantFirst();
+    first.Release();
+
+    Grant(second, 2);
+
+    EXPECT_FALSE(idleTimer.Armed());
+    EXPECT_CALL(granted, callback(2));
+    ExecuteAllActions();
 }
 
 TEST_F(IdleTimerTest, idle_notification_after_idle_delay_once_queue_is_empty)

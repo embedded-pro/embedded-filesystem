@@ -249,6 +249,11 @@ namespace fs
         background = &work;
     }
 
+    bool FatVolume::Idle() const
+    {
+        return queue.Idle() && (background == nullptr || !background->Scheduled());
+    }
+
     void FatVolume::MarkDirty(const infra::Function<void(Result result)>& onDone)
     {
         if (operations.markDirty != nullptr)

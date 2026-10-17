@@ -19,6 +19,7 @@ validation/
         baselines/          the glue of FatFs and littlefs
         boards/stm32h757/BoardProfile.hpp
         boards/stm32h745/BoardProfile.hpp
+        cycles/             F-2: the cycle counting, its run and command, and the subjects
         devices/            the null, RAM and counting devices
         hil/                the command groups
         results/            the result lines
@@ -34,7 +35,7 @@ validation/
 
 The C++ of `validation/firmware` is split in two:
 
-* Libraries that need no board: the null, RAM and counting devices, the glue of FatFs and littlefs, the benchmarks, the workload runner, the parser of FAT layouts, the result lines and the command groups.
+* Libraries that need no board: the null, RAM and counting devices, the glue of FatFs and littlefs, the cycle counting of F-2 and its subjects, the benchmarks, the workload runner, the parser of FAT layouts, the result lines and the command groups.
   They are written against `hal::Flash`, `hal::BlockDevice` and the terminal of EmIL, built and tested on the host, and covered 100 % like `fs/`.
 * Board files: the board profiles, the `main` of both cores and the glue to the drivers of hal-st.
   They build only for the boards, and are excluded from the coverage and from SonarCloud.
@@ -121,7 +122,7 @@ At 400 MHz the counter wraps after 10.7 s, so a duration is the difference of tw
 | `fmc`              | EVAL  | `hal::NorFlashStm`                                                                                    | The whole 16 MiB                                     | 128 blocks of one 128 KiB sector, program unit 2, and the write buffer of the chip as the page                               |
 | `sd`               | EVAL  | `hal::SdCardStm`                                                                                      | `validation::BlockDeviceRegion` of the first 256 MiB | The FAT subject of `sd-card-256m`: `fs::FatFileSystem::WithStorage<2, 8>`, with the allocation unit of the card              |
 | `emmc`             | DISCO | The eMMC driver of hal-st                                                                             | `validation::BlockDeviceRegion` of the first 256 MiB | As `sd`, with the high-capacity erase group of the eMMC as the allocation unit                                               |
-| `ramflash`         | Both  | `validation::RamFlash`, NOR semantics in SDRAM                                                        | 2 MiB                                                | For F-2: as `qspi`, with 512 blocks                                                                                          |
+| `ramflash`         | Both  | `validation::RamFlash`, NOR semantics in SDRAM                                                        | 4 MiB                                                | For F-2: as `qspi`, with 1024 blocks                                                                                         |
 | `ramblock`         | Both  | `validation::RamBlockDevice` in SDRAM                                                                 | 2 MiB                                                | For F-2: as `sd`, which `fs::FatFormatter` formats as FAT12 at this size, without an allocation unit                         |
 
 The QSPI flash is set up as the demos of hal-st do it: `services::FlashGeometryQuadSfdp` reads the geometry and the read command from the SFDP tables, the firmware aligns the dummy cycles of the volatile configuration register, and `services::FlashQuadSpiGeneric` runs with `Protocol::extendedSpi`.
@@ -157,22 +158,22 @@ After a reset it prints `EVT boot board=<name> family=stm32h7 sysclk=<hz> reset=
 Every command answers with one `OK` or `ERR` line, and results are `EVT` lines, printed while the command runs.
 A command that runs for minutes is a `services::HilPendingOperation` whose timeout is part of the command.
 
-| Command                                                                             | Does                                                                                           | Answers                                      |
-|-------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|----------------------------------------------|
-| `firmware.info`                                                                     | Names the commit the firmware was built from, and whether the Cortex-M4 stopped                | `OK commit=<commit> cm4=<stopped\|running>`  |
-| `dev.list`                                                                          | Lists the devices of the board                                                                 | `OK devices=qspi,fmc,sd,ramflash,ramblock`   |
-| `dev.info <device>`                                                                 | Identifies a device and prints its geometry                                                    | `EVT device`, `OK`                           |
-| `bench.program <device> size=<bytes> n=<count>`                                     | Programs `size` bytes at `n` erased, page-aligned addresses                                    | `EVT bench`, `OK`                            |
-| `bench.erase <device> n=<count>`                                                    | Erases `n` sectors                                                                             | `EVT bench`, `OK`                            |
-| `bench.read <device> size=<bytes> n=<count>`                                        | Reads `size` bytes `n` times                                                                   | `EVT bench`, `OK`                            |
-| `bench.blocks <device> <read\|write> blocks=<count> n=<count>`                      | Reads or writes `n` requests of `blocks` consecutive blocks                                    | `EVT bench`, `OK`                            |
-| `bench.units <device> units=<count> n=<count>`                                      | Writes one block into each of `units` allocation units in turn, `n` rounds                     | `EVT bench`, `OK`                            |
-| `bench.flush <device> n=<count>`, `bench.discard <device> blocks=<count> n=<count>` | Flushes or discards `n` times                                                                  | `EVT bench`, `OK`                            |
-| `fs.format <device>`                                                                | Formats the volume of the device, with `fs::NorFileSystem::Format` or `fs::FatFormatter`       | `OK`                                         |
-| `wl.run <device> <workload> [fill=<percent>] [scale=<divisor>]`                     | Runs a workload on the volume of the device                                                    | `EVT phase`, `EVT window`, `OK`              |
-| `cycles.run <subject> [n=<count>]`                                                  | Runs the operations of F-2 on a RAM device                                                     | `EVT cycles` per operation, `OK`             |
-| `layout.read <device>`                                                              | Reads the MBR and the boot sector of the whole card, and compares them with `fs::FatFormatter` | `EVT layout` twice, `OK differences=<count>` |
-| `layout.format <device>`                                                            | Formats the whole card with `fs::FatFormatter`                                                 | `OK`                                         |
+| Command                                                                             | Does                                                                                           | Answers                                        |
+|-------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|------------------------------------------------|
+| `firmware.info`                                                                     | Names the commit the firmware was built from, and whether the Cortex-M4 stopped                | `OK commit=<commit> cm4=<stopped\|running>`    |
+| `dev.list`                                                                          | Lists the devices of the board                                                                 | `OK devices=qspi,fmc,sd,ramflash,ramblock`     |
+| `dev.info <device>`                                                                 | Identifies a device and prints its geometry                                                    | `EVT device`, `OK`                             |
+| `bench.program <device> size=<bytes> n=<count>`                                     | Programs `size` bytes at `n` erased, page-aligned addresses                                    | `EVT bench`, `OK`                              |
+| `bench.erase <device> n=<count>`                                                    | Erases `n` sectors                                                                             | `EVT bench`, `OK`                              |
+| `bench.read <device> size=<bytes> n=<count>`                                        | Reads `size` bytes `n` times                                                                   | `EVT bench`, `OK`                              |
+| `bench.blocks <device> <read\|write> blocks=<count> n=<count>`                      | Reads or writes `n` requests of `blocks` consecutive blocks                                    | `EVT bench`, `OK`                              |
+| `bench.units <device> units=<count> n=<count>`                                      | Writes one block into each of `units` allocation units in turn, `n` rounds                     | `EVT bench`, `OK`                              |
+| `bench.flush <device> n=<count>`, `bench.discard <device> blocks=<count> n=<count>` | Flushes or discards `n` times                                                                  | `EVT bench`, `OK`                              |
+| `fs.format <device>`                                                                | Formats the volume of the device, with `fs::NorFileSystem::Format` or `fs::FatFormatter`       | `OK`                                           |
+| `wl.run <device> <workload> [fill=<percent>] [scale=<divisor>]`                     | Runs a workload on the volume of the device                                                    | `EVT phase`, `EVT window`, `OK`                |
+| `cycles.run <subject> [n=<count>]`                                                  | Runs the operations of F-2 on a RAM device                                                     | `EVT device`, `EVT cycles` per operation, `OK` |
+| `layout.read <device>`                                                              | Reads the MBR and the boot sector of the whole card, and compares them with `fs::FatFormatter` | `EVT layout` twice, `OK differences=<count>`   |
+| `layout.format <device>`                                                            | Formats the whole card with `fs::FatFormatter`                                                 | `OK`                                           |
 
 `PROTOCOL.md` in `validation/` describes every command and every key, and grows with every step that adds commands, as hal-st does for its validation.
 
@@ -189,14 +190,15 @@ EVT <kind> id=<number> <key>=<value> ...
 * Numbers are decimal; durations are in nanoseconds, in keys ending in `Ns`, cycles in keys ending in `Cycles`, and sizes in bytes.
 * The host ignores kinds and keys it does not know, so a later firmware can add them without breaking the conversion of older runs; only a `device` record keeps every key, as a parameter of the device.
 
-| Kind     | Keys                                                                                                                                                                                                                                                         | Record                               |
-|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------|
-| `device` | `device`, `kind` (`nor` or `block`), the geometry, `chip` (the JEDEC identifier or the CID), `unitBlocks`, `clockHz`                                                                                                                                         | The device a run used                |
-| `bench`  | `device`, `op`, `size`, `n`, `minNs`, `medianNs`, `p99Ns`, `maxNs`, `meanNs`                                                                                                                                                                                 | One benchmark                        |
-| `phase`  | `device`, `subject`, `phase`, `fill`, `ramBytes`, `elapsedNs`, the counts of the volume, and per operation of the phase, idle periods included: `calls`, `userBytes`, the sum, maximum and histogram of the latencies, and the counts of the counting device | One phase of a workload              |
-| `window` | `device`, `subject`, `fill`, `log` (`first` or `second`), `appends`, and the counts of the counting device and of the volume                                                                                                                                 | One window of W-2                    |
-| `cycles` | `subject`, `op`, `n`, `ramBytes`, `minCycles`, `medianCycles`, `maxCycles`, `settledCycles`                                                                                                                                                                  | The cycles of one operation, for F-2 |
-| `layout` | `source` (`card` or `formatter`), `partitionStart`, `partitionSectors`, `type`, `sectorsPerCluster`, `reservedSectors`, `fats`, `fatSectors`, `rootEntries`, `dataStart`, `differs`                                                                          | One layout of a card                 |
+| Kind            | Keys                                                                                                                                                                                                                                                         | Record                                |
+|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------|
+| `device`        | `device`, `kind` (`nor` or `block`), the geometry, `chip` (the JEDEC identifier or the CID), `unitBlocks`, `clockHz`                                                                                                                                         | The device a run used                 |
+| `bench`         | `device`, `op`, `size`, `n`, `minNs`, `medianNs`, `p99Ns`, `maxNs`, `meanNs`                                                                                                                                                                                 | One benchmark                         |
+| `phase`         | `device`, `subject`, `phase`, `fill`, `ramBytes`, `elapsedNs`, the counts of the volume, and per operation of the phase, idle periods included: `calls`, `userBytes`, the sum, maximum and histogram of the latencies, and the counts of the counting device | One phase of a workload               |
+| `window`        | `device`, `subject`, `fill`, `log` (`first` or `second`), `appends`, and the counts of the counting device and of the volume                                                                                                                                 | One window of W-2                     |
+| `cycles`        | `subject`, `device`, `op`, `n`, `ramBytes`, `minCycles`, `medianCycles`, `maxCycles`, `settledCycles`                                                                                                                                                        | The cycles of one operation, for F-2  |
+| `cycles.failed` | `subject`, `op`, `run`, `status`                                                                                                                                                                                                                             | A run of F-2 that a failed call ended |
+| `layout`        | `source` (`card` or `formatter`), `partitionStart`, `partitionSectors`, `type`, `sectorsPerCluster`, `reservedSectors`, `fats`, `fatSectors`, `rootEntries`, `dataStart`, `differs`                                                                          | One layout of a card                  |
 
 ### Counting devices
 
@@ -243,7 +245,10 @@ Only the subjects of embedded-filesystem run the workloads on the boards; the ba
 ### Processor cycles
 
 `cycles.run <subject>` measures F-2 on a RAM device in the SDRAM, where a request takes no device time, so that every cycle of a call is spent in the filesystem, the event dispatcher and the copies of the RAM device.
+`validation::RamFlash` and `validation::RamBlockDevice` keep the semantics of NOR flash and of a block device in the first 6 MiB of the SDRAM, and complete through the event dispatcher.
+FatFs and littlefs block, so they run on views of the same memory that complete within the call: the event dispatcher of EmIL runs an action again when it is asked to dispatch from within it, which the glue of FatFs and littlefs would do while it waits, and so the glue never waits.
 The subjects are `embedded-filesystem/fat` on `ramblock`, `embedded-filesystem/nor` on `ramflash`, and the baselines closest in RAM, `fatfs/tuned` on `ramblock` and `littlefs/ram-matched` on `ramflash`, through the glue of [Build](#build); FatFs symbols are global, so one image holds one FatFs configuration.
+`littlefs/ram-matched` takes one bit of lookahead per block of `ramflash`, 128 B, as [Metrics.md](Metrics.md#baselines) defines it, and `ramflash` holds 4 MiB because littlefs copies a file from an overwritten offset to its end: an overwrite near the start of `/big` needs another 1 MiB free.
 The operations are those of a product:
 
 | Operation   | Call                                                                        |
@@ -261,8 +266,16 @@ The operations are those of a product:
 | `remove`    | Removing a file                                                             |
 | `unmount`   | Unmounting                                                                  |
 
+Before the operations, the volume is formatted and gets a directory `/d` of 100 files of 64 bytes and a file `/big` of 1 MiB, and is unmounted, which the time of `format` does not include.
+`read` and `overwrite` take whole sectors of 512 bytes at random offsets of `/big`, the same for every subject; `write` reopens `/w` for writing every 32 runs, which empties it before the run is measured, so that every write appends and the file stays within the RAM device; `create`, `rename` and `remove` work on `/c<run>` and `/r<run>`.
+
 Each operation runs `n` times, 100 by default, and reports the minimum, median and maximum of the cycles from the call to its completion.
-It also reports the cycles the processor is busy from the call until the volume is idle again, without the time the event dispatcher sleeps, which a strategy of `infra::LowPowerEventDispatcher` measures, so that the background work an operation leaves, such as the erases of NOR and the scan of the FAT, counts too.
+It also reports the cycles the processor is busy from the call until the volume is idle again, so that the background work an operation leaves, such as the erases of NOR and the scan of the FAT, counts too:
+
+* the volume is idle once `fs::FileSystem::Idle()` is true, as [Architecture.md](Architecture.md#public-api) describes; FatFs leaves no background work and is idle on completion, and littlefs runs `lfs_fs_gc` once after a call, as `littlefs/ram-matched` does when the volume is idle in [Metrics.md](Metrics.md#baselines), and is idle once it has;
+* the firmware checks `Idle()` on every tick of 1 ms, so the processor sleeps in between, and a measured call starts only on an idle volume;
+* the event dispatcher is a `infra::LowPowerEventDispatcher` whose strategy, `validation::IdleCycleCounter`, adds up the cycles spent asleep, which do not count;
+* every tick of the wait brings the timer interrupt and a check of `Idle()`, which do not count either: a calibration of 100 ms, once the subject is reset and idle, takes the median of the busy cycles of its ticks, so that the ticks the output of the terminal delays are left out; so the result holds whether or not the cycle counter runs while the processor sleeps, which depends on the debugger.
 F-2 records the medians of both, as `<operation>` and `<operation> settled`.
 
 ### Formatter comparison
@@ -301,7 +314,7 @@ The layouts of every card and the result of the check on the PC are recorded in 
 * a `device` record becomes a device of the fragment, named `<board>/<device>`, such as `stm32h757i-eval/qspi`, with the geometry, the chip, the clock, the run and the parameters of the model the run is converted with as its parameters;
 * `bench` records become the measured parameters of the device, and the parameters a model would take from them;
 * `phase` and `window` records become the metrics of the phases, computed as the host computes them, and C-1 and C-2, from the device models;
-* `cycles` records become F-2, with the operation as the workload;
+* `cycles` records become F-2, with the operation as the workload, and the cycles until the volume is idle again as `<operation> settled`; the last run of a subject in a transcript replaces its earlier runs, and a run that ends with `cycles.failed` leaves no F-2 for its subject;
 * every result carries `ramBytes`, as the merge needs: the size of the state of the subject on the board.
 
 The device models come from `metrics.device_models`, a host program of the metrics harness that prints the parameters of every model of `metrics/device/DeviceModels.cpp`, and the W-6 bound that `metrics::NorTargets` and `metrics::FatTargets` give for the configuration of every device of the boards.

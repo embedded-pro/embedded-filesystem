@@ -87,6 +87,7 @@ namespace fs
         void Urge() override;
         void ForegroundClaiming() override;
         void ForegroundReleased() override;
+        bool Scheduled() const override;
 
     private:
         void Idle();

@@ -96,6 +96,11 @@ namespace fs
         volume.Defer(onDone, Unsupported());
     }
 
+    bool NorLite::Idle() const
+    {
+        return volume.Idle();
+    }
+
     NorVolume& NorLite::Volume()
     {
         return volume;

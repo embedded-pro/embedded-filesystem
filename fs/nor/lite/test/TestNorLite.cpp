@@ -62,6 +62,24 @@ TEST_F(NorLiteTest, mounts_a_volume_that_the_full_volume_formatted)
     EXPECT_EQ(fs::Result::success, Unmount(lite));
 }
 
+TEST_F(NorLiteTest, is_idle_unless_a_call_waits_or_runs)
+{
+    EXPECT_TRUE(lite.Idle());
+
+    std::optional<fs::Result> mounted;
+    lite.Mount([&mounted](fs::Result result)
+        {
+            mounted = result;
+        });
+    EXPECT_FALSE(lite.Idle());
+    ExecuteFirstAction();
+    EXPECT_FALSE(lite.Idle());
+
+    ExecuteAllActions();
+    EXPECT_EQ(fs::Result::success, mounted);
+    EXPECT_TRUE(lite.Idle());
+}
+
 TEST_F(NorLiteTest, a_flash_that_was_never_formatted_does_not_mount)
 {
     hal::FlashStub blank{ 32, 4096 };

@@ -60,6 +60,7 @@ namespace fs
         void Rename(infra::BoundedConstString from, infra::BoundedConstString to, const infra::Function<void(Result result)>& onDone) override;
         void MakeDirectory(infra::BoundedConstString path, const infra::Function<void(Result result)>& onDone) override;
         void Usage(const infra::Function<void(Result result, VolumeUsage usage)>& onDone) override;
+        bool Idle() const override;
 
     protected:
         NorFileSystem(const NorVolumeParts& parts, const NorConfig& config);
@@ -109,10 +110,7 @@ namespace fs
     namespace detail
     {
         template<class Operation, class Call>
-        void StartNorOperation(NorVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished)
-        {
-            volume.Operation().template emplace<Operation>(volume, std::move(call), onFinished).Start();
-        }
+        void StartNorOperation(NorVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished);
 
         void StartNorTruncate(NorVolume& volume, NorOpenFile& file, uint32_t size, const infra::Function<void(Result result)>& onDone);
         void StartNorFormat(NorVolume& volume, const infra::Function<void(Result result)>& onDone);

@@ -114,6 +114,11 @@ namespace fs
         volume.Defer(onDone, Unsupported());
     }
 
+    bool FatLite::Idle() const
+    {
+        return volume.Idle();
+    }
+
     FatLiteVolume& FatLite::Volume()
     {
         return volume;

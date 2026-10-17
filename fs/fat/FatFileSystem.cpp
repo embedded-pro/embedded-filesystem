@@ -108,6 +108,11 @@ namespace fs
             Start(FatUsageCall{ onDone });
     }
 
+    bool FatFileSystem::Idle() const
+    {
+        return volume.Idle();
+    }
+
     FatVolume& FatFileSystem::Volume()
     {
         return volume;
@@ -284,6 +289,26 @@ namespace fs
 
     namespace detail
     {
+        template<class Operation, class Call>
+        void StartFatOperation(FatVolume& volume, Call&& call, const infra::Function<void(Result result)>& onFinished)
+        {
+            volume.Operation().template emplace<Operation>(volume, std::move(call), onFinished).Start();
+        }
+
+        template void StartFatOperation<FatMakeDirectory, FatMakeDirectoryCall>(FatVolume& volume, FatMakeDirectoryCall&& call, const infra::Function<void(Result result)>& onFinished);
+        template void StartFatOperation<FatRemove, FatRemoveCall>(FatVolume& volume, FatRemoveCall&& call, const infra::Function<void(Result result)>& onFinished);
+        template void StartFatOperation<FatRename, FatRenameCall>(FatVolume& volume, FatRenameCall&& call, const infra::Function<void(Result result)>& onFinished);
+        template void StartFatOperation<FatUsage, FatUsageCall>(FatVolume& volume, FatUsageCall&& call, const infra::Function<void(Result result)>& onFinished);
+
+        FatBackgroundStorage<true>::FatBackgroundStorage(FatVolume& volume, infra::Duration idleDelay)
+            : scan(volume.Queue(), volume.FreeSpace(), idleDelay, [&volume](Result result)
+                  {
+                      volume.Report(result);
+                  })
+        {
+            volume.AttachBackground(scan);
+        }
+
         void StartFatOpenDirectory(FatVolume& volume, FatOpenDirectoryCall&& call, const FatDirectoryAllocation& allocate, const infra::Function<void(Result result)>& onFinished)
         {
             volume.Operation().emplace<FatOpenDirectory>(volume, std::move(call), allocate, onFinished).Start();

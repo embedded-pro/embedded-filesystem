@@ -43,6 +43,11 @@ namespace fs
             machine.Dispatch(NorLevelingDue{});
     }
 
+    bool NorForegroundLeveling::Scheduled() const
+    {
+        return false;
+    }
+
     bool NorForegroundLeveling::MoveDue() const
     {
         const auto& blocks = volume.State().blocks;
