@@ -301,6 +301,7 @@ fs::FatReader::WithStorage<2> reader{ sdCard };
 
 The template arguments of `fs::FatReader::WithStorage<Files, Directories, Limits, Features>` are the number of open files, the number of open directory handles, 1 by default, an optional `fs::PathLimits`, the longest name and the longest path in UTF-8 bytes, 255 each by default, and an optional `fs::FatReaderFeatures`.
 The longest name also sizes the buffer that holds a name while it is reported, as `FatLimits::maxNameBytes` does for `fs::FatFileSystem`.
+The constructor takes the device and the alignment of the buffers that the driver transfers, 1 by default, as described under [Direct transfers](#direct-transfers).
 With `fs::FatReaderFeatures::longNames` left out, the volume reads only short names, as FatFs does without `FF_USE_LFN`: it skips the long name entries, finds and lists every entry by its 8.3 name, and its name buffer holds one short name, 34 bytes.
 On a Cortex-M4, F-1 measures 19.1 KB of flash and 2.0 KB of RAM for `fs::FatReader::WithStorage<1>`, against 61.0 KB and 7.8 KB for `fs::FatFileSystem` with the same calls and 5.8 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 
@@ -315,7 +316,7 @@ It mounts, looks up, lists and reads with the parts of `fs::FatReader`, and it w
 It leaves out:
 
 * `MakeDirectory`, `Remove`, `Rename`, `ExpectSize` and `Usage`, which complete with `unsupported` on a mounted volume, and with `notMounted` otherwise;
-* the sector cache: its one sector buffer holds the sector of the FAT, of a directory or of a file that the last step read or changed, and a changed sector is written back, to every copy of the FAT for a sector of the FAT, before another sector is loaded; whole sectors of a file go straight to or from the buffer of the caller, at most one cluster per request, when it is aligned for the driver as described under [Direct transfers](#direct-transfers);
+* the sector cache: its one sector buffer holds the sector of the FAT, of a directory or of a file that the last step read or changed, and a changed sector is written back, to every copy of the FAT for a sector of the FAT, before another sector is loaded; whole sectors of a file go straight to or from the buffer of the caller, at most one cluster per request;
 * the extent cache, the closed files, the background scan, the allocation units and the discard;
 * the timestamps, as `fs::FatFeatures::timestamps` does, and the clean-shutdown bit, so that a PC does not check the volume after a power loss, and FSINFO at mount, as `fs::FatFeatures::cleanShutdown` does.
 
@@ -339,7 +340,7 @@ hal::BlockDevice& sdCard = ...;
 fs::FatLite::WithStorage<2> lite{ sdCard };
 ```
 
-The template arguments of `fs::FatLite::WithStorage<Files, Directories, Limits, Features>` are those of `fs::FatReader::WithStorage`.
+The template arguments of `fs::FatLite::WithStorage<Files, Directories, Limits, Features>` and its constructor are those of `fs::FatReader::WithStorage`, and its whole sectors go through the sector buffer when the buffer of the caller is not aligned for the driver.
 On a Cortex-M4, F-1 measures 30.4 KB of flash and 2.4 KB of RAM for `fs::FatLite::WithStorage<1>` that reads only short names, against 45.7 KB and 7.4 KB for `fs::FatFileSystem` with every `fs::FatFeatures` left out and 7.4 KB and 1.1 KB for `fatfs/minimal`, which also removes, renames and makes directories, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 Reading long names adds 0.8 KB of flash and 0.2 KB of RAM.
 
