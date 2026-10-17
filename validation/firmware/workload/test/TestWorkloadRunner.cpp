@@ -80,7 +80,8 @@ namespace
         {
             EXPECT_CALL(file, Write(_, _)).WillOnce(testing::SaveArg<1>(&pending));
             runner.Write(infra::MakeRange(buffer), Done());
-            counters->checkpoints += checkpoints;
+            if (checkpoints != 0)
+                counters->checkpoints += checkpoints;
             Complete();
         }
 
