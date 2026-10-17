@@ -17,7 +17,6 @@ namespace validation
         explicit IdleWait(const infra::Function<void()>& onDone);
         IdleWait(const IdleWait& other) = delete;
         IdleWait& operator=(const IdleWait& other) = delete;
-        ~IdleWait() = default;
 
         void Wait(infra::Duration duration);
         void Settle(const fs::FileSystem& fileSystem, infra::Duration limit);
