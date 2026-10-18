@@ -26,10 +26,7 @@ namespace fs
 
     void NorReplay::ReadRecord()
     {
-        records.Read(volume.Geometry(), volume.State().epoch[index], offset, [this](const std::optional<OpenedRecord>& record)
-            {
-                OnRecord(record);
-            });
+        Read(index, offset, false);
     }
 
     void NorReplay::OnRecord(const std::optional<OpenedRecord>& record)
@@ -54,9 +51,18 @@ namespace fs
 
     void NorReplay::ReadLaterRecord()
     {
-        records.Read(volume.Geometry(), volume.State().epoch[laterIndex], laterOffset, [this](const std::optional<OpenedRecord>& record)
+        Read(laterIndex, laterOffset, true);
+    }
+
+    void NorReplay::Read(std::size_t epochIndex, uint32_t at, bool later)
+    {
+        readingLater = later;
+        records.Read(volume.Geometry(), volume.State().epoch[epochIndex], at, [this](const std::optional<OpenedRecord>& record)
             {
-                HoldBlocksOf(record);
+                if (readingLater)
+                    HoldBlocksOf(record);
+                else
+                    OnRecord(record);
             });
     }
 

@@ -36,10 +36,7 @@ namespace fs
     {
         candidate = block;
         candidateSequence = sequence;
-        Read(0, norCheckpointFixedBytes, [this]
-            {
-                OnFixedPart();
-            });
+        Read(0, norCheckpointFixedBytes, Step::fixedPart);
     }
 
     void NorCheckpointLoad::OnFixedPart()
@@ -63,21 +60,16 @@ namespace fs
     void NorCheckpointLoad::ReadForCrc()
     {
         if (position == crcOffset)
-        {
-            Read(crcOffset, norCheckpointCrcBytes, [this]
-                {
-                    OnStoredCrc();
-                });
-            return;
-        }
+            Read(crcOffset, norCheckpointCrcBytes, Step::storedCrc);
+        else
+            Read(position, static_cast<uint32_t>(std::min<std::size_t>(buffer.size(), crcOffset - position)), Step::crcPart);
+    }
 
-        auto size = static_cast<uint32_t>(std::min<std::size_t>(buffer.size(), crcOffset - position));
-        Read(position, size, [this, size]
-            {
-                crc.Update(infra::Head(buffer, size));
-                position += size;
-                ReadForCrc();
-            });
+    void NorCheckpointLoad::OnCrcPart()
+    {
+        crc.Update(infra::Head(buffer, readSize));
+        position += readSize;
+        ReadForCrc();
     }
 
     void NorCheckpointLoad::OnStoredCrc()
@@ -108,10 +100,7 @@ namespace fs
         else if (position == geometry.blocks)
             onDone(Result::corrupted);
         else
-            flash.ReadBuffer(infra::Head(buffer, geometry.HeaderSize()), geometry.AddressOfBlock(position), [this]
-                {
-                    OnCandidateHeader();
-                });
+            ReadAt(geometry.AddressOfBlock(position), geometry.HeaderSize(), Step::candidateHeader);
     }
 
     void NorCheckpointLoad::OnCandidateHeader()
@@ -145,21 +134,17 @@ namespace fs
             return;
         }
 
-        auto size = static_cast<uint32_t>(std::min<std::size_t>(buffer.size(), bitmapBytes - position));
-        Read(norCheckpointFixedBytes + position, size, [this, size]
-            {
-                OnBitmap(size);
-            });
+        Read(norCheckpointFixedBytes + position, static_cast<uint32_t>(std::min<std::size_t>(buffer.size(), bitmapBytes - position)), Step::bitmap);
     }
 
-    void NorCheckpointLoad::OnBitmap(uint32_t size)
+    void NorCheckpointLoad::OnBitmap()
     {
         auto blocks = volume.geometry->blocks;
-        for (uint32_t index = 0; index != size; ++index)
+        for (uint32_t index = 0; index != readSize; ++index)
             for (uint32_t bit = 0; bit != bitsPerByte && (position + index) * bitsPerByte + bit < blocks; ++bit)
                 Settle((position + index) * bitsPerByte + bit, ((buffer[index] >> bit) & 1) != 0);
 
-        position += size;
+        position += readSize;
         ReadBitmap();
     }
 
@@ -203,13 +188,41 @@ namespace fs
         return checkpoint.recordsBlock >= superblocks && checkpoint.recordsBlock < geometry.blocks && volume.blocks.State(checkpoint.recordsBlock) == NorBlockState::inUse && checkpoint.recordsOffset % geometry.programUnit == 0 && checkpoint.recordsOffset >= lowest && checkpoint.recordsOffset <= geometry.BlockSize();
     }
 
-    void NorCheckpointLoad::Read(uint32_t offset, uint32_t size, const infra::Function<void()>& onReadDone)
+    void NorCheckpointLoad::Read(uint32_t offset, uint32_t size, Step next)
     {
         const auto& geometry = *volume.geometry;
-        onRead = onReadDone;
-        flash.ReadBuffer(infra::Head(buffer, size), geometry.AddressOfBlock(candidate) + geometry.HeaderSize() + offset, [this]
+        ReadAt(geometry.AddressOfBlock(candidate) + geometry.HeaderSize() + offset, size, next);
+    }
+
+    void NorCheckpointLoad::ReadAt(uint32_t address, uint32_t size, Step next)
+    {
+        step = next;
+        readSize = size;
+        flash.ReadBuffer(infra::Head(buffer, size), address, [this]
             {
-                onRead();
+                Continue();
             });
+    }
+
+    void NorCheckpointLoad::Continue()
+    {
+        switch (step)
+        {
+            case Step::fixedPart:
+                OnFixedPart();
+                break;
+            case Step::crcPart:
+                OnCrcPart();
+                break;
+            case Step::storedCrc:
+                OnStoredCrc();
+                break;
+            case Step::candidateHeader:
+                OnCandidateHeader();
+                break;
+            default:
+                OnBitmap();
+                break;
+        }
     }
 }

@@ -29,7 +29,7 @@ namespace fs
 
     private:
         void ReadSuperblock(uint32_t block);
-        void OnSuperblock(uint32_t block);
+        void OnSuperblock();
         Result Check(const NorSuperblock& superblock) const;
         void ScanHeaders();
         void LoadCheckpoint();
@@ -45,7 +45,7 @@ namespace fs
         NorScanSummary summary;
         std::variant<std::monostate, NorHeaderScan, NorCheckpointLoad, NorJournalScan> step;
         Result result{ Result::success };
-        infra::AutoResetFunction<void()> onSuperblock;
+        uint32_t superblock{ 0 };
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }

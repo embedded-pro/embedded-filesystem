@@ -51,34 +51,36 @@ namespace fs
                     WriteNextNode();
                 });
         else if (!next.has_value())
-            volume.Allocator().Allocate(NorBlockType::checkpoint, {}, NorReserve::used, [this](std::optional<uint32_t> allocated)
-                {
-                    CheckpointBlockAllocated(allocated);
-                });
+            Allocate(NorBlockType::checkpoint, NorWear::least);
         else
         {
             slot = next.value_or(0);
             if (state.nodeBlock.has_value() && state.nodeOffset + geometry.nodeSize <= geometry.BlockSize())
                 ProgramNode();
             else
-                volume.Allocator().Allocate(NorBlockType::node, {}, NorReserve::used, wear, [this](std::optional<uint32_t> allocated)
-                    {
-                        NodeBlockAllocated(allocated);
-                    });
+                Allocate(NorBlockType::node, wear);
         }
     }
 
-    void NorCheckpointWriter::NodeBlockAllocated(std::optional<uint32_t> allocated)
+    void NorCheckpointWriter::Allocate(NorBlockType type, NorWear blockWear)
     {
-        if (!allocated.has_value())
-        {
-            onDone(Result::noSpace);
-            return;
-        }
+        programming = type;
+        volume.Allocator().Allocate(type, {}, NorReserve::used, blockWear, [this](std::optional<uint32_t> allocated)
+            {
+                if (!allocated.has_value())
+                    onDone(Result::noSpace);
+                else if (programming == NorBlockType::node)
+                    NodeBlockAllocated(*allocated);
+                else
+                    CheckpointBlockAllocated(*allocated);
+            });
+    }
 
+    void NorCheckpointWriter::NodeBlockAllocated(uint32_t allocated)
+    {
         auto& state = volume.State();
-        state.blocks.Set(allocated.value_or(0), NorBlockState::inUse);
-        state.nodeBlocks.Add(allocated.value_or(0));
+        state.blocks.Set(allocated, NorBlockState::inUse);
+        state.nodeBlocks.Add(allocated);
         state.nodeBlock = allocated;
         state.nodeOffset = volume.Geometry().NodeSlotsOffset();
         ProgramNode();
@@ -87,28 +89,25 @@ namespace fs
     void NorCheckpointWriter::ProgramNode()
     {
         auto& state = volume.State();
-        auto address = volume.Geometry().AddressOfBlock(state.nodeBlock.value_or(0)) + state.nodeOffset;
+        programming = NorBlockType::node;
+        nodeAddress = volume.Geometry().AddressOfBlock(state.nodeBlock.value_or(0)) + state.nodeOffset;
         state.nodeOffset += volume.Geometry().nodeSize;
-        volume.Flash().WriteBuffer(WriteBack().Seal(slot), address, [this, address]
-            {
-                auto& programmed = volume.State();
-                WriteBack().Written(slot, address, programmed.inodeTable);
-                ++programmed.liveNodes;
-                WriteNextNode();
-            });
+        Program(WriteBack().Seal(slot), nodeAddress);
     }
 
-    void NorCheckpointWriter::CheckpointBlockAllocated(std::optional<uint32_t> allocated)
+    void NorCheckpointWriter::NodeProgrammed()
     {
-        if (!allocated.has_value())
-        {
-            onDone(Result::noSpace);
-            return;
-        }
+        auto& state = volume.State();
+        WriteBack().Written(slot, nodeAddress, state.inodeTable);
+        ++state.liveNodes;
+        WriteNextNode();
+    }
 
+    void NorCheckpointWriter::CheckpointBlockAllocated(uint32_t allocated)
+    {
         auto& state = volume.State();
         const auto& geometry = volume.Geometry();
-        block = allocated.value_or(0);
+        block = allocated;
         state.blocks.Set(block, NorBlockState::inUse);
         auto records = replayRecords.value_or(NorRecordPosition{ block, geometry.HeaderSize() + geometry.RoundToProgramUnit(geometry.CheckpointBytes()) });
         checkpoint = NorCheckpoint{ state.inodeTable.address, state.inodeTable.height, state.nextInode, records.block, records.offset, state.liveNodes - volume.Cache().ReleasedNodes(), geometry.blocks };
@@ -138,13 +137,27 @@ namespace fs
         if (written + chunk == total)
             StoreLittle32(bytes, crcOffset - written, crc.Result());
 
-        volume.Flash().WriteBuffer(bytes, geometry.AddressOfBlock(block) + geometry.HeaderSize() + written, [this, total]
+        Program(bytes, geometry.AddressOfBlock(block) + geometry.HeaderSize() + written);
+    }
+
+    void NorCheckpointWriter::ChunkProgrammed()
+    {
+        const auto& geometry = volume.Geometry();
+        written += chunk;
+        if (written == geometry.RoundToProgramUnit(geometry.CheckpointBytes()))
+            Commit();
+        else
+            ProgramNextChunk();
+    }
+
+    void NorCheckpointWriter::Program(infra::ConstByteRange bytes, uint32_t address)
+    {
+        volume.Flash().WriteBuffer(bytes, address, [this]
             {
-                written += chunk;
-                if (written == total)
-                    Commit();
+                if (programming == NorBlockType::node)
+                    NodeProgrammed();
                 else
-                    ProgramNextChunk();
+                    ChunkProgrammed();
             });
     }
 

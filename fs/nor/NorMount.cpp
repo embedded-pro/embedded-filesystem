@@ -40,24 +40,21 @@ namespace fs
 
     void NorMount::ReadSuperblock(uint32_t block)
     {
-        onSuperblock = [this, block]
-        {
-            OnSuperblock(block);
-        };
+        superblock = block;
         flash.ReadBuffer(infra::Head(buffer, norSuperblockBytes), volume.geometry->AddressOfBlock(block), [this]
             {
-                onSuperblock();
+                OnSuperblock();
             });
     }
 
-    void NorMount::OnSuperblock(uint32_t block)
+    void NorMount::OnSuperblock()
     {
-        auto superblock = ParseNorSuperblock(infra::Head(buffer, norSuperblockBytes));
-        if (superblock.has_value() && Check(*superblock) == Result::success)
+        auto parsed = ParseNorSuperblock(infra::Head(buffer, norSuperblockBytes));
+        if (parsed.has_value() && Check(*parsed) == Result::success)
             ScanHeaders();
-        else if (superblock.has_value())
-            Done(Check(*superblock));
-        else if (block == 0)
+        else if (parsed.has_value())
+            Done(Check(*parsed));
+        else if (superblock == 0)
             ReadSuperblock(1);
         else
             Done(Result::corrupted);

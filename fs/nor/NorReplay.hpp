@@ -29,6 +29,7 @@ namespace fs
         void ReadRecord();
         void OnRecord(const std::optional<OpenedRecord>& record);
         void ReadLaterRecord();
+        void Read(std::size_t epochIndex, uint32_t at, bool later);
         void HoldBlocksOf(const std::optional<OpenedRecord>& record);
         void WriteCheckpoint();
         void Apply(const OpenedRecord& record);
@@ -41,6 +42,7 @@ namespace fs
         uint32_t offset{ 0 };
         bool linked{ false };
         bool applied{ false };
+        bool readingLater{ false };
         std::optional<NorRecordPosition> checkpointBefore;
         NorRecordPosition current;
         std::size_t laterIndex{ 0 };

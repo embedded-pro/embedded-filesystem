@@ -33,13 +33,19 @@ namespace fs
         void Committed();
 
     private:
+        enum class Step : uint8_t
+        {
+            owner,
+            parent,
+            node
+        };
+
         void Examine();
         void HeaderRead();
-        void OwnerFetched(NorFetchResult result);
+        void OwnerFetched();
         void Check(const NorMapRoot& map);
-        void ParentFetched(NorFetchResult result);
         void Compare(uint32_t address);
-        void NodeFetched(NorFetchResult result);
+        void Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, uint8_t level, Step next);
         void Relocate() const;
         void Next();
         void Skip();
@@ -73,6 +79,7 @@ namespace fs
         uint32_t awaitingCommit{ 0 };
         bool sparseOnly{ false };
         bool surveying{ false };
+        Step step{ Step::owner };
         uint32_t liveInBlock{ 0 };
         uint32_t leftInLap{ 0 };
         uint32_t lapBlocks{ 0 };

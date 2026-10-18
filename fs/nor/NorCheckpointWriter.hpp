@@ -33,10 +33,14 @@ namespace fs
     private:
         void Start(const infra::Function<void(Result result)>& onDone);
         void WriteNextNode();
-        void NodeBlockAllocated(std::optional<uint32_t> block);
+        void Allocate(NorBlockType type, NorWear wear);
+        void NodeBlockAllocated(uint32_t block);
         void ProgramNode();
-        void CheckpointBlockAllocated(std::optional<uint32_t> block);
+        void NodeProgrammed();
+        void CheckpointBlockAllocated(uint32_t block);
         void ProgramNextChunk();
+        void ChunkProgrammed();
+        void Program(infra::ConstByteRange bytes, uint32_t address);
         void Commit();
         uint8_t ByteAt(uint32_t offset) const;
         bool IsInNewCheckpoint(uint32_t block) const;
@@ -49,11 +53,13 @@ namespace fs
         NorCheckpoint checkpoint;
         std::optional<NorRecordPosition> replayRecords;
         std::array<uint8_t, norCheckpointFixedBytes> fixedPart{};
+        uint32_t nodeAddress{ 0 };
         uint32_t written{ 0 };
         uint32_t chunk{ 0 };
         bool collectionDue{ false };
         bool collect{ false };
         NorWear wear{ NorWear::least };
+        NorBlockType programming{ NorBlockType::node };
         Crc32 crc;
         infra::AutoResetFunction<void(Result result)> onDone;
     };

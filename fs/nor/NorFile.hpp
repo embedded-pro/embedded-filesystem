@@ -64,6 +64,7 @@ namespace fs
         Result Unwritable() const;
         Result Availability() const;
         void Claim(Call call);
+        void Enqueue(Call call);
         void Granted();
         void ReadDone(Result result, std::size_t bytesRead);
         void Done(Result result);
