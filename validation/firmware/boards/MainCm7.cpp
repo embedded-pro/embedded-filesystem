@@ -45,6 +45,7 @@
 #include "validation/firmware/hil/NoPins.hpp"
 #include "validation/firmware/results/ResultLines.hpp"
 #include "validation/firmware/workload/DataLogger.hpp"
+#include "validation/firmware/workload/FatWorkloadVolume.hpp"
 #include "validation/firmware/workload/MountScaling.hpp"
 #include "validation/firmware/workload/NorWorkloadVolume.hpp"
 #include "validation/firmware/workload/RandomOverwrite.hpp"
@@ -133,20 +134,27 @@ namespace
         return { .maxBlocks = chip.numberOfSectors, .programUnit = 2, .pageSize = chip.writeBufferBytes };
     }
 
+    validation::DeviceEntry& SdmmcEntry()
+    {
+        return validation::board::microSd ? devices[microSdDevice] : devices[emmcDevice];
+    }
+
     // A template, so that the volume of the parallel NOR is not instantiated for a board without one
     template<bool hasParallelNor = validation::board::ParallelNorConfig().has_value()>
-    infra::MemoryRange<const validation::WorkloadTarget> WorkloadTargets(validation::CountingFlash& quadSpi, [[maybe_unused]] validation::CountingFlash& parallelNor)
+    infra::MemoryRange<const validation::WorkloadTarget> WorkloadTargets(validation::CountingFlash& quadSpi, [[maybe_unused]] validation::CountingFlash& parallelNor, validation::CountingBlockDevice& sdmmc)
     {
         static validation::NorWorkloadVolume<metrics::norQspi16mConfig> quadSpiVolume{ quadSpi };
+        static validation::FatWorkloadVolume sdmmcVolume{ sdmmc, sdmmc.UnitBlocks() };
         if constexpr (hasParallelNor)
         {
             static validation::NorWorkloadVolume<ParallelNorVolumeConfig<hasParallelNor>()> parallelNorVolume{ parallelNor };
-            static const std::array<validation::WorkloadTarget, 2> targets{ { { devices[quadSpiDevice], quadSpi, quadSpiVolume }, { devices[parallelNorDevice], parallelNor, parallelNorVolume } } };
+            static const std::array<validation::WorkloadTarget, 3> targets{ { { devices[quadSpiDevice], quadSpi, quadSpiVolume }, { devices[parallelNorDevice], parallelNor, parallelNorVolume },
+                { SdmmcEntry(), sdmmc, sdmmcVolume } } };
             return infra::MakeRange(targets);
         }
         else
         {
-            static const std::array<validation::WorkloadTarget, 1> targets{ { { devices[quadSpiDevice], quadSpi, quadSpiVolume } } };
+            static const std::array<validation::WorkloadTarget, 2> targets{ { { devices[quadSpiDevice], quadSpi, quadSpiVolume }, { SdmmcEntry(), sdmmc, sdmmcVolume } } };
             return infra::MakeRange(targets);
         }
     }
@@ -291,7 +299,7 @@ int main()
     static validation::NorBench bench{ results, SystemCoreClock };
     static validation::BlockBench blockBench{ results, SystemCoreClock };
     static validation::CountingBlockDevice& sdmmcCounting = Sdmmc(eventInfrastructure.cycles);
-    static const std::array<validation::BlockBenchTarget, 1> blockBenchTargets{ { { validation::board::microSd ? devices[microSdDevice] : devices[emmcDevice], sdmmcCounting } } };
+    static const std::array<validation::BlockBenchTarget, 1> blockBenchTargets{ { { SdmmcEntry(), sdmmcCounting } } };
     static validation::BenchCommands benchCommands{ context, bench, blockBench, infra::MakeRange(benchTargets), infra::MakeRange(blockBenchTargets) };
 
     static validation::WorkloadRunner workloadRunner{ results, eventInfrastructure.cycles, SystemCoreClock };
@@ -303,7 +311,7 @@ int main()
     static validation::ReadPatterns readPatterns{ workloadTools };
     static validation::MountScaling mountScaling{ workloadTools };
     static const std::array<validation::Workload*, 6> workloads{ { &sequentialWrite, &dataLogger, &randomOverwrite, &smallFiles, &readPatterns, &mountScaling } };
-    static validation::WorkloadCommands workloadCommands{ context, workloadRunner, infra::MakeRange(workloads), WorkloadTargets(quadSpiCounting, parallelNorCounting) };
+    static validation::WorkloadCommands workloadCommands{ context, workloadRunner, infra::MakeRange(workloads), WorkloadTargets(quadSpiCounting, parallelNorCounting, sdmmcCounting) };
 
     // The baselines block, so they use views of the RAM devices that complete within the call
     auto flashMemory = infra::Head(sdram.Memory(), ramFlashBytes);
