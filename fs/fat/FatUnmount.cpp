@@ -9,34 +9,40 @@ namespace fs
     FatUnmount::FatUnmount(FatVolume& volume, const infra::Function<void(Result result)>& onDone)
         : volume(volume)
         , onDone(onDone)
+        , resume([this](Result result)
+              {
+                  Resume(result);
+              })
     {}
 
     FatUnmount::~FatUnmount() = default;
 
-    void FatUnmount::Start() const
+    void FatUnmount::Start()
     {
         CommitNextFile();
     }
 
-    void FatUnmount::CommitNextFile() const
+    void FatUnmount::CommitNextFile()
     {
         for (auto& file : volume.OpenFiles())
             if (file.State().Uncommitted())
             {
-                volume.EntryUpdate().Commit(file.State(), [this](Result result)
-                    {
-                        if (result != Result::success)
-                            Done(result);
-                        else
-                            CommitNextFile();
-                    });
+                volume.EntryUpdate().Commit(file.State(), Then(Step::fileCommitted));
                 return;
             }
 
         WriteFsInfo();
     }
 
-    void FatUnmount::WriteFsInfo() const
+    void FatUnmount::FileCommitted(Result result)
+    {
+        if (result != Result::success)
+            Done(result);
+        else
+            CommitNextFile();
+    }
+
+    void FatUnmount::WriteFsInfo()
     {
         const auto& state = volume.State();
 
@@ -55,26 +61,18 @@ namespace fs
             });
     }
 
-    void FatUnmount::MarkClean(Result previous) const
+    void FatUnmount::MarkClean(Result previous)
     {
         if (previous != Result::success)
-        {
             Flush(previous);
-            return;
-        }
-
-        volume.MarkClean([this](Result result)
-            {
-                Flush(result);
-            });
+        else
+            volume.MarkClean(Then(Step::markedClean));
     }
 
-    void FatUnmount::Flush(Result previous) const
+    void FatUnmount::Flush(Result previous)
     {
-        volume.Cache().Flush([this, previous](Result result)
-            {
-                Done(previous != Result::success ? previous : result);
-            });
+        beforeFlush = previous;
+        volume.Cache().Flush(Then(Step::flushed));
     }
 
     void FatUnmount::Done(Result result) const
@@ -82,5 +80,27 @@ namespace fs
         volume.Cache().Clear();
         volume.Cache().SetMirroredRegion(std::nullopt);
         onDone(result);
+    }
+
+    const infra::Function<void(Result result)>& FatUnmount::Then(Step next)
+    {
+        step = next;
+        return resume;
+    }
+
+    void FatUnmount::Resume(Result result)
+    {
+        switch (step)
+        {
+            case Step::fileCommitted:
+                FileCommitted(result);
+                break;
+            case Step::markedClean:
+                Flush(result);
+                break;
+            default:
+                Done(beforeFlush != Result::success ? beforeFlush : result);
+                break;
+        }
     }
 }

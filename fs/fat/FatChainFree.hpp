@@ -27,10 +27,18 @@ namespace fs
         void Free(uint32_t first, const infra::Function<void(Result result)>& onDone);
 
     private:
+        enum class Step : uint8_t
+        {
+            freed,
+            discarded
+        };
+
         void ReadNext();
         void OnNext(Result result, std::optional<uint32_t> next);
         void OnFreed(Result result);
         void DiscardRun();
+        void Update(Step next);
+        void Updated(Result result);
         void OnDiscarded(Result result);
 
     private:
@@ -40,6 +48,7 @@ namespace fs
         FatFreeSpaceScan& freeSpace;
         FatTableReader table;
         bool discard;
+        Step step{ Step::freed };
         uint32_t current{ 0 };
         std::optional<uint32_t> next;
         FatReservation run;

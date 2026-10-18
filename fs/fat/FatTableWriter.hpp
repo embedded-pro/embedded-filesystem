@@ -22,7 +22,8 @@ namespace fs
         uint32_t SectorOf(uint32_t cluster) const;
 
     private:
-        void WriteSecondPart();
+        void Modify();
+        void OnSector(Result result, infra::ByteRange contents);
 
     private:
         SectorStore& sectors;
@@ -30,6 +31,7 @@ namespace fs
         uint32_t cluster{ 0 };
         uint32_t value{ 0 };
         bool straddles{ false };
+        bool secondPart{ false };
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }

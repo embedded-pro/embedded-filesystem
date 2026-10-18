@@ -151,16 +151,27 @@ namespace fs
 
     void FatAllocator::Take(uint32_t cluster)
     {
-        writer.Write(cluster, EndOfChain(volume.geometry.type), [this, cluster](Result result)
+        linkingPrevious = false;
+        WriteTaken(cluster, cluster, EndOfChain(volume.geometry.type));
+    }
+
+    void FatAllocator::WriteTaken(uint32_t cluster, uint32_t entry, uint32_t value)
+    {
+        writer.Write(entry, value, [this, cluster](Result result)
             {
-                if (result == Result::success && allocated != 0)
-                    writer.Write(previous, cluster, [this, cluster](Result result)
-                        {
-                            Taken(result, cluster);
-                        });
-                else
-                    Taken(result, cluster);
+                OnTakenWritten(result, cluster);
             });
+    }
+
+    void FatAllocator::OnTakenWritten(Result result, uint32_t cluster)
+    {
+        if (result == Result::success && allocated != 0 && !linkingPrevious)
+        {
+            linkingPrevious = true;
+            WriteTaken(cluster, previous, cluster);
+        }
+        else
+            Taken(result, cluster);
     }
 
     void FatAllocator::Taken(Result result, uint32_t cluster)
@@ -210,34 +221,34 @@ namespace fs
         else
         {
             takeResult = result;
-            onLinked = [this](Result linked)
-            {
-                Done(linked != Result::success ? linked : takeResult);
-            };
             LinkAfterBarrier();
         }
     }
 
     void FatAllocator::LinkAfterBarrier()
     {
+        auto onLinkStep = [this](Result result)
+        {
+            OnLinkStep(result);
+        };
+
         if (barrier)
-            cache.Flush([this](Result flushed)
-                {
-                    if (flushed != Result::success)
-                        onLinked(flushed);
-                    else
-                        LinkLast();
-                });
+            cache.Flush(onLinkStep);
         else
-            LinkLast();
+            writer.Write(*last, first, onLinkStep);
     }
 
-    void FatAllocator::LinkLast()
+    void FatAllocator::OnLinkStep(Result result)
     {
-        writer.Write(*last, first, [this](Result written)
-            {
-                onLinked(written);
-            });
+        if (result == Result::success && barrier)
+        {
+            barrier = false;
+            LinkAfterBarrier();
+        }
+        else if (linkWhenTaken)
+            Done(result != Result::success ? result : takeResult);
+        else
+            onLinked(result);
     }
 
     void FatAllocator::Done(Result result)

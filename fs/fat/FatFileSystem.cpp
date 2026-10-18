@@ -35,7 +35,7 @@ namespace fs
     void FatFileSystem::Mount(const infra::Function<void(Result result)>& onDone)
     {
         if (lifecycle.Dispatch(FatMountRequested{}) == services::DispatchResult::transitioned)
-            onMountDone = onDone;
+            onChanged = onDone;
         else
             volume.Defer(onDone, Result::busy);
     }
@@ -43,7 +43,7 @@ namespace fs
     void FatFileSystem::Unmount(const infra::Function<void(Result result)>& onDone)
     {
         if (lifecycle.Dispatch(FatUnmountRequested{}) == services::DispatchResult::transitioned)
-            onUnmountDone = onDone;
+            onChanged = onDone;
         else if (std::holds_alternative<FatMounting>(lifecycle.CurrentState()) || std::holds_alternative<FatUnmounting>(lifecycle.CurrentState()))
             volume.Defer(onDone, Result::busy);
         else
@@ -136,46 +136,37 @@ namespace fs
         return std::holds_alternative<FatMounted>(lifecycle.CurrentState());
     }
 
-    void FatFileSystem::BeginMount()
+    void FatFileSystem::BeginChange()
     {
         lifecycleClaimer.Claim([this]
             {
-                StartMount();
+                StartChange();
             });
     }
 
-    void FatFileSystem::StartMount()
+    void FatFileSystem::StartChange()
     {
-        lifecycleDone = lifecycle.CompletionWith<void(Result result)>([](Result result)
-            {
-                return FatMountDone{ result };
-            });
-        volume.Operation().emplace<FatMount>(volume.Device(), volume.Cache(), volume.State(), volume.Operations().readCleanState, [this](Result result)
-                              {
-                                  LifecycleOperationDone(result);
-                              })
-            .Start();
-    }
+        auto onChangeDone = [this](Result result)
+        {
+            LifecycleOperationDone(result);
+        };
 
-    void FatFileSystem::BeginUnmount()
-    {
-        lifecycleClaimer.Claim([this]
-            {
-                StartUnmount();
-            });
-    }
-
-    void FatFileSystem::StartUnmount()
-    {
-        lifecycleDone = lifecycle.CompletionWith<void(Result result)>([](Result result)
-            {
-                return FatUnmountDone{ result };
-            });
-        volume.Operation().emplace<FatUnmount>(volume, [this](Result result)
-                              {
-                                  LifecycleOperationDone(result);
-                              })
-            .Start();
+        if (std::holds_alternative<FatMounting>(lifecycle.CurrentState()))
+        {
+            lifecycleDone = lifecycle.CompletionWith<void(Result result)>([](Result result)
+                {
+                    return FatMountDone{ result };
+                });
+            volume.Operation().emplace<FatMount>(volume.Device(), volume.Cache(), volume.State(), volume.Operations().readCleanState, onChangeDone).Start();
+        }
+        else
+        {
+            lifecycleDone = lifecycle.CompletionWith<void(Result result)>([](Result result)
+                {
+                    return FatUnmountDone{ result };
+                });
+            volume.Operation().emplace<FatUnmount>(volume, onChangeDone).Start();
+        }
     }
 
     void FatFileSystem::LifecycleOperationDone(Result result)
@@ -187,14 +178,8 @@ namespace fs
 
     void FatFileSystem::Entered(Result result)
     {
-        DeferCompletion(onMountDone, result);
-        DeferCompletion(onUnmountDone, result);
-    }
-
-    void FatFileSystem::DeferCompletion(infra::Function<void(Result result)>& onDone, Result result)
-    {
-        if (onDone)
-            volume.Defer(std::exchange(onDone, nullptr), result);
+        if (onChanged)
+            volume.Defer(std::exchange(onChanged, nullptr), result);
     }
 
     Result FatFileSystem::Refusal(infra::BoundedConstString path, bool supported) const

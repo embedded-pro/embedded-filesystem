@@ -17,22 +17,8 @@ namespace fs
         this->value = value;
         this->onDone = onDone;
         straddles = LocateEntry(geometry.type, cluster, sectors.SectorSize()).straddles;
-
-        sectors.Modify(SectorOf(cluster), tableRank, [this](Result result, infra::ByteRange contents)
-            {
-                if (result != Result::success)
-                    this->onDone(result);
-                else if (straddles)
-                {
-                    WriteStraddlingPart(this->cluster, this->value, contents, false);
-                    WriteSecondPart();
-                }
-                else
-                {
-                    WriteEntry(geometry.type, this->cluster, this->value, contents, infra::ByteRange());
-                    this->onDone(result);
-                }
-            });
+        secondPart = false;
+        Modify();
     }
 
     uint32_t FatTableWriter::SectorOf(uint32_t cluster) const
@@ -40,14 +26,33 @@ namespace fs
         return geometry.ActiveFatSector() + LocateEntry(geometry.type, cluster, sectors.SectorSize()).sector;
     }
 
-    void FatTableWriter::WriteSecondPart()
+    void FatTableWriter::Modify()
     {
-        sectors.Modify(SectorOf(cluster) + 1, tableRank, [this](Result result, infra::ByteRange contents)
+        sectors.Modify(secondPart ? SectorOf(cluster) + 1 : SectorOf(cluster), tableRank, [this](Result result, infra::ByteRange contents)
             {
-                if (result == Result::success)
-                    WriteStraddlingPart(cluster, value, contents, true);
-
-                onDone(result);
+                OnSector(result, contents);
             });
+    }
+
+    void FatTableWriter::OnSector(Result result, infra::ByteRange contents)
+    {
+        if (result != Result::success)
+            onDone(result);
+        else if (secondPart)
+        {
+            WriteStraddlingPart(cluster, value, contents, true);
+            onDone(result);
+        }
+        else if (straddles)
+        {
+            WriteStraddlingPart(cluster, value, contents, false);
+            secondPart = true;
+            Modify();
+        }
+        else
+        {
+            WriteEntry(geometry.type, cluster, value, contents, infra::ByteRange());
+            onDone(result);
+        }
     }
 }

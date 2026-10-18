@@ -7,6 +7,10 @@ namespace fs
     FatTruncation::FatTruncation(FatVolume& volume)
         : volume(volume)
         , table(volume.Cache(), volume.Geometry())
+        , resume([this](Result result)
+              {
+                  Resume(result);
+              })
     {}
 
     FatTruncation::~FatTruncation() = default;
@@ -61,13 +65,7 @@ namespace fs
 
     void FatTruncation::Commit()
     {
-        volume.MarkDirty([this](Result result)
-            {
-                if (result != Result::success)
-                    onDone(result);
-                else
-                    CommitEntry();
-            });
+        volume.MarkDirty(Then(Step::dirtied));
     }
 
     void FatTruncation::CommitEntry()
@@ -80,10 +78,7 @@ namespace fs
         if (kept == 0)
             file->firstCluster = 0;
 
-        volume.EntryUpdate().Commit(*file, [this](Result result)
-            {
-                FlushThen(result, &FatTruncation::CutChain);
-            });
+        volume.EntryUpdate().Commit(*file, Then(Step::entryCommitted));
     }
 
     void FatTruncation::CutChain()
@@ -93,26 +88,26 @@ namespace fs
         else if (kept == 0)
             FreeCut();
         else
-            volume.TableWriter().Write(lastKept, EndOfChain(volume.Geometry().type), [this](Result result)
-                {
-                    FlushThen(result, &FatTruncation::FreeCut);
-                });
+            volume.TableWriter().Write(lastKept, EndOfChain(volume.Geometry().type), Then(Step::endWritten));
     }
 
     void FatTruncation::FreeCut()
     {
-        volume.ChainFree().Free(*firstCut, [this](Result result)
-            {
-                FlushThen(result, &FatTruncation::Succeed);
-            });
+        volume.ChainFree().Free(*firstCut, Then(Step::chainFreed));
     }
 
-    void FatTruncation::Succeed()
+    void FatTruncation::Flush(Step next)
     {
-        onDone(Result::success);
+        volume.Cache().Flush(Then(next));
     }
 
-    void FatTruncation::FlushThen(Result result, Step next)
+    const infra::Function<void(Result result)>& FatTruncation::Then(Step next)
+    {
+        step = next;
+        return resume;
+    }
+
+    void FatTruncation::Resume(Result result)
     {
         if (result != Result::success)
         {
@@ -120,13 +115,29 @@ namespace fs
             return;
         }
 
-        afterFlush = next;
-        volume.Cache().Flush([this](Result result)
-            {
-                if (result != Result::success)
-                    onDone(result);
-                else
-                    (this->*afterFlush)();
-            });
+        switch (step)
+        {
+            case Step::dirtied:
+                CommitEntry();
+                break;
+            case Step::entryCommitted:
+                Flush(Step::cutChain);
+                break;
+            case Step::endWritten:
+                Flush(Step::freeCut);
+                break;
+            case Step::chainFreed:
+                Flush(Step::succeed);
+                break;
+            case Step::cutChain:
+                CutChain();
+                break;
+            case Step::freeCut:
+                FreeCut();
+                break;
+            default:
+                onDone(Result::success);
+                break;
+        }
     }
 }

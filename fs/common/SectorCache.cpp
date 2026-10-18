@@ -247,10 +247,7 @@ namespace fs
             Available();
         }
         else
-            barrier.Device().ReadBlocks(BufferOf(*target), requestedSector, [this](hal::BlockDevice::Result deviceResult)
-                {
-                    OnLoaded(deviceResult);
-                });
+            Transfer(Step::load);
     }
 
     void SectorCache::OnLoaded(hal::BlockDevice::Result deviceResult)
@@ -305,10 +302,7 @@ namespace fs
         if (request == Request::writeBack)
             Complete(Result::success);
         else if (request == Request::flush)
-            barrier.Flush([this](hal::BlockDevice::Result deviceResult)
-                {
-                    Complete(ToResult(deviceResult));
-                });
+            Transfer(Step::flush);
         else
             Available();
     }
@@ -325,16 +319,34 @@ namespace fs
 
         writing = infra::MemoryRange<Entry>(entries.begin() + first, entries.begin() + end);
         copy = 0;
-        WriteCopy();
+        Transfer(Step::write);
     }
 
-    void SectorCache::WriteCopy()
+    void SectorCache::Transfer(Step next)
     {
-        auto data = infra::Head(infra::DiscardHead(buffers, IndexOf(writing.front()) * sectorSize), writing.size() * sectorSize);
-        barrier.Write(data, CopySector(mirroredRegion, writing.front().sector, copy), writing.front().rank, [this](hal::BlockDevice::Result deviceResult)
-            {
-                OnWritten(deviceResult);
-            });
+        auto onTransferred = [this](hal::BlockDevice::Result deviceResult)
+        {
+            Transferred(deviceResult);
+        };
+
+        step = next;
+
+        if (next == Step::load)
+            barrier.Device().ReadBlocks(BufferOf(*target), requestedSector, onTransferred);
+        else if (next == Step::flush)
+            barrier.Flush(onTransferred);
+        else
+            barrier.Write(infra::Head(infra::DiscardHead(buffers, IndexOf(writing.front()) * sectorSize), writing.size() * sectorSize), CopySector(mirroredRegion, writing.front().sector, copy), writing.front().rank, onTransferred);
+    }
+
+    void SectorCache::Transferred(hal::BlockDevice::Result deviceResult)
+    {
+        if (step == Step::load)
+            OnLoaded(deviceResult);
+        else if (step == Step::flush)
+            Complete(ToResult(deviceResult));
+        else
+            OnWritten(deviceResult);
     }
 
     void SectorCache::OnWritten(hal::BlockDevice::Result deviceResult)
@@ -342,7 +354,7 @@ namespace fs
         if (deviceResult != hal::BlockDevice::Result::success)
             Complete(ToResult(deviceResult));
         else if (++copy != Copies(mirroredRegion, writing.front().sector))
-            WriteCopy();
+            Transfer(Step::write);
         else
         {
             for (auto& written : writing)

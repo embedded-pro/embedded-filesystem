@@ -48,6 +48,7 @@ namespace fs
         void OnZeroed(Result result);
         void OnLinked(Result result);
         void WriteSector();
+        void UpdateSector();
         void OnWritten(Result result);
         void Fill(infra::ByteRange contents) const;
         void Done(Result result);
@@ -68,6 +69,7 @@ namespace fs
         uint32_t capacity{ 0 };
         uint8_t slots{ 1 };
         uint8_t checksum{ 0 };
+        bool zeroing{ false };
         std::array<uint32_t, 3> clusters{};
         uint8_t resolved{ 0 };
         uint8_t existing{ 0 };

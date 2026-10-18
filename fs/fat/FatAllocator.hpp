@@ -45,11 +45,13 @@ namespace fs
         void OnSector(Result result, infra::ConstByteRange contents);
         std::optional<uint32_t> FreeInSector(infra::ConstByteRange contents);
         void Take(uint32_t cluster);
+        void WriteTaken(uint32_t cluster, uint32_t entry, uint32_t value);
+        void OnTakenWritten(Result result, uint32_t cluster);
         void Taken(Result result, uint32_t cluster);
         void Finish(Result result);
         void FinishAllocated(Result result);
         void LinkAfterBarrier();
-        void LinkLast();
+        void OnLinkStep(Result result);
         void Done(Result result);
         uint32_t Preferred() const;
         uint32_t SearchStart() const;
@@ -65,6 +67,7 @@ namespace fs
         FatFreeSpaceScan& freeSpace;
         FatReservation* own{ nullptr };
         FatChain chain{ FatChain::referenced };
+        bool linkingPrevious{ false };
         uint32_t cursor{ 2 };
         std::optional<uint32_t> last;
         uint32_t start{ 0 };
