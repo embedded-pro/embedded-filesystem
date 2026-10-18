@@ -177,6 +177,9 @@ Together with a single copy of the directory entry, this saves about 300 B of RA
   It keeps a pointer to the entry the directory reader assembled instead of a copy, and `fs::FatLite` keeps a new entry as its short name until it writes it.
 * The same continuation per owner in the operations that every NOR image shares saved 1,952 bytes of flash and 32 of RAM on `fs::NorLite`, and 1,968 bytes of flash on `fs::NorFileSystem`.
   The record apply, the creation of an entry, the commit of a file, the scans of the mount, the checkpoint writer, the file handle, the node collector and the replay resume their waits through one callback each.
+* In the operations that every image of `fs::FatFileSystem` shares, it saved 1,024 bytes of flash on `embedded-filesystem/fat-minimal` and 1,080 on `embedded-filesystem/fat`, and no RAM.
+  The write, the truncation, the open, the unmount, the lookup of a parent directory, the file handle and the lifecycle resume their waits through one callback each, and the sector cache and the flush barrier run their device requests through one callback, as the window of the lite volumes does.
+  The lite volumes share the flush barrier and the reader of the table, so `fs::FatLite` saved 128 bytes and `fs::FatReader` 64.
 * A spike rewrote the read path of `fs::FatReader`, its mount, lookup, read and listing, as C++20 coroutines with their frames in a buffer per owner: 19,536 bytes of flash against 19,140, and 2,684 bytes of RAM against 2,012 once the buffers fit the deepest calls.
   Each coroutine costs about 200 bytes of fixed code and each suspension point 60 to 80 bytes, as much as the callbacks they replace, and a frame keeps every local variable alive across a wait.
 * A second spike ran the same read path as sequential code on one cooperative stack per volume, with a stack switch in a few lines of assembly on the Cortex-M and `ucontext` for the tests on the host.
