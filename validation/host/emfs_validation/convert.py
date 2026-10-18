@@ -21,7 +21,7 @@ TRANSCRIPT = "transcript.log"
 RUN = "run.json"
 RESULT_KEYS = ("metric", "workload", "subject", "device", "unit", "value", "ramBytes", "better")
 RESULT_IDENTITY = ("metric", "workload", "subject", "device", "fill")
-MEASURED_PREFIXES = ("bench.", "measured.")
+MEASURED_PREFIXES = ("bench.", "measured.", "layout.")
 BENCH_STATISTICS = ("minNs", "medianNs", "p99Ns", "maxNs", "meanNs")
 RUN_NAME = re.compile(r"^(\d{4})_(\d{2})_(\d{2})(?:_(\d+))?$")
 # A write into one more allocation unit in turn that takes more than this many times the write into one opens a unit
@@ -124,11 +124,11 @@ class Fragment:
         """The parameters of a device as its device record and the conversion give them, without what its benchmarks measured."""
         return {key: value for key, value in self.devices[name].items() if not key.startswith(MEASURED_PREFIXES)}
 
-    def measured(self, local: str) -> dict[str, str]:
-        """The parameters of a device of the board that its benchmarks add to."""
+    def measured(self, local: str, what: str = "a benchmark") -> dict[str, str]:
+        """The parameters of a device of the board that its benchmarks and layouts add to."""
         name = f"{self.board}/{local}"
         if name not in self.devices:
-            raise ConversionError(f"a benchmark is on an unknown device '{local}'")
+            raise ConversionError(f"{what} is on an unknown device '{local}'")
         return self.devices[name]
 
     def result(self, entry: dict[str, Any]) -> None:
@@ -272,6 +272,18 @@ def opening_parameters(units: dict[int, int]) -> dict[str, str]:
     }
 
 
+def convert_layout(fragment: Fragment, record: Record) -> None:
+    """The layout of a card or of the formatter, as `layout.<source>.<key>` among the parameters of the device, and the fields
+    in which they differ as `layout.differs`; the comparison is recorded, not held to a target."""
+    parameters = fragment.measured(record.field("device"), "a layout")
+    source = record.field("source")
+    for key, value in record.fields.items():
+        if key == "differs":
+            parameters["layout.differs"] = value
+        elif key not in ("device", "source"):
+            parameters[f"layout.{source}.{key}"] = value
+
+
 def convert_cycles_failed(fragment: Fragment, record: Record) -> None:
     """A run of F-2 that failed leaves no F-2 for its subject, not even for the operations it completed."""
     subject = record.field("subject")
@@ -314,6 +326,7 @@ CONVERTERS: dict[str, Callable[[Fragment, Record], None]] = {
     "window": convert_window,
     "workload.failed": convert_workload_failed,
     "workload.done": convert_workload_done,
+    "layout": convert_layout,
 }
 
 

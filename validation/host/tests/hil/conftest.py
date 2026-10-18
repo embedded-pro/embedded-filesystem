@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import time
 
-from pytest_bdd import parsers, then, when
+import pytest
+from pytest_bdd import given, parsers, then, when
 
 # Above the timeout of 4 hours of the firmware for a workload
 WORKLOAD_TIMEOUT = 14460.0
@@ -25,6 +26,12 @@ WORKLOAD_RUNS = (
     ("L7", 0),
 )
 WORKLOAD_EVENTS = ("workload", "phase", "window", "workload.failed", "workload.done")
+
+
+@given(parsers.parse("the board has the block device {device}"))
+def has_block_device(board, device):
+    if device not in board.devices:
+        pytest.skip(f"{board.name} has no {device}")
 
 
 @when("the devices of the board are listed")

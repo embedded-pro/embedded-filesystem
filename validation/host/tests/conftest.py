@@ -23,6 +23,7 @@ from emfs_validation.fake_firmware import FakeFirmware
 from emfs_validation.recording import JUNIT, RUN, TRANSCRIPT, RecordingTerminal, source_commit, write_run
 
 HIL_DIR = Path(__file__).parent / "hil"
+LAYOUT_SCENARIOS = "test_layout.py"
 _BOARD_KEY = pytest.StashKey[Board]()
 _STARTED_KEY = pytest.StashKey[str]()
 _FIRMWARE_KEY = pytest.StashKey[dict[str, str]]()
@@ -64,6 +65,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    # The layout of a card formatted on a PC is read before any other scenario writes the card
+    items.sort(key=lambda item: item.path.name != LAYOUT_SCENARIOS)
     runs = bool(config.getoption("--port")) or config.getoption("--fake")
     skip = pytest.mark.skip(reason="needs --port or --fake")
     for item in items:
