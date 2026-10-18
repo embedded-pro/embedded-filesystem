@@ -117,7 +117,7 @@ namespace validation
         context.response.Ok() << " differences=" << count;
     }
 
-    void LayoutCommands::PrintLayout(const char* source, const FatLayout& layout, std::optional<infra::BoundedConstString> differs)
+    void LayoutCommands::PrintLayout(const char* source, const FatLayout& layout, std::optional<infra::BoundedConstString> differs) const
     {
         auto record = results.Record("layout");
         record.Add("device", target->device.description.name)

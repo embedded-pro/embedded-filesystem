@@ -48,7 +48,7 @@ namespace validation
         void FirstSectorRead(hal::BlockDevice::Result result);
         void BootSectorRead(hal::BlockDevice::Result result);
         void Compare(const FatLayout& card, const FatLayout& formatter);
-        void PrintLayout(const char* source, const FatLayout& layout, std::optional<infra::BoundedConstString> differs);
+        void PrintLayout(const char* source, const FatLayout& layout, std::optional<infra::BoundedConstString> differs) const;
         void Formatted(fs::Result result);
         void Fail();
         bool Release();
