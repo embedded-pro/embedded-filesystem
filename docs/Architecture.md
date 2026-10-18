@@ -54,7 +54,7 @@ The validation on boards uses the drivers of hal-st, which it fetches only when 
 | `infra::Function`                                                         | Completion callbacks                                         |
 | `infra::SharedPtr`, `infra::SharedObjectAllocatorFixedSize`               | Handles to open files and directories, from fixed-size pools |
 | `infra::BoundedVector`, `infra::BoundedDeque`, `infra::BoundedString`     | Bounded storage for queues, caches, names and paths          |
-| `services::TableStateMachine`                                             | Lifecycle of volumes and of background work                  |
+| `services::TableStateMachine`                                             | Lifecycle of the full volumes and of background work         |
 | `infra::Crc32Nibblewise`, `infra::Crc16CcittFalseBitwise`                 | Protecting NOR records, and the hash of FAT short names      |
 | `hal::FlashStub`, `hal::BlockDeviceStub`, `infra::EventDispatcherFixture` | Tests                                                        |
 
@@ -109,6 +109,9 @@ A FAT volume reports the corruption that an operation finds to that operation an
 Background work has its own machine, for instance `Stopped`, `Waiting`, `Claiming` and `Working` on NOR volumes, where each unit of work is a checkpoint, a sector erase or a block move.
 Device completions are passed to the machine through `Completion<Ev>()`, so a completion that arrives after the machine has left the state that started it, for instance after the card was removed, is discarded instead of corrupting the volume.
 The completions of `Mount` and `Unmount` are delivered through the deferred completions, so a callback that mounts or unmounts again does not re-enter the machine while it is still dispatching.
+
+The lite volumes, `fs::FatReader`, `fs::FatLite` and `fs::NorLite`, have the same states without a machine: `fs::LiteLifecycle` keeps the phase in an enumeration, and the volume runs the actions of each transition itself, in the same order and with the same deferred completions.
+This saves 1.4 KB of flash on each of them.
 
 ### Operations as explicit state machines
 

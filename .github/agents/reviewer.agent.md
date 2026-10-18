@@ -21,7 +21,7 @@ You are the reviewer agent for embedded-filesystem. You review changes for compl
 
 1. **Memory**: no heap in `fs/`; every pool, cache and queue sized at compile time; no recursion.
 2. **Asynchronous model**: no blocking; completions only through `infra::EventDispatcher`, never synchronously; at most one device request in flight per volume; buffers outlive their requests; late completions discarded through `Completion<Ev>()`.
-3. **State machines**: named-step operation classes; lifecycles as `services::TableStateMachine`; no `infra::Sequencer`.
+3. **State machines**: named-step operation classes; lifecycles as `services::TableStateMachine`, or enumerations in the lite volumes and `fs::NorForegroundLeveling`; no `infra::Sequencer`.
 4. **Power-fail safety**: NOR program units programmed once per erase; nothing visible before a committed CRC-protected record; no erase of a block referenced by committed state; FAT ordering data, FAT, directory entry; `Sync` ends with `Flush`.
 5. **On-disk compatibility**: FAT structures follow the specification; NOR format changes are reflected in `docs/NorFilesystem.md`.
 6. **Errors**: `fs::Result` everywhere a device or the medium can fail; no exceptions; corrupted media never crash, loop or overrun buffers.

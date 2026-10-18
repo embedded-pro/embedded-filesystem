@@ -31,7 +31,7 @@ ctest --preset host
 
 - **Memory**: no `new`/`delete`/`malloc`/`free`, no `std::make_unique`/`std::make_shared`, no `std::vector`/`string`/`deque`/`list`/`map`/`set` in `fs/`. Use `infra::BoundedVector`, `infra::BoundedDeque`, `infra::BoundedString`, `std::array`, `std::optional`, `std::variant`, `WithStorage` templates. `metrics/` is host-only and exempt.
 - **Asynchronous**: every device operation takes an `infra::Function` callback and returns immediately; completions are delivered through `infra::EventDispatcher`, never synchronously; never block or sleep.
-- **State machines**: multi-step operations are small classes whose steps are named member functions chained through device callbacks; lifecycles are `services::TableStateMachine`; never `infra::Sequencer`.
+- **State machines**: multi-step operations are small classes whose steps are named member functions chained through device callbacks; lifecycles are `services::TableStateMachine`, or enumerations in the lite volumes and `fs::NorForegroundLeveling`; never `infra::Sequencer`.
 - **Storage**: NOR program units are programmed once per erase; state changes become visible only through committed, CRC-protected records; FAT writes are ordered data, FAT, directory entry.
 - **Style**: Allman braces, 4-space indent, PascalCase types and methods, camelCase members, acronyms as words, `{}` initialization, functions of about 30 lines, no comments except non-obvious domain reasons, header guards `FS_<FOLDER>_<FILE>_HPP`.
 - **Interfaces**: protected default constructor, deleted copy operations, protected non-virtual destructor.

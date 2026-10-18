@@ -20,6 +20,7 @@ target_sources(fs.common_test PRIVATE
     TestFlushBarrier.cpp
     TestHandlePool.cpp
     TestIdleTimer.cpp
+    TestLiteLifecycle.cpp
     TestLittleEndian.cpp
     TestOperationQueue.cpp
     TestPath.cpp

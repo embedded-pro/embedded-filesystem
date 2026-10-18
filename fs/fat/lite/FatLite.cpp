@@ -13,51 +13,38 @@ namespace fs
         , window(barrier, sector)
         , volume(barrier, window, transferAlignment, nameBuffer, reading, deferred, [this]
               {
-                  lifecycle.Dispatch(FatMediaRemoved{});
+                  if (lifecycle.RemoveMedia())
+                      volume.EnterUnmounted(Result::mediaRemoved);
               })
         , mount(device, window, volume.Geometry())
         , scan(volume.Reader(), nullptr)
         , limits(limits)
         , lifecycleClaimer(volume.Queue())
         , pathClaimer(volume.Queue())
-        , lifecycle(*this, services::Validated<FatLite>())
-    {
-        lifecycle.OnEntered<FatMounted>([](FatLite& lite, FatMounted&)
-            {
-                lite.volume.EnterMounted();
-                lite.Entered(Result::success);
-            });
-        lifecycle.OnEntered<FatFault>([](FatLite& lite, const FatFault& fault)
-            {
-                lite.volume.EnterUnmounted(fault.result);
-                lite.Entered(fault.result);
-            });
-        lifecycle.OnEntered<FatUnmounted>([](FatLite& lite, FatUnmounted&)
-            {
-                lite.volume.EnterUnmounted(Result::notMounted);
-                lite.Entered(lite.lifecycleResult);
-            });
-        lifecycle.Start<FatUnmounted>();
-    }
+    {}
 
     FatLite::~FatLite() = default;
 
     void FatLite::Mount(const infra::Function<void(Result result)>& onDone)
     {
-        if (lifecycle.Dispatch(FatMountRequested{}) == services::DispatchResult::transitioned)
-            onMountDone = onDone;
-        else
+        if (!lifecycle.StartMount())
             volume.Defer(onDone, Result::busy);
+        else
+        {
+            onMountDone = onDone;
+            BeginMount();
+        }
     }
 
     void FatLite::Unmount(const infra::Function<void(Result result)>& onDone)
     {
-        if (lifecycle.Dispatch(FatUnmountRequested{}) == services::DispatchResult::transitioned)
+        if (lifecycle.StartUnmount())
+        {
             onUnmountDone = onDone;
-        else if (std::holds_alternative<FatMounting>(lifecycle.CurrentState()) || std::holds_alternative<FatUnmounting>(lifecycle.CurrentState()))
-            volume.Defer(onDone, Result::busy);
+            BeginUnmount();
+        }
         else
-            volume.Defer(onDone, Unavailable());
+            volume.Defer(onDone, lifecycle.Changing() ? Result::busy : lifecycle.Unavailable());
     }
 
     void FatLite::Open(infra::BoundedConstString path, OpenMode mode, const infra::Function<void(Result result, infra::SharedPtr<File> file)>& onDone)
@@ -124,28 +111,15 @@ namespace fs
         return volume;
     }
 
-    bool FatLite::IsMounted() const
-    {
-        return std::holds_alternative<FatMounted>(lifecycle.CurrentState());
-    }
-
-    Result FatLite::Unavailable() const
-    {
-        if (const auto* fault = std::get_if<FatFault>(&lifecycle.CurrentState()); fault != nullptr && fault->result == Result::mediaRemoved)
-            return Result::mediaRemoved;
-
-        return Result::notMounted;
-    }
-
     Result FatLite::Unsupported() const
     {
-        return IsMounted() ? Result::unsupported : Unavailable();
+        return lifecycle.IsMounted() ? Result::unsupported : lifecycle.Unavailable();
     }
 
     Result FatLite::Refusal(infra::BoundedConstString path) const
     {
-        if (!IsMounted())
-            return Unavailable();
+        if (!lifecycle.IsMounted())
+            return lifecycle.Unavailable();
 
         if (auto validation = ValidatePath(path, limits); validation != Result::success)
             return validation;
@@ -170,7 +144,7 @@ namespace fs
     void FatLite::Run()
     {
         if (!volume.Available())
-            Found(Unavailable());
+            Found(lifecycle.Unavailable());
         else if (onOpen)
             FindParent();
         else
@@ -426,7 +400,14 @@ namespace fs
     void FatLite::Mounted(Result result)
     {
         lifecycleClaimer.Release();
-        lifecycle.Dispatch(FatMountDone{ result });
+        lifecycle.Mounted(result);
+
+        if (result == Result::success)
+            volume.EnterMounted();
+        else
+            volume.EnterUnmounted(result);
+
+        Entered(result);
     }
 
     void FatLite::BeginUnmount()
@@ -484,7 +465,9 @@ namespace fs
     {
         volume.Report(result);
         lifecycleClaimer.Release();
-        lifecycle.Dispatch(FatUnmountDone{ result });
+        lifecycle.Unmounted();
+        volume.EnterUnmounted(Result::notMounted);
+        Entered(result);
     }
 
     void FatLite::Entered(Result result)
