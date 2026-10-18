@@ -292,3 +292,141 @@ def test_a_workload_cut_off_before_its_end_leaves_no_results(tmp_path: Path):
     lines = [DEVICE, phase_line(2, "L7", "L7,10", rest="readNs=9000000")]
 
     assert convert_run(write_run(tmp_path / "2026_10_20", lines), {})["results"] == []
+
+
+BLOCK_DEVICE = "EVT device id=1 device=sd kind=block blocks=524288 blockSize=512 unitBlocks=8192 chip=035344534431364780 clockHz=25000000"
+BLOCK_PARAMETERS = {"kind": "block", "blocks": "524288", "blockSize": "512", "unitBlocks": "8192"}
+BLOCK_MODEL = {
+    "model": "sd-card-256m",
+    "blocksPerAllocationUnit": "8192",
+    "recentAllocationUnits": "2",
+    "typical.commandNs": "100000",
+    "typical.blockReadNs": "25000",
+    "typical.blockWrittenNs": "50000",
+    "typical.writeBusyNs": "1000",
+    "typical.allocationUnitOpeningNs": "10000000",
+    "w6BoundMs": "1021.025",
+}
+
+
+def block_runs(
+    runs: dict[tuple[str, int], WorkloadRun], model: dict[str, str] | None = None, parameters: dict[str, str] | None = None
+) -> DeviceRuns:
+    return DeviceRuns("sd", "embedded-filesystem/fat", runs, model or {}, parameters or BLOCK_PARAMETERS)
+
+
+def test_the_device_time_of_a_block_device_is_that_of_its_reads_writes_flushes_and_discards():
+    assert totals(readNs=1, writeNs=2, flushNs=4, discardNs=8).device_ns() == 15
+
+
+def test_l1_on_a_block_device_gives_the_throughput_the_amplification_and_the_writes_to_the_card():
+    write = totals(
+        writeNs=1_000_000, writeRequests=4, blocksWritten=16, alignedBlocks=12, distinctUnits=1, write_calls=64, write_userBytes=4096
+    )
+    runs = block_runs({("L1", 0): run_of({"L1 4096 64": write, "L1 cleanup 4096 64": totals(discardNs=5)})})
+
+    results = values(workload_results(runs))
+
+    assert results[("W-1", "L1 4096 64", None)] == pytest.approx(4096 / 0.001)
+    assert results[("W-4", "L1 4096 64", None)] == 2
+    assert results[("M-1", "L1 4096 64", None)] == 4
+    assert results[("M-2", "L1 4096 64", None)] == 0.75
+    assert results[("M-3", "L1 4096 64", None)] == 256
+    assert ("M-1", "L1 cleanup 4096 64", None) not in results
+
+
+def test_l2_and_l4_on_a_block_device_give_the_writes_to_the_card_at_each_fill_level():
+    log = totals(writeRequests=10, blocksWritten=10, alignedBlocks=1, distinctUnits=2, write_calls=10, write_userBytes=640)
+    files = totals(writeRequests=8, blocksWritten=16, alignedBlocks=16, distinctUnits=1, write_calls=8, write_userBytes=1048576)
+    runs = block_runs({("L2", 10): run_of({"L2": log}), ("L4", 50): run_of({"L4": files})})
+
+    results = values(workload_results(runs))
+
+    assert results[("W-4", "L2", 10)] == 8
+    assert results[("M-1", "L2", 10)] == 1
+    assert results[("M-2", "L2", 10)] == 0.1
+    assert results[("M-3", "L2", 10)] == pytest.approx(2 / (640 / 1048576))
+    assert results[("M-1", "L4", 50)] == 2
+    assert results[("M-2", "L4", 50)] == 1
+    assert results[("M-3", "L4", 50)] == 1
+
+
+def test_writes_without_requests_have_no_blocks_per_request_as_on_the_host():
+    runs = block_runs({("L4", 10): run_of({"L4": totals(write_calls=1, write_userBytes=0)})})
+
+    results = values(workload_results(runs))
+
+    assert results[("M-1", "L4", 10)] == 0
+    assert results[("M-2", "L4", 10)] == 0
+    assert results[("M-3", "L4", 10)] == 0
+
+
+def test_l6_on_a_block_device_reads_blocks_and_has_no_ratio_of_random_reads():
+    phases = {
+        "L6 sequential": totals(readNs=1_000_000, blocksRead=16, read_calls=2, read_userBytes=4096),
+        "L6 random 512": totals(readRequests=64, read_calls=64),
+        "L6 random 16384": totals(readRequests=128, read_calls=64),
+    }
+    runs = block_runs({("L6", 0): run_of(phases)})
+
+    results = values(workload_results(runs))
+
+    assert results[("R-5", "L6 sequential", None)] == 2
+    assert results[("R-2", "L6 random 16384", None)] == 2
+    assert ("R-2", "L6 random ratio", None) not in results
+
+
+def test_c1_on_a_block_device_gives_the_time_of_the_model_for_its_requests_and_openings():
+    phase = totals(
+        readNs=10_000_000,
+        writeNs=90_000_000,
+        readRequests=2,
+        blocksRead=10,
+        writeRequests=3,
+        blocksWritten=20,
+        flushRequests=1,
+        discardRequests=1,
+        unitsRecent1=5,
+        unitsRecent2=1,
+        unitsRecent3=2,
+        unitsRecent4=3,
+        unitsNotRecent=4,
+    )
+    runs = block_runs({("L4", 10): run_of({"L4": phase})}, BLOCK_MODEL)
+
+    results = values(workload_results(runs))
+
+    model_ns = 100_000 * 7 + 25_000 * 10 + 50_000 * 20 + 1_000 * 3 + 10_000_000 * (2 + 3 + 4)
+    assert results[("C-1", "L4", 10)] == pytest.approx(abs(model_ns - 100_000_000) / 100_000_000)
+
+
+def test_c1_on_a_block_device_needs_the_allocation_unit_of_its_model():
+    phase = totals(writeNs=1_000_000, writeRequests=1, blocksWritten=1)
+    log = totals(write_calls=1, write_maxNs=3_000_000, write_histogram="81,1")
+    runs = block_runs(
+        {("L4", 10): run_of({"L4": phase}), ("L2", 50): run_of({"L2": log})}, BLOCK_MODEL, {**BLOCK_PARAMETERS, "unitBlocks": "4096"}
+    )
+
+    results = values(workload_results(runs))
+
+    assert not [key for key in results if key[0] == "C-1"]
+    assert results[("C-2", "L2", 50)] == pytest.approx(3.0 / 1021.025)
+
+
+def test_a_transcript_of_a_workload_on_a_block_device_becomes_its_metrics(tmp_path: Path):
+    phase = "EVT phase id=3 device=sd subject=embedded-filesystem/fat workload=L1 phase=L1,4096,64 fill=0 ramBytes=7748 "
+    lines = [
+        BLOCK_DEVICE,
+        "EVT workload id=2 device=sd subject=embedded-filesystem/fat workload=L1 fill=0 scale=16 ramBytes=7748",
+        phase + "writeNs=1000000 writeRequests=2 blocksWritten=8 alignedBlocks=8 distinctUnits=1",
+        "EVT phase id=3 write.calls=64 write.userBytes=4096",
+        "EVT workload.done id=4 device=sd subject=embedded-filesystem/fat workload=L1 fill=0",
+    ]
+
+    fragment = convert_run(write_run(tmp_path / "2026_10_20", lines), {f"{BOARD}/sd": BLOCK_MODEL})
+
+    results = {(entry["metric"], entry["workload"]): entry["value"] for entry in fragment["results"]}
+    assert results[("W-4", "L1 4096 64")] == 1
+    assert results[("M-1", "L1 4096 64")] == 4
+    model_ns = 100_000 * 2 + 50_000 * 8 + 1_000 * 2
+    assert results[("C-1", "L1 4096 64")] == pytest.approx(abs(model_ns - 1_000_000) / 1_000_000)
