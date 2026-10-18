@@ -114,7 +114,7 @@ The drivers of hal-st and the cycle counter of EmIL need changes first, made as 
 8. The workload runner with its operations, histograms and windows, L1, L2, L3, L4, L6 and L7 on the NOR devices, and C-1 and C-2 from `metrics.device_models`.
 9. Buffers aligned for drivers that use DMA: the sectors of the cache, of `fs::FatReader` and of `fs::FatLite` and the buffer of the formatter aligned to 32 bytes, and `FatConfig::transferAlignment` and the alignment of `fs::FatReader` and `fs::FatLite`, as [Fat.md](Fat.md#direct-transfers) describes.
 10. Block devices on the boards: the regions of the microSD card and of the eMMC, the counting `hal::BlockDevice`, and the benchmarks of block devices.
-11. The workloads on the FAT volumes of the microSD card and the eMMC.
+11. The workloads on the FAT volumes of the microSD card and the eMMC, with M-1 to M-3, and C-1 and C-2 for FAT with the microSD card among the devices of `metrics.device_models`.
 12. The comparison of `fs::FatFormatter` with the SD Memory Card Formatter: `validation::FatLayout`, `layout.read` and `layout.format`.
 13. The runs, one pull request each: the run is committed and summarized in [Metrics.md](Metrics.md), the models are calibrated, `nor-parallel-16m` and the model of the eMMC join them from their datasheets, with the parallel NOR and the eMMC among the devices of `metrics.device_models`, the layouts of the cards go to [Fat.md](Fat.md), and once the runs show their spread, C-1 and C-2 get their targets.
 
