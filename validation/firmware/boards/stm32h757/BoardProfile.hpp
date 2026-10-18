@@ -56,6 +56,13 @@ namespace validation::board
     inline constexpr std::array<std::pair<hal::Port, uint8_t>, 6> quadSpiPins = { { { hal::Port::B, 2 }, { hal::Port::G, 6 }, { hal::Port::F, 8 }, { hal::Port::F, 9 },
         { hal::Port::F, 7 }, { hal::Port::F, 6 } } };
 
+    // SDMMC1 holds the microSD socket, behind a level shifter whose direction the driver sets
+    constexpr bool microSd = true;
+
+    // Clock, command and data lines 0 to 3 of SDMMC1, then the direction of data line 0, of data lines 1 to 3 and of the command
+    inline constexpr std::array<std::pair<hal::Port, uint8_t>, 9> sdmmcPins = { { { hal::Port::C, 12 }, { hal::Port::D, 2 }, { hal::Port::C, 8 }, { hal::Port::C, 9 },
+        { hal::Port::C, 10 }, { hal::Port::C, 11 }, { hal::Port::C, 6 }, { hal::Port::C, 7 }, { hal::Port::B, 9 } } };
+
     constexpr hal::QuadSpiStm::Config QuadSpiConfig()
     {
         hal::QuadSpiStm::Config config;

@@ -3,8 +3,10 @@
 #include "hal_st/stm32fxxx/DualCoreHandshakeStm.hpp"
 #include "hal_st/stm32fxxx/FmcStm.hpp"
 #include "hal_st/stm32fxxx/GpioStm.hpp"
+#include "hal_st/stm32fxxx/MmcStm.hpp"
 #include "hal_st/stm32fxxx/NorFlashStm.hpp"
 #include "hal_st/stm32fxxx/QuadSpiStm.hpp"
+#include "hal_st/stm32fxxx/SdCardStm.hpp"
 #include "hal_st/stm32fxxx/SdRamStm.hpp"
 #include "hal_st/stm32fxxx/UartStm.hpp"
 #include "infra/stream/StringOutputStream.hpp"
@@ -19,6 +21,7 @@
 #include "services/tracer/StreamWriterOnSerialCommunication.hpp"
 #include "services/tracer/Tracer.hpp"
 #include "validation/firmware/bench/BenchCommands.hpp"
+#include "validation/firmware/bench/BlockBench.hpp"
 #include "validation/firmware/bench/NorBench.hpp"
 #include "validation/firmware/boards/BoardInfoStm.hpp"
 #include "validation/firmware/boards/Clocks.hpp"
@@ -30,6 +33,8 @@
 #include "validation/firmware/cycles/subjects/FatFsSubject.hpp"
 #include "validation/firmware/cycles/subjects/FileSystemSubject.hpp"
 #include "validation/firmware/cycles/subjects/LittleFsSubject.hpp"
+#include "validation/firmware/devices/BlockDeviceRegion.hpp"
+#include "validation/firmware/devices/CountingBlockDevice.hpp"
 #include "validation/firmware/devices/CountingFlash.hpp"
 #include "validation/firmware/devices/NullFlash.hpp"
 #include "validation/firmware/devices/QuadSpiNor.hpp"
@@ -48,6 +53,7 @@
 #include "validation/firmware/workload/SmallFiles.hpp"
 #include "validation/firmware/workload/WorkloadCommands.hpp"
 #include "validation/firmware/workload/WorkloadRunner.hpp"
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include DEVICE_HEADER
@@ -73,10 +79,18 @@ namespace
     constexpr validation::FlashGuard parallelNorGuard{ 100ms, 20ms, 8s };
     constexpr std::size_t quadSpiDevice = 0;
     constexpr std::size_t parallelNorDevice = 1;
+    constexpr std::size_t microSdDevice = 2;
+    constexpr std::size_t emmcDevice = 3;
 
-    std::array<validation::DeviceEntry, 4> devices{ {
+    constexpr uint32_t sdmmcRegionBlocks = 256 * 1024 * 1024 / 512;
+    constexpr uint32_t sdCard256mUnitBlocks = 8192;
+    constexpr infra::Duration sdmmcGuard = 8s;
+
+    std::array<validation::DeviceEntry, 6> devices{ {
         { { "qspi", validation::DeviceKind::nor, 0, 0, 0, "", 0, "" }, false },
         { { "fmc", validation::DeviceKind::nor, 0, 0, 0, "", 0, "" }, false },
+        { { "sd", validation::DeviceKind::block, 0, 0, 0, "", 0, "" }, false },
+        { { "emmc", validation::DeviceKind::block, 0, 0, 0, "", 0, "" }, false },
         { ramFlash, true },
         { ramBlock, true },
     } };
@@ -86,6 +100,18 @@ namespace
         text.clear();
         infra::StringOutputStream stream{ text };
         stream << infra::hex << infra::Width(digits, '0') << value;
+        return text;
+    }
+
+    template<std::size_t productSize>
+    infra::BoundedConstString CardIdentifier(infra::BoundedString& text, uint8_t manufacturer, uint32_t oem, std::size_t oemDigits, const std::array<char, productSize>& product, uint8_t revision)
+    {
+        text.clear();
+        infra::StringOutputStream stream{ text };
+        stream << infra::hex << infra::Width(2, '0') << manufacturer;
+        stream << infra::hex << infra::Width(oemDigits, '0') << oem;
+        stream << infra::AsHex(infra::ReinterpretCastByteRange(infra::MakeRange(product)));
+        stream << infra::hex << infra::Width(2, '0') << revision;
         return text;
     }
 
@@ -122,6 +148,65 @@ namespace
         {
             static const std::array<validation::WorkloadTarget, 1> targets{ { { devices[quadSpiDevice], quadSpi, quadSpiVolume } } };
             return infra::MakeRange(targets);
+        }
+    }
+
+    // The allocation unit that the counting takes: the one the device reports, or that of sd-card-256m where it reports none,
+    // and no fewer blocks than the counting of distinct units allows in the region
+    uint32_t CountedUnitBlocks(uint32_t reportedBlocks)
+    {
+        if (reportedBlocks == 0)
+            return sdCard256mUnitBlocks;
+
+        return std::max(reportedBlocks, sdmmcRegionBlocks / static_cast<uint32_t>(validation::CountingBlockDevice::maximumUnits));
+    }
+
+    validation::CountingBlockDevice& CountedSdmmc(validation::DeviceEntry& entry, hal::BlockDevice& device, uint32_t reportedUnitBlocks, infra::BoundedConstString chip,
+        infra::BoundedConstString cache, const validation::CycleCounter& cycles)
+    {
+        static validation::BlockDeviceRegion region{ device, 0, sdmmcRegionBlocks };
+        static validation::CountingBlockDevice counting{ region, CountedUnitBlocks(reportedUnitBlocks), cycles, SystemCoreClock, sdmmcGuard };
+        const auto clockHz = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_SDMMC) / (2 * hal::SdmmcBlockDeviceStm<hal::detail::SdCardHal>::Config::defaultClockDivider);
+        entry.description = { entry.description.name, validation::DeviceKind::block, region.NumberOfBlocks(), region.BlockSize(), 0, chip, clockHz, "", counting.UnitBlocks(), cache };
+        entry.present = region.NumberOfBlocks() != 0;
+        return counting;
+    }
+
+    // A template, so that only the driver of the device on SDMMC1 is instantiated
+    template<bool microSd = validation::board::microSd>
+    validation::CountingBlockDevice& Sdmmc(const validation::CycleCounter& cycles)
+    {
+        constexpr auto& pins = validation::board::sdmmcPins;
+        static hal::GpioPinStm clock{ pins[0].first, pins[0].second };
+        static hal::GpioPinStm command{ pins[1].first, pins[1].second };
+        static hal::GpioPinStm data0{ pins[2].first, pins[2].second };
+        static hal::GpioPinStm data1{ pins[3].first, pins[3].second };
+        static hal::GpioPinStm data2{ pins[4].first, pins[4].second };
+        static hal::GpioPinStm data3{ pins[5].first, pins[5].second };
+        static infra::BoundedString::WithStorage<18> chip;
+
+        if constexpr (microSd)
+        {
+            static hal::GpioPinStm data0Direction{ pins[6].first, pins[6].second };
+            static hal::GpioPinStm data123Direction{ pins[7].first, pins[7].second };
+            static hal::GpioPinStm commandDirection{ pins[8].first, pins[8].second };
+            static hal::SdCardStm card{ 1, clock, command, data0, data1, data2, data3, hal::SdCardStm::Config{}, hal::SdCardStm::DirectionPins{ data0Direction, data123Direction, commandDirection } };
+            const auto& identification = card.CardIdentification();
+            return CountedSdmmc(devices[microSdDevice], card, card.AllocationUnitBlocks(),
+                CardIdentifier(chip, identification.manufacturer, identification.oem, 4, identification.product, identification.revision), "", cycles);
+        }
+        else
+        {
+            static hal::MmcStm::Config config = []
+            {
+                hal::MmcStm::Config config;
+                config.cache = true;
+                return config;
+            }();
+            static hal::MmcStm emmc{ 1, clock, command, data0, data1, data2, data3, config };
+            const auto& identification = emmc.DeviceIdentification();
+            return CountedSdmmc(devices[emmcDevice], emmc, emmc.EraseGroupBlocks(),
+                CardIdentifier(chip, identification.manufacturer, identification.oem, 2, identification.product, identification.revision), emmc.CacheEnabled() ? "on" : "off", cycles);
         }
     }
 
@@ -204,7 +289,10 @@ int main()
     static validation::CountingFlash parallelNorCounting{ ParallelNor(fmc), parallelNorPageSize, eventInfrastructure.cycles, SystemCoreClock, parallelNorGuard };
     static const std::array<validation::NorBenchTarget, 2> benchTargets{ { { devices[quadSpiDevice], quadSpiCounting }, { devices[parallelNorDevice], parallelNorCounting } } };
     static validation::NorBench bench{ results, SystemCoreClock };
-    static validation::BenchCommands benchCommands{ context, bench, infra::MakeRange(benchTargets) };
+    static validation::BlockBench blockBench{ results, SystemCoreClock };
+    static validation::CountingBlockDevice& sdmmcCounting = Sdmmc(eventInfrastructure.cycles);
+    static const std::array<validation::BlockBenchTarget, 1> blockBenchTargets{ { { validation::board::microSd ? devices[microSdDevice] : devices[emmcDevice], sdmmcCounting } } };
+    static validation::BenchCommands benchCommands{ context, bench, blockBench, infra::MakeRange(benchTargets), infra::MakeRange(blockBenchTargets) };
 
     static validation::WorkloadRunner workloadRunner{ results, eventInfrastructure.cycles, SystemCoreClock };
     static validation::WorkloadTools workloadTools{ workloadRunner };

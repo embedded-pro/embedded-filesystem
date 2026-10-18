@@ -13,6 +13,8 @@ target_link_libraries(validation.devices_test PUBLIC
 )
 
 target_sources(validation.devices_test PRIVATE
+    TestBlockDeviceRegion.cpp
+    TestCountingBlockDevice.cpp
     TestCountingFlash.cpp
     TestNullDevices.cpp
     TestQuadSpiNor.cpp

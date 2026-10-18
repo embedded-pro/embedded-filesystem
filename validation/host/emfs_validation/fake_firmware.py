@@ -19,7 +19,21 @@ NOR_DEVICES = {
     "qspi": {"sectors": 4096, "sectorSize": 4096, "pageSize": 256, "chip": "20ba20", "clockHz": 50000000},
     "fmc": {"sectors": 128, "sectorSize": 131072, "pageSize": 64, "chip": "0089227e", "clockHz": 200000000},
 }
+BLOCK_DEVICES = {
+    "sd": {"blocks": 524288, "blockSize": 512, "unitBlocks": 8192, "chip": "035344534431364780", "clockHz": 25000000},
+    "emmc": {"blocks": 524288, "blockSize": 512, "unitBlocks": 1024, "chip": "150138475446345210", "clockHz": 25000000, "cache": "on"},
+}
 MAXIMUM_BENCH_REPETITIONS = 1024
+MAXIMUM_BENCH_BLOCKS = 128
+MAXIMUM_BENCH_UNITS = 8
+# The positional arguments and the keys of each benchmark of block devices, and the key of its count
+BLOCK_BENCH_ARGUMENTS = {
+    "bench.blocks": (2, "blocks"),
+    "bench.units": (1, "units"),
+    "bench.flush": (1, None),
+    "bench.discard": (1, "blocks"),
+}
+OPEN_UNITS = 4
 MAXIMUM_PROGRAM_BYTES = 4096
 MAXIMUM_READ_BYTES = 65536
 BENCH_KEYS = {"bench.program": {"size", "n"}, "bench.erase": {"n"}, "bench.read": {"size", "n"}}
@@ -118,6 +132,8 @@ class FakeFirmware:
             return self._device_info(arguments)
         if name in BENCH_KEYS:
             return self._bench(name, arguments)
+        if name in BLOCK_BENCH_ARGUMENTS:
+            return self._block_bench(name, arguments)
         if name == "dev.check":
             return self._check(arguments)
         if name == "fs.format":
@@ -156,7 +172,7 @@ class FakeFirmware:
         return "OK"
 
     def _present_devices(self) -> list[str]:
-        return [device for device in NOR_DEVICES if device in self.board.devices] + list(RAM_DEVICES)
+        return [device for device in (*NOR_DEVICES, *BLOCK_DEVICES) if device in self.board.devices] + list(RAM_DEVICES)
 
     def _device_info(self, arguments: list[str]) -> str:
         if len(arguments) != 1 or "=" in arguments[0]:
@@ -166,6 +182,9 @@ class FakeFirmware:
             return "ERR unsupported"
         if device in RAM_DEVICES:
             self._record("device", f"device={device} {RAM_DEVICES[device]}")
+        elif device in BLOCK_DEVICES:
+            geometry = " ".join(f"{key}={value}" for key, value in BLOCK_DEVICES[device].items())
+            self._record("device", f"device={device} kind=block {geometry}")
         else:
             geometry = " ".join(f"{key}={value}" for key, value in NOR_DEVICES[device].items())
             self._record("device", f"device={device} kind=nor {geometry}")
@@ -204,6 +223,58 @@ class FakeFirmware:
             f"p99Ns={median + 5000} maxNs={median + 10000} meanNs={median + 500}",
         )
         return "OK"
+
+    def _block_bench(self, name: str, arguments: list[str]) -> str:
+        """As validation::BenchCommands: the shape of the arguments, the numbers, the device, the operation and then the range."""
+        positionals, count_key = BLOCK_BENCH_ARGUMENTS[name]
+        positional = [argument for argument in arguments if "=" not in argument]
+        keys: dict[str, str] = {}
+        for argument in arguments:
+            if "=" in argument:
+                key, value = argument.split("=", 1)
+                keys.setdefault(key, value)
+        if len(positional) != positionals or keys.keys() != {"n", count_key} - {None}:
+            return "ERR usage"
+        repetitions, count = parse_number(keys["n"]), parse_number(keys.get(count_key or "", "0"))
+        if repetitions is None or count is None:
+            return "ERR usage"
+        if not 1 <= repetitions <= MAXIMUM_BENCH_REPETITIONS:
+            return "ERR range"
+        device = positional[0]
+        if device not in BLOCK_DEVICES or device not in self.board.devices:
+            return "ERR unsupported"
+        operation = positional[1] if name == "bench.blocks" else name.split(".")[1]
+        if operation not in ("read", "write", "units", "flush", "discard"):
+            return "ERR usage"
+        geometry = BLOCK_DEVICES[device]
+        if not self._block_bench_fits(operation, geometry, count, repetitions):
+            return "ERR range"
+        block_size = int(geometry["blockSize"])
+        size = block_size if operation in ("units", "flush") else count * block_size
+        samples = count * repetitions if operation == "units" else repetitions
+        units = f" units={count}" if operation == "units" else ""
+        median = {
+            "read": 280000 + 20000 * count,
+            "write": 460000 + 40000 * count,
+            "units": 500000 if count <= OPEN_UNITS else 8500000,
+            "flush": 1200000,
+            "discard": 3000000,
+        }[operation]
+        self._record(
+            "bench",
+            f"device={device} op={operation} size={size}{units} n={samples} minNs={median - 1000} medianNs={median} "
+            f"p99Ns={median + 5000} maxNs={median + 10000} meanNs={median + 500}",
+        )
+        return "OK"
+
+    @staticmethod
+    def _block_bench_fits(operation: str, geometry: dict[str, int | str], count: int, repetitions: int) -> bool:
+        blocks, unit_blocks = int(geometry["blocks"]), int(geometry["unitBlocks"])
+        if operation in ("read", "write"):
+            return 1 <= count <= min(MAXIMUM_BENCH_BLOCKS, blocks)
+        if operation == "units":
+            return 1 <= count <= MAXIMUM_BENCH_UNITS and count * repetitions <= MAXIMUM_BENCH_REPETITIONS and count * unit_blocks <= blocks
+        return operation == "flush" or 1 <= count <= blocks
 
     def _check(self, arguments: list[str]) -> str:
         if len(arguments) != 1 or "=" in arguments[0]:

@@ -20,6 +20,13 @@ def terminal(board):
     return terminal
 
 
+@pytest.fixture
+def disco():
+    terminal = FirmwareTerminal(serial=FakeFirmware(load_board("stm32h745i_disco")), timeout=0.5)
+    terminal.sync()
+    return terminal
+
+
 def test_boots_with_the_identity_of_the_board(board):
     terminal = FirmwareTerminal(serial=FakeFirmware(board), timeout=0.5)
 
@@ -161,15 +168,12 @@ def test_cycles_run_rejects_what_the_firmware_rejects(terminal, line, reason):
     assert error.value.reason == reason
 
 
-def test_dev_list_names_the_nor_devices_of_the_board_and_the_ram_devices(terminal):
-    assert terminal.command("dev.list").values == {"devices": "qspi,fmc,ramflash,ramblock"}
+def test_dev_list_names_the_nor_and_block_devices_of_the_board_and_the_ram_devices(terminal):
+    assert terminal.command("dev.list").values == {"devices": "qspi,fmc,sd,ramflash,ramblock"}
 
 
-def test_dev_list_leaves_out_what_the_board_does_not_have():
-    terminal = FirmwareTerminal(serial=FakeFirmware(load_board("stm32h745i_disco")), timeout=0.5)
-    terminal.sync()
-
-    assert terminal.command("dev.list").values == {"devices": "qspi,ramflash,ramblock"}
+def test_dev_list_leaves_out_what_the_board_does_not_have(disco):
+    assert disco.command("dev.list").values == {"devices": "qspi,emmc,ramflash,ramblock"}
 
 
 def test_dev_info_describes_a_nor_device(terminal):
@@ -187,13 +191,34 @@ def test_dev_info_describes_a_nor_device(terminal):
     }
 
 
+def test_dev_info_describes_a_block_device(terminal):
+    assert terminal.command("dev.info sd").ok
+
+    (record,) = terminal.drain_events("device")
+    assert {key: value for key, value in record.values.items() if key != "id"} == {
+        "device": "sd",
+        "kind": "block",
+        "blocks": "524288",
+        "blockSize": "512",
+        "unitBlocks": "8192",
+        "chip": "035344534431364780",
+        "clockHz": "25000000",
+    }
+
+
+def test_dev_info_describes_the_cache_of_the_emmc(disco):
+    assert disco.command("dev.info emmc").ok
+
+    assert disco.drain_events("device")[0].values["cache"] == "on"
+
+
 def test_dev_info_describes_a_ram_device(terminal):
     assert terminal.command("dev.info ramblock").ok
 
     assert terminal.drain_events("device")[0].values["memory"] == "sdram"
 
 
-@pytest.mark.parametrize(("line", "reason"), [("dev.info", "usage"), ("dev.info qspi fmc", "usage"), ("dev.info sd", "unsupported")])
+@pytest.mark.parametrize(("line", "reason"), [("dev.info", "usage"), ("dev.info qspi fmc", "usage"), ("dev.info emmc", "unsupported")])
 def test_dev_info_takes_one_device_of_the_board(terminal, line, reason):
     with pytest.raises(FirmwareError) as error:
         terminal.command(line)
@@ -363,3 +388,112 @@ def test_the_records_of_wl_run_convert_into_the_metrics_of_the_workloads(board, 
 
     metrics = {entry["metric"] for entry in fragment["results"]}
     assert metrics == {"W-1", "W-2", "W-3", "W-4", "W-5", "W-6", "R-1", "R-2", "R-3", "R-4", "R-5", "C-1", "C-2"}
+
+
+@pytest.mark.parametrize(
+    ("line", "op", "size", "samples"),
+    [
+        ("bench.blocks sd read blocks=8 n=4", "read", "4096", "4"),
+        ("bench.blocks sd write blocks=128 n=2", "write", "65536", "2"),
+        ("bench.units sd units=3 n=4", "units", "512", "12"),
+        ("bench.flush sd n=8", "flush", "512", "8"),
+        ("bench.discard sd blocks=8192 n=2", "discard", "4194304", "2"),
+    ],
+)
+def test_block_benchmarks_print_a_bench_record(terminal, line, op, size, samples):
+    assert terminal.command(line).ok
+
+    (record,) = terminal.drain_events("bench")
+    values = record.values
+    assert (values["device"], values["op"], values["size"], values["n"]) == ("sd", op, size, samples)
+    assert int(values["minNs"]) <= int(values["medianNs"]) <= int(values["p99Ns"]) <= int(values["maxNs"])
+
+
+def test_the_benchmark_of_allocation_units_names_its_units(terminal):
+    assert terminal.command("bench.units sd units=5 n=1").ok
+
+    assert terminal.drain_events("bench")[0].values["units"] == "5"
+
+
+@pytest.mark.parametrize(
+    ("line", "reason"),
+    [
+        ("bench.blocks sd read blocks=8", "usage"),
+        ("bench.blocks sd blocks=8 n=1", "usage"),
+        ("bench.blocks sd read n=1", "usage"),
+        ("bench.blocks sd read blocks=8 n=1 size=4", "usage"),
+        ("bench.blocks sd erase blocks=8 n=1", "usage"),
+        ("bench.blocks sd read blocks=x n=1", "usage"),
+        ("bench.blocks sd read blocks=8 n=0", "range"),
+        ("bench.blocks sd read blocks=8 n=1025", "range"),
+        ("bench.blocks sd read blocks=0 n=1", "range"),
+        ("bench.blocks sd read blocks=129 n=1", "range"),
+        ("bench.blocks sd write blocks=128 n=1024", None),
+        ("bench.blocks qspi read blocks=1 n=1", "unsupported"),
+        ("bench.blocks emmc read blocks=1 n=1", "unsupported"),
+        ("bench.blocks ramblock read blocks=1 n=1", "unsupported"),
+        ("bench.units sd n=1", "usage"),
+        ("bench.units sd sd units=1 n=1", "usage"),
+        ("bench.units sd units=0 n=1", "range"),
+        ("bench.units sd units=9 n=1", "range"),
+        ("bench.units sd units=8 n=129", "range"),
+        ("bench.units sd units=8 n=128", None),
+        ("bench.flush sd", "usage"),
+        ("bench.flush sd n=1 blocks=1", "usage"),
+        ("bench.flush sd n=1025", "range"),
+        ("bench.flush fmc n=1", "unsupported"),
+        ("bench.discard sd n=1", "usage"),
+        ("bench.discard sd blocks=0 n=1", "range"),
+        ("bench.discard sd blocks=524289 n=1", "range"),
+        ("bench.discard sd blocks=524288 n=1", None),
+        ("bench.read sd size=512 n=1", "unsupported"),
+        ("dev.check sd", "unsupported"),
+        ("fs.format sd", "unsupported"),
+    ],
+)
+def test_block_benchmarks_check_their_arguments_as_the_firmware_does(terminal, line, reason):
+    if reason is None:
+        assert terminal.command(line).ok
+        return
+    with pytest.raises(FirmwareError) as error:
+        terminal.command(line)
+
+    assert error.value.reason == reason
+
+
+def test_block_benchmarks_run_on_the_emmc_of_the_disco(disco):
+    assert disco.command("bench.flush emmc n=1").ok
+
+    assert disco.drain_events("bench")[0].values["device"] == "emmc"
+
+
+def test_the_records_of_block_benchmarks_convert_into_the_parameters_of_a_model(terminal, tmp_path):
+    lines = [
+        "dev.info sd",
+        "bench.blocks sd read blocks=1 n=8",
+        "bench.blocks sd read blocks=128 n=8",
+        "bench.blocks sd write blocks=1 n=8",
+    ]
+    lines += ["bench.blocks sd write blocks=128 n=8", "bench.flush sd n=8", "bench.discard sd blocks=8192 n=2"]
+    lines += [f"bench.units sd units={units} n=8" for units in range(1, 9)]
+    transcript = []
+    for line in lines:
+        assert terminal.command(line).ok
+        transcript += [event.raw for kind in ("device", "bench") for event in terminal.drain_events(kind)]
+    run = tmp_path / "2026_10_20"
+    run.mkdir()
+    (run / "run.json").write_text('{"board": "stm32h757i-eval"}', encoding="utf-8")
+    (run / "transcript.log").write_text("\n".join(transcript) + "\n", encoding="utf-8")
+
+    parameters = convert.convert_run(run, {})["devices"]["stm32h757i-eval/sd"]
+
+    assert {key: value for key, value in parameters.items() if key.startswith("measured.")} == {
+        "measured.blockReadNs": "20000",
+        "measured.readCommandNs": "280000",
+        "measured.blockWrittenNs": "40000",
+        "measured.writeCommandNs": "460000",
+        "measured.recentAllocationUnits": "4",
+        "measured.allocationUnitOpeningNs": "8000000",
+        "measured.flushNs": "1200000",
+        "measured.discardNs": "3000000",
+    }

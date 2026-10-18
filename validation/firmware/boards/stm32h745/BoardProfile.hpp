@@ -46,6 +46,13 @@ namespace validation::board
     inline constexpr std::array<std::pair<hal::Port, uint8_t>, 6> quadSpiPins = { { { hal::Port::F, 10 }, { hal::Port::G, 6 }, { hal::Port::D, 11 }, { hal::Port::F, 9 },
         { hal::Port::F, 7 }, { hal::Port::F, 6 } } };
 
+    // SDMMC1 holds the eMMC, wired for 8 bits, of which the driver uses data lines 0 to 3
+    constexpr bool microSd = false;
+
+    // Clock, command and data lines 0 to 3 of SDMMC1
+    inline constexpr std::array<std::pair<hal::Port, uint8_t>, 6> sdmmcPins = { { { hal::Port::C, 12 }, { hal::Port::D, 2 }, { hal::Port::C, 8 }, { hal::Port::C, 9 },
+        { hal::Port::C, 10 }, { hal::Port::C, 11 } } };
+
     constexpr hal::QuadSpiStm::Config QuadSpiConfig()
     {
         hal::QuadSpiStm::Config config;

@@ -1,17 +1,15 @@
 #include "validation/firmware/devices/CountingFlash.hpp"
 #include "infra/util/ReallyAssert.hpp"
-#include "validation/firmware/timing/Nanoseconds.hpp"
 
 namespace validation
 {
     CountingFlash::CountingFlash(hal::Flash& flash, uint32_t pageSize, const CycleCounter& cycles, uint32_t clockHz, const FlashGuard& guard)
         : flash(flash)
         , pageSize(pageSize)
-        , cycles(cycles)
-        , clockHz(clockHz)
         , guard(guard)
+        , meter(cycles, clockHz)
     {
-        really_assert(pageSize != 0 && clockHz != 0);
+        really_assert(pageSize != 0);
     }
 
     uint32_t CountingFlash::NumberOfSectors() const
@@ -59,7 +57,12 @@ namespace validation
 
     void CountingFlash::OnTimeout(const infra::Function<void()>& onTimeout)
     {
-        this->onTimeout = onTimeout;
+        meter.OnTimeout(onTimeout);
+    }
+
+    RequestMeter& CountingFlash::Meter()
+    {
+        return meter;
     }
 
     uint32_t CountingFlash::PageSize() const
@@ -74,7 +77,7 @@ namespace validation
 
     uint32_t CountingFlash::LastCycles() const
     {
-        return lastCycles;
+        return meter.LastCycles();
     }
 
     bool CountingFlash::Busy() const
@@ -84,7 +87,7 @@ namespace validation
 
     bool CountingFlash::InUse() const
     {
-        return Busy() || onTimeout != nullptr;
+        return Busy() || meter.TimeoutWatched();
     }
 
     uint32_t CountingFlash::PagesSpanned(uint32_t address, std::size_t size) const
@@ -100,15 +103,7 @@ namespace validation
         really_assert(!Busy());
 
         this->onDone = onDone;
-        requestNs = &totalNs;
-        guardTimer.Start(guardDuration, [this]
-            {
-                // A copy, since the handler may replace itself
-                auto handler = onTimeout;
-                if (handler)
-                    handler();
-            });
-        startCycles = cycles.Cycles();
+        meter.Start(totalNs, guardDuration);
 
         return [this]
         {
@@ -118,9 +113,7 @@ namespace validation
 
     void CountingFlash::Completed()
     {
-        lastCycles = cycles.Cycles() - startCycles;
-        guardTimer.Cancel();
-        *requestNs += Nanoseconds(lastCycles, clockHz);
+        meter.Stop();
         onDone();
     }
 }

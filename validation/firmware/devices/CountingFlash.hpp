@@ -4,6 +4,7 @@
 #include "hal/interfaces/Flash.hpp"
 #include "infra/timer/Timer.hpp"
 #include "infra/util/AutoResetFunction.hpp"
+#include "validation/firmware/devices/RequestMeter.hpp"
 #include "validation/firmware/timing/CycleCounter.hpp"
 #include <cstdint>
 
@@ -65,6 +66,7 @@ namespace validation
         void EraseSectors(uint32_t beginIndex, uint32_t endIndex, infra::Function<void()> onDone) override;
 
         void OnTimeout(const infra::Function<void()>& onTimeout);
+        RequestMeter& Meter();
 
         uint32_t PageSize() const;
         const FlashCounts& Counts() const;
@@ -80,16 +82,10 @@ namespace validation
     private:
         hal::Flash& flash;
         uint32_t pageSize;
-        const CycleCounter& cycles;
-        uint32_t clockHz;
         FlashGuard guard;
         FlashCounts counts;
+        RequestMeter meter;
         infra::AutoResetFunction<void()> onDone;
-        infra::Function<void()> onTimeout;
-        infra::TimerSingleShot guardTimer;
-        uint64_t* requestNs{ nullptr };
-        uint32_t startCycles{ 0 };
-        uint32_t lastCycles{ 0 };
     };
 }
 

@@ -5,6 +5,7 @@ target_include_directories(validation.bench PUBLIC
 )
 
 target_link_libraries(validation.bench PUBLIC
+    fs.common
     services.hil.commands
     validation.devices
     validation.hil
@@ -15,6 +16,10 @@ target_link_libraries(validation.bench PUBLIC
 target_sources(validation.bench PRIVATE
     BenchCommands.cpp
     BenchCommands.hpp
+    Benchmark.cpp
+    Benchmark.hpp
+    BlockBench.cpp
+    BlockBench.hpp
     NorBench.cpp
     NorBench.hpp
 )

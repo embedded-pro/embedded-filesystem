@@ -24,6 +24,8 @@ RESULT_IDENTITY = ("metric", "workload", "subject", "device", "fill")
 MEASURED_PREFIXES = ("bench.", "measured.")
 BENCH_STATISTICS = ("minNs", "medianNs", "p99Ns", "maxNs", "meanNs")
 RUN_NAME = re.compile(r"^(\d{4})_(\d{2})_(\d{2})(?:_(\d+))?$")
+# A write into one more allocation unit in turn that takes more than this many times the write into one opens a unit
+UNIT_OPENING_FACTOR = 2
 
 
 class ConversionError(Exception):
@@ -187,10 +189,12 @@ def convert_cycles(fragment: Fragment, record: Record) -> None:
 
 
 def convert_bench(fragment: Fragment, record: Record) -> None:
-    """A benchmark: its statistics among the parameters of the device, as `bench.<op>.<size>.<statistic>`, and the parameters
-    a model takes from the benchmarks of the device so far, as `measured.<parameter>`."""
+    """A benchmark: its statistics among the parameters of the device, as `bench.<op>.<size>.<statistic>`, or
+    `bench.units.<units>.<statistic>` for the allocation units written in turn, and the parameters a model takes from the
+    benchmarks of the device so far, as `measured.<parameter>`."""
     parameters = fragment.measured(record.field("device"))
-    prefix = f"bench.{record.field('op')}.{record.number('size')}"
+    operation = record.field("op")
+    prefix = f"bench.{operation}.{record.number('units' if operation == 'units' else 'size')}"
     parameters[f"{prefix}.n"] = str(record.number("n"))
     for statistic in BENCH_STATISTICS:
         parameters[f"{prefix}.{statistic}"] = str(record.number(statistic))
@@ -198,11 +202,22 @@ def convert_bench(fragment: Fragment, record: Record) -> None:
 
 
 def model_parameters(parameters: dict[str, str]) -> dict[str, str]:
-    """The parameters of a NOR model from the medians of the benchmarks: a program of a page, an erase of a sector, and
-    the rate and the fixed cost of a read, from the smallest and the largest read."""
     medians = {
         key[: -len(".medianNs")]: int(value) for key, value in parameters.items() if key.startswith("bench.") and key.endswith(".medianNs")
     }
+    if parameters.get("kind") == "block":
+        return block_model_parameters(parameters, medians)
+    return nor_model_parameters(parameters, medians)
+
+
+def bench_medians(medians: dict[str, int], operation: str) -> list[tuple[int, int]]:
+    """The medians of the benchmarks of an operation, by their size, or by their units, smallest first."""
+    return sorted((int(key.split(".")[2]), median) for key, median in medians.items() if key.startswith(f"bench.{operation}."))
+
+
+def nor_model_parameters(parameters: dict[str, str], medians: dict[str, int]) -> dict[str, str]:
+    """The parameters of a NOR model from the medians of the benchmarks: a program of a page, an erase of a sector, and
+    the rate and the fixed cost of a read, from the smallest and the largest read."""
     model: dict[str, str] = {}
     page = f"bench.program.{parameters.get('pageSize')}"
     if page in medians:
@@ -210,7 +225,7 @@ def model_parameters(parameters: dict[str, str]) -> dict[str, str]:
     sector = f"bench.erase.{parameters.get('sectorSize')}"
     if sector in medians:
         model["measured.sectorEraseNs"] = str(medians[sector])
-    reads = sorted((int(key.split(".")[2]), median) for key, median in medians.items() if key.startswith("bench.read."))
+    reads = bench_medians(medians, "read")
     if len(reads) >= 2 and reads[-1][1] > reads[0][1]:
         (smallest, smallest_ns), (largest, largest_ns) = reads[0], reads[-1]
         rate = (largest - smallest) * 1_000_000_000 // (largest_ns - smallest_ns)
@@ -218,6 +233,42 @@ def model_parameters(parameters: dict[str, str]) -> dict[str, str]:
             model["measured.readBytesPerSecond"] = str(rate)
             model["measured.readFixedNs"] = str(max(0, smallest_ns - smallest * 1_000_000_000 // rate))
     return model
+
+
+def block_model_parameters(parameters: dict[str, str], medians: dict[str, int]) -> dict[str, str]:
+    """The parameters of a block device model from the medians of the benchmarks: the command and the time per block of a
+    read and of a write, from the fewest and the most blocks; the allocation units the device keeps open and the opening of
+    one, from the writes into units in turn; and a flush, and a discard of one allocation unit."""
+    model: dict[str, str] = {}
+    block_size = int(parameters.get("blockSize", "512"))
+    for operation, per_block in (("read", "blockRead"), ("write", "blockWritten")):
+        requests = [(size // block_size, median) for size, median in bench_medians(medians, operation)]
+        if len(requests) >= 2 and requests[-1][1] > requests[0][1]:
+            (fewest, fewest_ns), (most, most_ns) = requests[0], requests[-1]
+            block_ns = (most_ns - fewest_ns) // (most - fewest)
+            model[f"measured.{per_block}Ns"] = str(block_ns)
+            model[f"measured.{operation}CommandNs"] = str(max(0, fewest_ns - fewest * block_ns))
+    model.update(opening_parameters(dict(bench_medians(medians, "units"))))
+    if f"bench.flush.{block_size}" in medians:
+        model["measured.flushNs"] = str(medians[f"bench.flush.{block_size}"])
+    discard = f"bench.discard.{int(parameters.get('unitBlocks', '0')) * block_size}"
+    if discard in medians:
+        model["measured.discardNs"] = str(medians[discard])
+    return model
+
+
+def opening_parameters(units: dict[int, int]) -> dict[str, str]:
+    """The allocation units that stay open are those below the first number of units written in turn whose write is
+    slower than UNIT_OPENING_FACTOR writes into one unit, and that write opens a unit."""
+    if 1 not in units:
+        return {}
+    opening = next((count for count in sorted(units) if units[count] > UNIT_OPENING_FACTOR * units[1]), None)
+    if opening is None:
+        return {}
+    return {
+        "measured.recentAllocationUnits": str(max(count for count in units if count < opening)),
+        "measured.allocationUnitOpeningNs": str(units[opening] - units[1]),
+    }
 
 
 def convert_cycles_failed(fragment: Fragment, record: Record) -> None:

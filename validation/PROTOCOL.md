@@ -59,26 +59,31 @@ The kinds are described with the commands that print them.
 
 ## Devices
 
-| Command             | Answer                                                                                                      |
-|---------------------|-------------------------------------------------------------------------------------------------------------|
-| `dev.list`          | `OK devices=<device>,...`, the devices that are present, in the order `qspi`, `fmc`, `ramflash`, `ramblock` |
-| `dev.info <device>` | `EVT device` for the device, then `OK`; a device that is not present answers `ERR unsupported`              |
+| Command             | Answer                                                                                                                    |
+|---------------------|---------------------------------------------------------------------------------------------------------------------------|
+| `dev.list`          | `OK devices=<device>,...`, the devices that are present, in the order `qspi`, `fmc`, `sd`, `emmc`, `ramflash`, `ramblock` |
+| `dev.info <device>` | `EVT device` for the device, then `OK`; a device that is not present answers `ERR unsupported`                            |
 
 `qspi` is the first 16 MiB of the QSPI flash on bank 1, present once the firmware has read its SFDP geometry after the reset and aligned its read dummy cycles, which takes milliseconds; `fmc` is the parallel NOR of the STM32H757I-EVAL, present when it answers its identification.
+`sd` is the first 256 MiB of the microSD card of the STM32H757I-EVAL, and `emmc` the first 256 MiB of the eMMC of the STM32H745I-DISCO, with the cache of the eMMC on; each is present when its driver identified the card or the eMMC at the reset, so a card inserted later needs a reset.
 
 ```text
 EVT device id=<number> device=qspi kind=nor sectors=4096 sectorSize=4096 pageSize=256 chip=<JEDEC identifier> clockHz=<clock of the QSPI bus>
 EVT device id=<number> device=fmc kind=nor sectors=128 sectorSize=131072 pageSize=64 chip=<manufacturer><device> clockHz=<kernel clock of the FMC>
+EVT device id=<number> device=sd kind=block blocks=524288 blockSize=512 unitBlocks=<blocks> chip=<identification> clockHz=<clock of the SDMMC bus>
+EVT device id=<number> device=emmc kind=block blocks=524288 blockSize=512 unitBlocks=<blocks> chip=<identification> clockHz=<clock of the SDMMC bus> cache=on
 ```
 
-| Key                                              | Value                                                                                                                       |
-|--------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
-| `kind`                                           | `nor` or `block`                                                                                                            |
-| `sectors`, `sectorSize` or `blocks`, `blockSize` | The geometry of the device                                                                                                  |
-| `pageSize`                                       | The page of NOR flash that the counting of programs takes: the page of the QSPI flash, the write buffer of the parallel NOR |
-| `chip`                                           | The identifier of the chip in hexadecimal: the JEDEC identifier, or the manufacturer and device codes of the parallel NOR   |
-| `clockHz`                                        | The clock of the bus of the device                                                                                          |
-| `memory`                                         | `sdram`, for the RAM devices of F-2                                                                                         |
+| Key                                              | Value                                                                                                                                                                                                                     |
+|--------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `kind`                                           | `nor` or `block`                                                                                                                                                                                                          |
+| `sectors`, `sectorSize` or `blocks`, `blockSize` | The geometry of the device                                                                                                                                                                                                |
+| `pageSize`                                       | The page of NOR flash that the counting of programs takes: the page of the QSPI flash, the write buffer of the parallel NOR                                                                                               |
+| `unitBlocks`                                     | The allocation unit that the counting of a block device takes, in blocks, as `docs/Validation.md` describes                                                                                                               |
+| `chip`                                           | The identifier of the chip in hexadecimal: the JEDEC identifier, the manufacturer and device codes of the parallel NOR, or the manufacturer, the OEM, the product name and the revision from the CID of a card or an eMMC |
+| `clockHz`                                        | The clock of the bus of the device                                                                                                                                                                                        |
+| `memory`                                         | `sdram`, for the RAM devices of F-2                                                                                                                                                                                       |
+| `cache`                                          | `on` or `off`, the cache of the eMMC                                                                                                                                                                                      |
 
 ## Benchmarks of NOR flash
 
@@ -112,6 +117,37 @@ EVT bench id=<number> device=<device> op=<program|erase|read> size=<bytes> n=<co
 | `op`                                            | The benchmark                                                                          |
 | `size`                                          | The bytes of a program or a read, and the size of a sector for an erase                |
 | `minNs`, `medianNs`, `p99Ns`, `maxNs`, `meanNs` | Of the measured requests, with the nearest rank for the median and the 99th percentile |
+
+## Benchmarks of block devices
+
+| Command                                                        | Answer                 |
+|----------------------------------------------------------------|------------------------|
+| `bench.blocks <device> <read\|write> blocks=<count> n=<count>` | `EVT bench`, then `OK` |
+| `bench.units <device> units=<count> n=<count>`                 | `EVT bench`, then `OK` |
+| `bench.flush <device> n=<count>`                               | `EVT bench`, then `OK` |
+| `bench.discard <device> blocks=<count> n=<count>`              | `EVT bench`, then `OK` |
+
+The benchmarks run on `sd` and `emmc`, and measure every request on its own, from the request to its completion:
+
+* `bench.blocks` reads or writes `blocks` consecutive blocks, from 1 to 128, `n` times, from 1 to 1024, at consecutive places from the start of the device, and from the start again where the next would not fit;
+* `bench.units` writes one block into each of the first `units` allocation units in turn, from 1 to 8, for `n` rounds, at the next block of each unit in each round, as flashbench does, at most 1024 writes in all;
+* `bench.flush` writes a block, which it does not measure, and then flushes the device, `n` times;
+* `bench.discard` writes the first block of `blocks` consecutive blocks, which it does not measure, and then discards them, `n` times, at consecutive places.
+
+What they write stays on the device; they do not restore what it held.
+A device that is not present answers `ERR unsupported`, an operation other than `read` or `write` `ERR usage`, a count out of range `ERR range`, a request that does not succeed `ERR failed`, and a benchmark while another runs `ERR busy`.
+A request that does not complete within 8 s answers `ERR timeout`, and the device stays busy until the request completes; the driver of hal-st itself ends a transfer after 1 s and a wait for the device after 5 s, with `ERR failed`.
+A benchmark that does not end within 30 minutes answers `ERR timeout` too.
+
+```text
+EVT bench id=<number> device=<device> op=<read|write|units|flush|discard> size=<bytes> [units=<count>] n=<count> minNs=<ns> medianNs=<ns> p99Ns=<ns> maxNs=<ns> meanNs=<ns>
+```
+
+| Key     | Value                                                                 |
+|---------|-----------------------------------------------------------------------|
+| `size`  | The bytes of a read, a write or a discard, and a block for the others |
+| `units` | The allocation units that `bench.units` writes into                   |
+| `n`     | The measured requests: `units` times the rounds for `bench.units`     |
 
 ## Workloads
 
