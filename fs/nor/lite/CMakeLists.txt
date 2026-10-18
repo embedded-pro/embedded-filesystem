@@ -7,7 +7,6 @@ target_link_libraries(fs.nor_lite PUBLIC
     hal.interfaces
     infra.event
     infra.util
-    services.fsm
 )
 
 target_sources(fs.nor_lite PRIVATE

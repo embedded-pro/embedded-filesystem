@@ -122,11 +122,11 @@ The drivers of hal-st and the cycle counter of EmIL need changes first, made as 
 
 F-1 measures embedded-filesystem at several times the flash of FatFs and littlefs.
 This plan records where the size comes from and the steps that reduce it, measured with Arm GCC 13.2.1 in `MinSizeRel` on the Cortex-M4.
-Step A is done in part, and two spikes measured step C.
+Step A is done, and two spikes measured step C.
 
 ### Where the size comes from
 
-Part of the gap comes from the asynchronous execution: about 1.7 KB of the 19.1 KB of `fs::FatReader`, as the spikes below measured.
+Part of the gap comes from the asynchronous execution: about 1.7 KB on the read path of `fs::FatReader`, as the spikes below measured.
 FatFs waits in `disk_read()` and keeps the progress of a call on the stack, at no cost: `move_window` and `sync_window`, which load and write back one sector, need 116 bytes.
 The same job in `fs::FatLite` needs 1,606 bytes in 36 functions, because every wait needs an object that keeps the state of the operation, a stored `infra::Function` with its invoker and table, and a separate function for the rest of the work.
 Most of the rest is the breadth of the interface and its checks, which every design here keeps, and features that FatFs leaves out.
@@ -137,7 +137,7 @@ Six patterns repeat across both filesystems:
    Its file handle needs 4.7 KB in 89 functions, against about 2 KB in 9 for `f_read`, `f_write`, `f_lseek`, `f_sync` and `f_close`, and its volume 4.9 KB in 76 functions.
 2. Layered pipelines with visitors: a directory is read through a visitor, an assembler and the path walk or the name scan, 4.8 KB in 77 functions against 1.2 KB in 14 for FatFs.
    Every layer keeps its own state, and the same 68-byte entry is copied four times.
-3. A `services::TableStateMachine` per lifecycle costs about 1 KB: 1.1 KB in `fs::FatLite`, and 1.9 KB in `fs::NorLite` for its lifecycle and its leveling.
+3. A `services::TableStateMachine` per lifecycle costs more than an enumeration: replacing them saved 1.4 KB in `fs::FatReader` and `fs::FatLite`, and 2.7 KB in `fs::NorLite` for its lifecycle and its leveling.
 4. Defensive breadth: the handling of media removal costs 0.9 KB, the checks of the boot sector and the geometry 1.5 KB against 0.8 KB for the whole mount of FatFs, and handles check their generation and calls are deferred with `busy`.
    A volume for fixed media would leave out only 130 B of it, because the generation checks of the handles serve unmount as well.
 5. Features that `fatfs/minimal` leaves out: reading long names costs `fs::FatLite` 844 B of flash and 216 B of RAM, which `fs::FatReaderFeatures::longNames` leaves out; converting short names to UTF-8 and validating paths stay.
@@ -156,16 +156,16 @@ Together with a single copy of the directory entry, this saves about 300 B of RA
 
 ### Steps
 
-| Step                                                                                                                                                    | `fs::FatLite`, from 31.2 KB              | Effort           | Confidence                        |
-|---------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|------------------|-----------------------------------|
-| A. Scope switches: names read in 8.3 only, done; no media removal for fixed media, left out at 130 B; an enumerated lifecycle in the lite volumes, open | 30.4 KB with short names only            | done in part     | measured                          |
-| B. One continuation per operation, one directory iterator instead of the visitor chain, one copy of the entry                                           | about 27.5 KB                            | one to two weeks | medium: one part measured         |
-| C. A straight-line core: operations written in sequence on a small cooperative stack per volume, which switches stacks at device calls                  | about 25.5 to 27.5 KB                    | weeks            | low: estimated from the read path |
-| D. NOR only: a simpler format profile, with one kind of index and compaction of the journal instead of checkpoints                                      | `fs::NorLite`, 60.9 KB today, much lower | months           | low                               |
+| Step                                                                                                                                                 | `fs::FatLite`, from 31.2 KB              | Effort           | Confidence                        |
+|------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|------------------|-----------------------------------|
+| A. Scope switches: names read in 8.3 only and an enumerated lifecycle in the lite volumes, done; no media removal for fixed media, left out at 130 B | 29.0 KB                                  | done             | measured                          |
+| B. One continuation per operation, one directory iterator instead of the visitor chain, one copy of the entry                                        | about 26 KB                              | one to two weeks | medium: one part measured         |
+| C. A straight-line core: operations written in sequence on a small cooperative stack per volume, which switches stacks at device calls               | about 24 to 26 KB                        | weeks            | low: estimated from the read path |
+| D. NOR only: a simpler format profile, with one kind of index and compaction of the journal instead of checkpoints                                   | `fs::NorLite`, 58.2 KB today, much lower | months           | low                               |
 
 * No step reaches twice FatFs. B and C remove the plumbing of patterns 1 and 2, but most of what remains is the front end, the handles, the lifecycle and the checks of pattern 4, which both keep.
   C saves up to 2 KB more than B, at the cost of a new execution model, a stack switch in assembly for every target and a stack per volume.
-* C and the enumerated lifecycle of A conflict with two rules of [AGENTS.md](../AGENTS.md), operations as classes with named steps and lifecycles as `services::TableStateMachine`, so the rules are decided first.
+* C conflicts with the rule of [AGENTS.md](../AGENTS.md) that operations are classes with named steps, so the rule is decided first; the rule on lifecycles allows the enumerations of A in the lite volumes.
 * The coverage, the power-cut sweep and the interoperability tests check behaviour, not structure, so they carry over to a rewrite.
 * For NOR, C would remove only the 11 % of plumbing and the split steps; D is the step that reduces its format machinery.
 * Steps A and B were estimated too high, because the estimates counted code that the rest of the volume still needs.
@@ -174,7 +174,7 @@ Together with a single copy of the directory entry, this saves about 300 B of RA
   Each coroutine costs about 200 bytes of fixed code and each suspension point 60 to 80 bytes, as much as the callbacks they replace, and a frame keeps every local variable alive across a wait.
 * A second spike ran the same read path as sequential code on one cooperative stack per volume, with a stack switch in a few lines of assembly on the Cortex-M and `ucontext` for the tests on the host.
   It needs 17,440 bytes of flash and 2,484 bytes of RAM, with a stack of 640 bytes for a deepest call of about 520 bytes, before interrupts that share the stack.
-  Its reading code shrinks from about 4.2 KB to 2.4 KB, but the front end, the handles, the lifecycle and the checks stay as they are, so the image is 3.0 times `fatfs/read-only` instead of 3.3 times.
+  Its reading code shrinks from about 4.2 KB to 2.4 KB, but the front end, the handles, the lifecycle and the checks stay as they are, so its image is 3.0 times `fatfs/read-only`, against 3.3 times for the volume it rewrote.
 * Both spikes are kept, on the branches `spike/coroutines` and `spike/fibers`.
 
 ## Later

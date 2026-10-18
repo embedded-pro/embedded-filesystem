@@ -26,6 +26,8 @@ target_sources(fs.common PRIVATE
     HandlePool.hpp
     IdleTimer.cpp
     IdleTimer.hpp
+    LiteLifecycle.cpp
+    LiteLifecycle.hpp
     LittleEndian.cpp
     LittleEndian.hpp
     OperationQueue.cpp
