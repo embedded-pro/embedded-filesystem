@@ -11,6 +11,6 @@ int main(int argc, char** argv)
     }
 
     std::ofstream output{ argv[1] };
-    output << metrics::DeviceModelsJson(metrics::norBoardDevices);
+    output << metrics::DeviceModelsJson(metrics::norBoardDevices, metrics::blockBoardDevices);
     return output ? 0 : 1;
 }

@@ -156,9 +156,9 @@ EVT bench id=<number> device=<device> op=<read|write|units|flush|discard> size=<
 | `fs.format <device>`                                            | `OK`, or `ERR failed`                                                               |
 | `wl.run <device> <workload> [fill=<percent>] [scale=<divisor>]` | `EVT workload`, `EVT phase` per phase, `EVT window`, `EVT workload.done`, then `OK` |
 
-The workloads run on the NOR volume of `qspi` and of `fmc`, as `docs/Validation.md` describes:
+The workloads run on the NOR volume of `qspi` and of `fmc`, and on the FAT volume of `sd` and of `emmc`, as `docs/Validation.md` describes:
 
-* `fs.format` formats the volume of the device with `fs::NorFileSystem::Format`, which erases the whole device;
+* `fs.format` formats the volume of the device with `fs::NorFileSystem::Format`, which erases the whole device, or with `fs::FatFormatter`, with the data area at an allocation unit, which discards the blocks of the region after its file system;
 * `wl.run` runs `L1`, `L2`, `L3`, `L4`, `L6` or `L7` of `docs/Metrics.md`, formatting the volume first, with the sizes of the files divided by `scale`, from 1 to 1024, 16 by default; `L4` keeps its 200 files;
 * `fill`, from 0 to 99, fills the volume to a level before `L2`, `L3` and `L4`, as the host does; `L7` fills to 10, 50 and 90 % itself, and the other workloads take no fill.
 
@@ -169,24 +169,29 @@ A request that does not complete within its guard, or a call that does not compl
 A workload that does not end within 4 hours, and a format within 30 minutes, answers `ERR timeout` too.
 
 ```text
-EVT workload id=<number> device=<device> subject=embedded-filesystem/nor workload=<workload> fill=<percent> scale=<divisor> ramBytes=<bytes>
+EVT workload id=<number> device=<device> subject=<embedded-filesystem/nor|embedded-filesystem/fat> workload=<workload> fill=<percent> scale=<divisor> ramBytes=<bytes>
 EVT phase id=<number> device=<device> subject=<subject> workload=<workload> phase=<phase> fill=<percent> ramBytes=<bytes> elapsedNs=<ns> <counts> <operations>
 EVT window id=<number> device=<device> subject=<subject> workload=L2 fill=<percent> log=<first|second> appends=<count> <counts>
 EVT workload.failed id=<number> device=<device> subject=<subject> workload=<workload> fill=<percent> phase=<phase> op=<operation> result=<result>
 EVT workload.done id=<number> device=<device> subject=<subject> workload=<workload> fill=<percent>
 ```
 
-`<counts>` are the counts of the counting device in the phase or the window, `readRequests`, `bytesRead`, `readNs`, `programRequests`, `bytesProgrammed`, `pagesProgrammed`, `programNs`, `eraseRequests`, `sectorsErased` and `eraseNs`, and those of the volume, from `Counters()` of the NOR volume across mounts, `allocatedSectors`, `erasedBlocks`, `checkpoints` and `movedBlocks`.
+`<counts>` are the counts of the counting device in the phase or the window:
+
+* of a NOR device, `readRequests`, `bytesRead`, `readNs`, `programRequests`, `bytesProgrammed`, `pagesProgrammed`, `programNs`, `eraseRequests`, `sectorsErased` and `eraseNs`, and those of the volume, from `Counters()` of the NOR volume across mounts, `allocatedSectors`, `erasedBlocks`, `checkpoints` and `movedBlocks`;
+* of a block device, `readRequests`, `blocksRead`, `readNs`, `writeRequests`, `blocksWritten`, `writeNs`, `unitsRecent1` to `unitsRecent4` and `unitsNotRecent`, `alignedBlocks`, `distinctUnits`, `flushRequests`, `flushNs`, `discardRequests`, `blocksDiscarded`, `discardNs` and `failedRequests`; the FAT volume has no counts of its own.
 `<operations>` are, for every operation called in the phase, from `format`, `mount`, `unmount`, `open`, `read`, `write`, `seek`, `sync`, `close`, `expectSize`, `remove`, `makeDirectory`, `list`, `usage` and `idle`, the keys `<operation>.calls`, `<operation>.userBytes`, `<operation>.latencyNs`, `<operation>.maxNs` and `<operation>.histogram`.
 
-| Key                     | Value                                                                                                                                                                      |
-|-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `phase`                 | The phase as the host names it, with commas for spaces, such as `L1,65536,64` or `L2,second,log`; the volume is filled in the phase `fill`                                 |
-| `elapsedNs`             | From the start of the phase to its end                                                                                                                                     |
-| `<operation>.calls`     | The calls of the operation, with the bytes they wrote or read in `userBytes`, the sum of their latencies in `latencyNs` and the longest in `maxNs`                         |
-| `<operation>.histogram` | The latencies as pairs of a bucket and a count: bucket `b` from 4 holds durations from `(4 + b % 4) << (b / 4 - 1)` ns, four per octave, and buckets 0 to 3 hold 0 to 3 ns |
-| `log`, `appends`        | The window of W-2, at the end of the first log or from the first checkpoint once the second holds 4 KiB, until the fourth checkpoint, and the appends in it                |
-| `op`, `result`          | The operation of the first call that failed and what it returned, or `timeout`                                                                                             |
+| Key                                                | Value                                                                                                                                                                                                                                                   |
+|----------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `phase`                                            | The phase as the host names it, with commas for spaces, such as `L1,65536,64` or `L2,second,log`; the volume is filled in the phase `fill`                                                                                                              |
+| `elapsedNs`                                        | From the start of the phase to its end                                                                                                                                                                                                                  |
+| `<operation>.calls`                                | The calls of the operation, with the bytes they wrote or read in `userBytes`, the sum of their latencies in `latencyNs` and the longest in `maxNs`                                                                                                      |
+| `<operation>.histogram`                            | The latencies as pairs of a bucket and a count: bucket `b` from 4 holds durations from `(4 + b % 4) << (b / 4 - 1)` ns, four per octave, and buckets 0 to 3 hold 0 to 3 ns                                                                              |
+| `log`, `appends`                                   | The window of W-2 and the appends in it: on NOR, at the end of the first log or from the first checkpoint once the second holds 4 KiB, until the fourth checkpoint; on FAT, the last 64 appends of the first log, and the 64 from 4 KiB into the second |
+| `unitsRecent1` to `unitsRecent4`, `unitsNotRecent` | The allocation units that writes spanned, by their place among the four most recently written units, the most recent first, or as none of them                                                                                                          |
+| `alignedBlocks`, `distinctUnits`                   | The written blocks that start an allocation unit or follow the block written before them, and the allocation units written in the phase                                                                                                                 |
+| `op`, `result`                                     | The operation of the first call that failed and what it returned, or `timeout`                                                                                                                                                                          |
 
 ## Processor cycles
 

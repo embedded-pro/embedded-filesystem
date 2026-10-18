@@ -2,10 +2,13 @@
 #include "infra/timer/test_helper/ClockFixture.hpp"
 #include "services/hil/HilResponse.hpp"
 #include "services/tracer/Tracer.hpp"
+#include "validation/firmware/devices/CountingBlockDevice.hpp"
 #include "validation/firmware/devices/CountingFlash.hpp"
+#include "validation/firmware/devices/RamBlockDevice.hpp"
 #include "validation/firmware/devices/RamFlash.hpp"
 #include "validation/firmware/timing/test_doubles/FakeCycleCounter.hpp"
 #include "validation/firmware/workload/DataLogger.hpp"
+#include "validation/firmware/workload/FatWorkloadVolume.hpp"
 #include "validation/firmware/workload/MountScaling.hpp"
 #include "validation/firmware/workload/NorWorkloadVolume.hpp"
 #include "validation/firmware/workload/RandomOverwrite.hpp"
@@ -32,6 +35,23 @@ namespace
     {
         static std::array<uint8_t, sectors * sectorSize> memory;
         return memory;
+    }
+
+    constexpr uint32_t fatBlocks = 16384;
+    constexpr uint32_t fatUnitBlocks = 2048;
+
+    std::array<uint8_t, fatBlocks * validation::RamBlockDevice::blockSize>& FatMemory()
+    {
+        static std::array<uint8_t, fatBlocks * validation::RamBlockDevice::blockSize> memory;
+        return memory;
+    }
+
+    uint32_t LittleEndian(infra::ConstByteRange bytes)
+    {
+        uint32_t value = 0;
+        for (auto byte = bytes.end(); byte != bytes.begin();)
+            value = value << 8 | *--byte;
+        return value;
     }
 
     // The keys of the record of a kind whose key has a value, joined from its lines
@@ -209,4 +229,86 @@ TEST_F(WorkloadsTest, l7_mounts_the_volume_at_three_fill_levels)
     EXPECT_THAT(Phase(output, "L7,prepare,10"), testing::HasSubstr(" format.calls=1 "));
     EXPECT_THAT(Phase(output, "L7,50"), testing::HasSubstr(" mount.calls=1 "));
     EXPECT_THAT(Phase(output, "L7,cleanup,90"), testing::HasSubstr(" unmount.calls=1 "));
+}
+
+namespace
+{
+    class FatWorkloadsTest
+        : public testing::Test
+        , public infra::ClockFixture
+    {
+    public:
+        std::string Run(validation::Workload& workload, uint32_t scaleDivisor, uint32_t fill = 0)
+        {
+            validation::WorkloadParameters parameters;
+            parameters.scaleDivisor = scaleDivisor;
+            parameters.fillPercent = fill;
+            runner.Begin(volume, counting, { "ramblock", volume.Subject(), workload.Name(), fill, scaleDivisor, volume.RamBytes(), validation::DeviceKind::block }, [] {});
+            finished = false;
+            workload.Run(parameters, [this]
+                {
+                    runner.End();
+                    finished = true;
+                });
+
+            for (int minute = 0; minute != 600 && !finished; ++minute)
+                ForwardTime(1min);
+
+            EXPECT_TRUE(finished);
+            EXPECT_FALSE(runner.Failed());
+            return { stream.Storage().begin(), stream.Storage().end() };
+        }
+
+        infra::StringOutputStream::WithStorage<128 * 1024> stream;
+        services::TracerToStream tracer{ stream };
+        services::HilResponse response{ tracer };
+        validation::RamBlockDevice ram{ infra::MakeRange(FatMemory()) };
+        validation::FakeCycleCounter cycles;
+        validation::CountingBlockDevice counting{ ram, fatUnitBlocks, cycles, validation::FakeCycleCounter::clockHz, 1s };
+        validation::FatWorkloadVolume volume{ counting, fatUnitBlocks };
+        validation::ResultLines results{ response };
+        validation::WorkloadRunner runner{ results, cycles, validation::FakeCycleCounter::clockHz };
+        validation::WorkloadTools tools{ runner };
+        bool finished{ false };
+    };
+}
+
+TEST_F(FatWorkloadsTest, the_volume_is_the_fat_subject_with_the_ram_of_the_host_and_without_counters)
+{
+    EXPECT_EQ("embedded-filesystem/fat", volume.Subject());
+    EXPECT_EQ(sizeof(fs::FatFileSystem::WithStorage<1, 8>), volume.RamBytes());
+    EXPECT_EQ(std::nullopt, volume.Counters());
+}
+
+TEST_F(FatWorkloadsTest, the_volume_formats_with_its_data_area_at_an_allocation_unit)
+{
+    std::optional<fs::Result> formatted;
+    volume.Format([&formatted](fs::Result result)
+        {
+            formatted = result;
+        });
+    ExecuteAllActions();
+
+    ASSERT_EQ(fs::Result::success, formatted);
+    const auto& memory = FatMemory();
+    auto partition = LittleEndian(infra::MakeRange(memory.data() + 454, memory.data() + 458));
+    const auto* boot = memory.data() + partition * validation::RamBlockDevice::blockSize;
+    auto reserved = LittleEndian(infra::MakeRange(boot + 14, boot + 16));
+    auto fats = boot[16];
+    auto rootSectors = LittleEndian(infra::MakeRange(boot + 17, boot + 19)) * 32 / validation::RamBlockDevice::blockSize;
+    auto fatSectors = LittleEndian(infra::MakeRange(boot + 22, boot + 24));
+    EXPECT_EQ(0, (partition + reserved + fats * fatSectors + rootSectors) % fatUnitBlocks);
+}
+
+TEST_F(FatWorkloadsTest, l2_takes_the_windows_of_a_volume_without_checkpoints_by_appends_and_prints_the_block_counts)
+{
+    validation::DataLogger workload{ tools };
+
+    auto output = Run(workload, 256, 10);
+
+    EXPECT_THAT(Record(output, "phase", "phase", "L2"), testing::HasSubstr(" write.calls=256 write.userBytes=16384 "));
+    EXPECT_THAT(Record(output, "phase", "phase", "L2"), testing::HasSubstr(" blocksWritten="));
+    EXPECT_THAT(Record(output, "phase", "phase", "L2"), testing::Not(testing::HasSubstr(" allocatedSectors=")));
+    EXPECT_THAT(Record(output, "window", "log", "first"), testing::HasSubstr(" fill=10 log=first appends=64 readRequests="));
+    EXPECT_THAT(Record(output, "window", "log", "second"), testing::HasSubstr(" fill=10 log=second appends=64 readRequests="));
 }

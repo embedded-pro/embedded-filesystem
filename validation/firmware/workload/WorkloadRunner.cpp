@@ -28,16 +28,16 @@ namespace validation
             });
     }
 
-    void WorkloadRunner::Begin(WorkloadVolume& volume, CountingFlash& flash, const WorkloadContext& context, const infra::Function<void()>& onInterrupted)
+    void WorkloadRunner::Begin(WorkloadVolume& volume, CountedDevice& device, const WorkloadContext& context, const infra::Function<void()>& onInterrupted)
     {
         really_assert(state == State::idle);
         this->volume = &volume;
-        this->flash = &flash;
+        this->device = &device;
         this->onInterrupted = onInterrupted;
         state = State::running;
         earlierMounts = VolumeCounts{};
-        report.Start(context, flash.Counts(), VolumeNow());
-        flash.OnTimeout([this]
+        report.Start(context, device.Snapshot(), VolumeNow());
+        device.OnTimeout([this]
             {
                 Interrupt();
             });
@@ -45,14 +45,15 @@ namespace validation
 
     void WorkloadRunner::End()
     {
-        report.End(flash->Counts(), VolumeNow());
-        flash->OnTimeout(nullptr);
+        report.End(device->Snapshot(), VolumeNow());
+        device->OnTimeout(nullptr);
         state = State::idle;
     }
 
-    void WorkloadRunner::SetPhase(infra::BoundedConstString name, PhaseWindow window)
+    void WorkloadRunner::SetPhase(infra::BoundedConstString name, PhaseWindow window, uint32_t windowFrom)
     {
-        report.StartPhase(name, window, flash->Counts(), VolumeNow());
+        device->StartPhase();
+        report.StartPhase(name, window, windowFrom, device->Snapshot(), VolumeNow());
     }
 
     void WorkloadRunner::Format(const Done& onDone)
@@ -252,7 +253,7 @@ namespace validation
 
     void WorkloadRunner::StartCall(WorkloadOperation operation, uint64_t userBytes, bool limited)
     {
-        call = { operation, userBytes, FileSize(), flash->Counts(), VolumeNow() };
+        call = { operation, userBytes, FileSize(), device->Snapshot(), VolumeNow() };
         if (limited)
             callTimer.Start(callLimit, [this]
                 {
@@ -265,7 +266,7 @@ namespace validation
     {
         auto latencyNs = callStopwatch.ElapsedNs();
         callTimer.Cancel();
-        report.Add(call, { result, userBytes, latencyNs, flash->Counts(), VolumeNow() });
+        report.Add(call, { result, userBytes, latencyNs, device->Snapshot(), VolumeNow() });
     }
 
     void WorkloadRunner::Completed(fs::Result result)

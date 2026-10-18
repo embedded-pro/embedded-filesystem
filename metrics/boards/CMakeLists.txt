@@ -1,6 +1,7 @@
 add_library(metrics.boards STATIC)
 
 target_link_libraries(metrics.boards PUBLIC
+    metrics.fat
     metrics.nor
 )
 

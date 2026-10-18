@@ -155,7 +155,8 @@ class Fragment:
         """The metrics of the workloads, once every record of the run is read."""
         for (device, subject), runs in self.workloads.items():
             model = self.models.get(f"{self.board}/{device}", {})
-            for entry in workload_results(DeviceRuns(device, subject, runs, model)):
+            parameters = self.devices.get(f"{self.board}/{device}", {})
+            for entry in workload_results(DeviceRuns(device, subject, runs, model, parameters)):
                 self.result(entry)
 
     def discard(self, matches: Callable[[dict[str, Any]], bool]) -> None:

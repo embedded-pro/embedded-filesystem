@@ -1,4 +1,4 @@
-"""The block devices of the board and their benchmarks. Scenarios: features/block.feature."""
+"""The block devices of the board, their benchmarks and the workloads on them. Scenarios: features/block.feature."""
 
 from __future__ import annotations
 

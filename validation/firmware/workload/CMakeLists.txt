@@ -5,6 +5,7 @@ target_include_directories(validation.workload PUBLIC
 )
 
 target_link_libraries(validation.workload PUBLIC
+    fs.fat
     fs.interfaces
     fs.nor
     infra.timer
@@ -22,6 +23,7 @@ target_sources(validation.workload PRIVATE
     CountRecords.hpp
     DataLogger.cpp
     DataLogger.hpp
+    FatWorkloadVolume.hpp
     FileWriter.cpp
     FileWriter.hpp
     IdleWait.cpp

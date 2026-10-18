@@ -4,42 +4,13 @@
 #include "hal/interfaces/Flash.hpp"
 #include "infra/timer/Timer.hpp"
 #include "infra/util/AutoResetFunction.hpp"
+#include "validation/firmware/devices/CountedDevice.hpp"
 #include "validation/firmware/devices/RequestMeter.hpp"
 #include "validation/firmware/timing/CycleCounter.hpp"
 #include <cstdint>
 
 namespace validation
 {
-    struct FlashCounts
-    {
-        uint64_t readRequests{};
-        uint64_t bytesRead{};
-        uint64_t readNs{};
-        uint64_t programRequests{};
-        uint64_t bytesProgrammed{};
-        uint64_t pagesProgrammed{};
-        uint64_t programNs{};
-        uint64_t eraseRequests{};
-        uint64_t sectorsErased{};
-        uint64_t eraseNs{};
-
-        bool operator==(const FlashCounts& other) const = default;
-
-        friend FlashCounts operator-(const FlashCounts& later, const FlashCounts& earlier)
-        {
-            return { later.readRequests - earlier.readRequests, later.bytesRead - earlier.bytesRead, later.readNs - earlier.readNs,
-                later.programRequests - earlier.programRequests, later.bytesProgrammed - earlier.bytesProgrammed, later.pagesProgrammed - earlier.pagesProgrammed, later.programNs - earlier.programNs,
-                later.eraseRequests - earlier.eraseRequests, later.sectorsErased - earlier.sectorsErased, later.eraseNs - earlier.eraseNs };
-        }
-
-        friend FlashCounts operator+(const FlashCounts& left, const FlashCounts& right)
-        {
-            return { left.readRequests + right.readRequests, left.bytesRead + right.bytesRead, left.readNs + right.readNs,
-                left.programRequests + right.programRequests, left.bytesProgrammed + right.bytesProgrammed, left.pagesProgrammed + right.pagesProgrammed, left.programNs + right.programNs,
-                left.eraseRequests + right.eraseRequests, left.sectorsErased + right.sectorsErased, left.eraseNs + right.eraseNs };
-        }
-    };
-
     struct FlashGuard
     {
         infra::Duration read;
@@ -49,6 +20,7 @@ namespace validation
 
     class CountingFlash
         : public hal::Flash
+        , public CountedDevice
     {
     public:
         CountingFlash(hal::Flash& flash, uint32_t pageSize, const CycleCounter& cycles, uint32_t clockHz, const FlashGuard& guard);
@@ -65,14 +37,16 @@ namespace validation
         void ReadBuffer(infra::ByteRange buffer, uint32_t address, infra::Function<void()> onDone) override;
         void EraseSectors(uint32_t beginIndex, uint32_t endIndex, infra::Function<void()> onDone) override;
 
-        void OnTimeout(const infra::Function<void()>& onTimeout);
+        DeviceCounts Snapshot() const override;
+        void StartPhase() override;
+        void OnTimeout(const infra::Function<void()>& onTimeout) override;
         RequestMeter& Meter();
 
         uint32_t PageSize() const;
         const FlashCounts& Counts() const;
         uint32_t LastCycles() const;
         bool Busy() const;
-        bool InUse() const;
+        bool InUse() const override;
 
     private:
         uint32_t PagesSpanned(uint32_t address, std::size_t size) const;

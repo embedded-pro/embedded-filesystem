@@ -4,6 +4,7 @@
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/timer/Timer.hpp"
 #include "infra/util/AutoResetFunction.hpp"
+#include "validation/firmware/devices/CountedDevice.hpp"
 #include "validation/firmware/devices/RequestMeter.hpp"
 #include "validation/firmware/timing/CycleCounter.hpp"
 #include <array>
@@ -13,48 +14,12 @@
 
 namespace validation
 {
-    struct BlockCounts
-    {
-        static constexpr std::size_t recentUnits = 4;
-
-        uint64_t readRequests{};
-        uint64_t blocksRead{};
-        uint64_t readNs{};
-        uint64_t writeRequests{};
-        uint64_t blocksWritten{};
-        uint64_t writeNs{};
-        std::array<uint64_t, recentUnits> unitsByRecency{};
-        uint64_t unitsNotRecent{};
-        uint64_t alignedBlocks{};
-        uint64_t distinctUnits{};
-        uint64_t flushRequests{};
-        uint64_t flushNs{};
-        uint64_t discardRequests{};
-        uint64_t blocksDiscarded{};
-        uint64_t discardNs{};
-        uint64_t failedRequests{};
-
-        bool operator==(const BlockCounts& other) const = default;
-
-        friend BlockCounts operator-(const BlockCounts& later, const BlockCounts& earlier)
-        {
-            return Combine(later, earlier, -1);
-        }
-
-        friend BlockCounts operator+(const BlockCounts& left, const BlockCounts& right)
-        {
-            return Combine(left, right, 1);
-        }
-
-    private:
-        static BlockCounts Combine(const BlockCounts& left, const BlockCounts& right, int sign);
-    };
-
     // Counts the requests of a block device as metrics::MeteredBlockDevice does on the host, and measures them: the
     // allocation units that writes span are counted by their place among the four most recently written ones, so that the
     // openings of a model that keeps fewer of them open follow from the counts
     class CountingBlockDevice
         : public hal::BlockDevice
+        , public CountedDevice
     {
     public:
         static constexpr std::size_t maximumUnits = 4096;
@@ -71,14 +36,16 @@ namespace validation
         void EraseBlocks(uint32_t beginBlock, uint32_t endBlock, const infra::Function<void(Result)>& onDone) override;
         void Flush(const infra::Function<void(Result)>& onDone) override;
 
-        void OnTimeout(const infra::Function<void()>& onTimeout);
+        DeviceCounts Snapshot() const override;
+        void StartPhase() override;
+        void OnTimeout(const infra::Function<void()>& onTimeout) override;
         RequestMeter& Meter();
 
         uint32_t UnitBlocks() const;
         const BlockCounts& Counts() const;
         uint32_t LastCycles() const;
         bool Busy() const;
-        bool InUse() const;
+        bool InUse() const override;
 
     private:
         uint32_t Blocks(infra::ConstByteRange buffer) const;

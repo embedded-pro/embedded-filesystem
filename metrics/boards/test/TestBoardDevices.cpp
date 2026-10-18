@@ -1,4 +1,5 @@
 #include "metrics/boards/BoardDevices.hpp"
+#include "metrics/fat/FatTargets.hpp"
 #include "metrics/nor/NorConfigurations.hpp"
 #include "metrics/nor/NorTargets.hpp"
 #include "gmock/gmock.h"
@@ -56,4 +57,36 @@ TEST(BoardDevicesTest, devices_of_the_boards_take_the_geometry_of_their_model)
         EXPECT_EQ(device.model->programUnit, device.config.programUnit) << device.name;
         EXPECT_EQ(device.model->pageSize, device.config.pageSize) << device.name;
     }
+}
+
+TEST(BoardDevicesTest, json_gives_a_block_device_its_model_and_the_w6_bound_of_fat)
+{
+    std::array<metrics::BlockBoardDevice, 1> devices{ { { "board/card", &metrics::sdCard256m } } };
+    metrics::FatTargets targets{ metrics::sdCard256m };
+
+    auto json = metrics::DeviceModelsJson({}, devices);
+
+    std::string expected = "{\n  \"board/card\": { \"model\": \"sd-card-256m\"";
+    for (const auto& [key, value] : metrics::Parameters(metrics::sdCard256m))
+        expected += ", \"" + key + "\": \"" + value + "\"";
+    EXPECT_THAT(json, testing::StartsWith(expected + ", \"w6BoundMs\": \""));
+    std::string_view key{ "\"w6BoundMs\": \"" };
+    auto start = json.find(key) + key.size();
+    EXPECT_DOUBLE_EQ(targets.CommitMilliseconds(), std::stod(json.substr(start, json.find('"', start) - start)));
+}
+
+TEST(BoardDevicesTest, json_lists_the_block_devices_after_the_nor_devices)
+{
+    std::array<metrics::NorBoardDevice, 1> norDevices{ { { "a/flash", &metrics::norQspi1m, metrics::norQspi1mConfig } } };
+    std::array<metrics::BlockBoardDevice, 1> blockDevices{ { { "a/card", &metrics::sdCard256m } } };
+
+    auto json = metrics::DeviceModelsJson(norDevices, blockDevices);
+
+    EXPECT_THAT(json, testing::HasSubstr(" },\n  \"a/card\": { "));
+}
+
+TEST(BoardDevicesTest, block_devices_of_the_boards_are_regions_of_256_mib_with_the_geometry_of_their_model)
+{
+    for (const auto& device : metrics::blockBoardDevices)
+        EXPECT_EQ(256ull * 1024 * 1024, uint64_t{ device.model->numberOfBlocks } * device.model->blockSize) << device.name;
 }

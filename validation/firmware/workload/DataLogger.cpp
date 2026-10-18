@@ -31,7 +31,7 @@ namespace validation
 
     void DataLogger::FirstLog()
     {
-        tools.runner.SetPhase("L2", PhaseWindow::firstLog);
+        tools.runner.SetPhase("L2", PhaseWindow::firstLog, size - AppendsFrom::appends * LogAppender::appendSize);
         appender.Append("/log", 200, size, [this]
             {
                 SecondLog();
@@ -40,7 +40,7 @@ namespace validation
 
     void DataLogger::SecondLog()
     {
-        tools.runner.SetPhase("L2,second,log", PhaseWindow::secondLog);
+        tools.runner.SetPhase("L2,second,log", PhaseWindow::secondLog, WorkloadReport::smallLogSize);
         appender.Append("/log2", 201, secondSize, [this]
             {
                 onDone();

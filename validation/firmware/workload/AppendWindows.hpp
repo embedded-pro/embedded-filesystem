@@ -1,7 +1,7 @@
 #ifndef VALIDATION_FIRMWARE_WORKLOAD_APPEND_WINDOWS_HPP
 #define VALIDATION_FIRMWARE_WORKLOAD_APPEND_WINDOWS_HPP
 
-#include "validation/firmware/devices/CountingFlash.hpp"
+#include "validation/firmware/devices/DeviceCounts.hpp"
 #include "validation/firmware/workload/WorkloadOperation.hpp"
 #include "validation/firmware/workload/WorkloadVolume.hpp"
 #include <array>
@@ -15,14 +15,14 @@ namespace validation
     {
         WorkloadOperation operation;
         uint32_t fileSizeBefore;
-        FlashCounts device;
+        DeviceCounts device;
         VolumeCounts volume;
     };
 
     struct WindowTotals
     {
         uint32_t appends{ 0 };
-        FlashCounts device;
+        DeviceCounts device;
         VolumeCounts volume;
 
         void Add(const AppendCall& call);
@@ -88,6 +88,30 @@ namespace validation
         State state{ State::waitingForSize };
         WindowTotals totals;
         uint64_t checkpoints{ 0 };
+    };
+
+    // The appends from the first write once the file holds a size, with their syncs and idle periods, until the write after
+    // the last of them, as metrics::MeanAppendDeviceTime selects them on the host for a volume without checkpoints
+    class AppendsFrom
+    {
+    public:
+        static constexpr uint32_t appends = 64;
+
+        void Start(uint32_t fileSize);
+        void Add(const AppendCall& call);
+        std::optional<WindowTotals> Window() const;
+
+    private:
+        enum class State : uint8_t
+        {
+            waitingForSize,
+            counting,
+            done
+        };
+
+        uint32_t fileSize{ 0 };
+        State state{ State::waitingForSize };
+        WindowTotals totals;
     };
 }
 

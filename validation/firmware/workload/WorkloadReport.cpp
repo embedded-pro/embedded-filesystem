@@ -9,13 +9,16 @@ namespace validation
         , phaseStopwatch(cycles, clockHz)
     {}
 
-    void WorkloadReport::Start(const WorkloadContext& context, const FlashCounts& device, const std::optional<VolumeCounts>& volume)
+    void WorkloadReport::Start(const WorkloadContext& context, const DeviceCounts& device, const std::optional<VolumeCounts>& volume)
     {
         this->context = context;
         failure.reset();
         window = PhaseWindow::none;
+        checkpointed = volume.has_value();
         firstLog.Clear();
         secondLog.Clear();
+        firstAppends.Start(0);
+        secondAppends.Start(0);
         phase.Start("", device, volume);
 
         auto record = results.Record("workload");
@@ -24,10 +27,14 @@ namespace validation
             .Add("ramBytes", context.ramBytes);
     }
 
-    void WorkloadReport::StartPhase(infra::BoundedConstString name, PhaseWindow window, const FlashCounts& device, const std::optional<VolumeCounts>& volume)
+    void WorkloadReport::StartPhase(infra::BoundedConstString name, PhaseWindow window, uint32_t windowFrom, const DeviceCounts& device, const std::optional<VolumeCounts>& volume)
     {
         PrintPhase(device, volume);
         this->window = window;
+        if (window == PhaseWindow::firstLog)
+            firstAppends.Start(windowFrom);
+        else if (window == PhaseWindow::secondLog)
+            secondAppends.Start(windowFrom);
         phase.Start(name, device, volume);
         phaseStopwatch.Start();
     }
@@ -45,11 +52,11 @@ namespace validation
         PrintFailure();
     }
 
-    void WorkloadReport::End(const FlashCounts& device, const std::optional<VolumeCounts>& volume)
+    void WorkloadReport::End(const DeviceCounts& device, const std::optional<VolumeCounts>& volume)
     {
         PrintPhase(device, volume);
-        PrintWindow("first", firstLog.Window());
-        PrintWindow("second", secondLog.Window());
+        PrintWindow("first", checkpointed ? firstLog.Window() : firstAppends.Window());
+        PrintWindow("second", checkpointed ? secondLog.Window() : secondAppends.Window());
         PrintFailure();
 
         auto record = results.Record("workload.done");
@@ -61,16 +68,21 @@ namespace validation
         return failure.has_value();
     }
 
+    // A volume with checkpoints takes its windows by checkpoint periods, and one without by appends, as on the host
     void WorkloadReport::AddToWindow(const CallStart& start, const CallEnd& end)
     {
-        if (window == PhaseWindow::none || !IsPartOfAppend(start.operation) || !start.volume || !end.volume)
+        if (window == PhaseWindow::none || !IsPartOfAppend(start.operation))
             return;
 
-        AppendCall append{ start.operation, start.fileSizeBefore, end.device - start.device, *end.volume - *start.volume };
-        if (window == PhaseWindow::firstLog)
+        AppendCall append{ start.operation, start.fileSizeBefore, end.device - start.device, end.volume.value_or(VolumeCounts{}) - start.volume.value_or(VolumeCounts{}) };
+        if (checkpointed && window == PhaseWindow::firstLog)
             firstLog.Add(append);
-        else
+        else if (checkpointed)
             secondLog.Add(append);
+        else if (window == PhaseWindow::firstLog)
+            firstAppends.Add(append);
+        else
+            secondAppends.Add(append);
     }
 
     void WorkloadReport::Check(WorkloadOperation operation, fs::Result result)
@@ -91,7 +103,7 @@ namespace validation
         return *failure;
     }
 
-    void WorkloadReport::PrintPhase(const FlashCounts& device, const std::optional<VolumeCounts>& volume)
+    void WorkloadReport::PrintPhase(const DeviceCounts& device, const std::optional<VolumeCounts>& volume)
     {
         if (!phase.Name().empty())
             phase.Print(results, context, { phaseStopwatch.ElapsedNs(), device, volume });
@@ -106,8 +118,9 @@ namespace validation
         AddRun(record);
         record.Add("log", log)
             .Add("appends", totals->appends);
-        AddCounts(record, totals->device);
-        AddCounts(record, totals->volume);
+        AddCounts(record, totals->device, context.kind);
+        if (checkpointed)
+            AddCounts(record, totals->volume);
     }
 
     void WorkloadReport::PrintFailure() const

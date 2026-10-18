@@ -4,7 +4,7 @@
 
 namespace validation
 {
-    void PhaseTotals::Start(infra::BoundedConstString name, const FlashCounts& device, const std::optional<VolumeCounts>& volume)
+    void PhaseTotals::Start(infra::BoundedConstString name, const DeviceCounts& device, const std::optional<VolumeCounts>& volume)
     {
         this->name = name;
         deviceAtStart = device;
@@ -43,7 +43,7 @@ namespace validation
             .Add("fill", context.fill)
             .Add("ramBytes", context.ramBytes)
             .Add("elapsedNs", end.elapsedNs);
-        AddCounts(record, end.device - deviceAtStart);
+        AddCounts(record, end.device - deviceAtStart, context.kind);
         if (end.volume && volumeAtStart)
             AddCounts(record, *end.volume - *volumeAtStart);
 

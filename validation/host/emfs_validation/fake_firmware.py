@@ -7,6 +7,8 @@ client run without a board (`--fake`).
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from emfs_validation.board import Board
 
 CTRL_C = 0x03
@@ -43,6 +45,7 @@ DEFAULT_SCALE = 16
 MAXIMUM_SCALE = 1024
 MAXIMUM_FILL = 99
 NOR_RAM_BYTES = 17764
+FAT_RAM_BYTES = 7748
 RAM_DEVICES = {
     "ramflash": "kind=nor sectors=1024 sectorSize=4096 memory=sdram",
     "ramblock": "kind=block blocks=4096 blockSize=512 memory=sdram",
@@ -286,10 +289,10 @@ class FakeFirmware:
     def _format(self, arguments: list[str]) -> str:
         if len(arguments) != 1 or "=" in arguments[0]:
             return "ERR usage"
-        return "OK" if self._nor_present(arguments[0]) else "ERR unsupported"
+        return "OK" if self._volume_present(arguments[0]) else "ERR unsupported"
 
-    def _nor_present(self, device: str) -> bool:
-        return device in NOR_DEVICES and device in self.board.devices
+    def _volume_present(self, device: str) -> bool:
+        return (device in NOR_DEVICES or device in BLOCK_DEVICES) and device in self.board.devices
 
     def _workload(self, arguments: list[str]) -> str:
         positional = [argument for argument in arguments if "=" not in argument]
@@ -306,17 +309,23 @@ class FakeFirmware:
         if fill > MAXIMUM_FILL or not 1 <= scale <= MAXIMUM_SCALE:
             return "ERR range"
         device, workload = positional
-        if not self._nor_present(device) or workload not in WORKLOADS:
+        if not self._volume_present(device) or workload not in WORKLOADS:
             return "ERR unsupported"
         if fill != 0 and workload not in FILLING_WORKLOADS:
             return "ERR range"
-        context = f"device={device} subject=embedded-filesystem/nor workload={workload} fill={fill}"
-        self._record("workload", f"{context} scale={scale} ramBytes={NOR_RAM_BYTES}")
-        for phase, counts in fake_phases(workload, fill, scale):
-            self._record("phase", f"{context} phase={phase} ramBytes={NOR_RAM_BYTES} {counts}")
+        block = device in BLOCK_DEVICES
+        subject, ram_bytes, counts = (
+            ("embedded-filesystem/fat", FAT_RAM_BYTES, fake_block_counts)
+            if block
+            else ("embedded-filesystem/nor", NOR_RAM_BYTES, fake_counts)
+        )
+        context = f"device={device} subject={subject} workload={workload} fill={fill}"
+        self._record("workload", f"{context} scale={scale} ramBytes={ram_bytes}")
+        for phase, phase_counts in fake_phases(workload, fill, scale, counts):
+            self._record("phase", f"{context} phase={phase} ramBytes={ram_bytes} {phase_counts}")
         if workload == "L2":
-            for log, program_ns in (("first", 8000000), ("second", 7600000)):
-                self._record("window", f"{context} log={log} appends=4 programNs={program_ns} eraseNs=0 allocatedSectors=0 checkpoints=4")
+            for log, window in fake_windows(block):
+                self._record("window", f"{context} log={log} {window}")
         self._record("workload.done", context)
         return "OK"
 
@@ -366,6 +375,9 @@ def fake_calls(operation: str, calls: int, user_bytes: int, latency_ns: int) -> 
     )
 
 
+Counts = Callable[..., str]
+
+
 def fake_counts(read_bytes: int = 0, programmed: int = 0, erased: int = 0, allocated: int = 0) -> str:
     pages = -(-programmed // 256)
     return (
@@ -376,29 +388,59 @@ def fake_counts(read_bytes: int = 0, programmed: int = 0, erased: int = 0, alloc
     )
 
 
+def fake_block_counts(read_bytes: int = 0, programmed: int = 0, erased: int = 0, allocated: int = 0) -> str:
+    """The counts of a block device for the same requests: blocks of 512 bytes, writes of 4 KiB and units of 4 MiB."""
+    del allocated
+    blocks_read = -(-read_bytes // 512)
+    blocks = -(-programmed // 512)
+    requests = -(-programmed // 4096)
+    units = -(-programmed // (4 << 20))
+    discards = 1 if erased else 0
+    return (
+        f"elapsedNs={1000000 + blocks * 60000 + discards * 100000} readRequests={-(-read_bytes // 4096)} blocksRead={blocks_read} "
+        f"readNs={blocks_read * 30000} writeRequests={requests} blocksWritten={blocks} writeNs={requests * 100000 + blocks * 55000} "
+        f"unitsRecent1={requests - units} unitsRecent2=0 unitsRecent3=0 unitsRecent4=0 unitsNotRecent={units} "
+        f"alignedBlocks={blocks} distinctUnits={units} flushRequests={requests} flushNs={requests * 100000} "
+        f"discardRequests={discards} blocksDiscarded={erased * 8} discardNs={discards * 100000} failedRequests=0"
+    )
+
+
+def fake_windows(block: bool) -> list[tuple[str, str]]:
+    """The windows of W-2: by checkpoint periods on NOR, by appends on a block device."""
+    if block:
+        return [
+            (log, f"appends=64 writeRequests=64 blocksWritten=192 writeNs={write_ns}")
+            for log, write_ns in (("first", 8320000), ("second", 8000000))
+        ]
+    return [
+        (log, f"appends=4 programNs={program_ns} eraseNs=0 allocatedSectors=0 checkpoints=4")
+        for log, program_ns in (("first", 8000000), ("second", 7600000))
+    ]
+
+
 def scaled(size: int, scale: int) -> int:
     return max(size // scale, 1)
 
 
-def fake_phases(workload: str, fill: int, scale: int) -> list[tuple[str, str]]:
+def fake_phases(workload: str, fill: int, scale: int, counts: Counts) -> list[tuple[str, str]]:
     """Phases of a workload with the names of the firmware and counts that look like a device, for the scenarios."""
-    phases = [(f"{workload},prepare", f"{fake_counts(erased=4096)} {fake_calls('format', 1, 0, 200000000000)}")]
+    phases = [(f"{workload},prepare", f"{counts(erased=4096)} {fake_calls('format', 1, 0, 200000000000)}")]
     if fill != 0:
-        phases.append(("fill", f"{fake_counts(programmed=4096 * fill, allocated=fill)} {fake_calls('write', fill, 4096 * fill, 2000000)}"))
-    return phases + FAKE_PHASES[workload](scale)
+        phases.append(("fill", f"{counts(programmed=4096 * fill, allocated=fill)} {fake_calls('write', fill, 4096 * fill, 2000000)}"))
+    return phases + FAKE_PHASES[workload](scale, counts)
 
 
-def fake_sequential_write(scale: int) -> list[tuple[str, str]]:
+def fake_sequential_write(scale: int, counts: Counts) -> list[tuple[str, str]]:
     phases = []
     for size in (scaled(1 << 20, scale), scaled(4 << 20, scale)):
         for chunk in (64, 512, 4096):
             calls = fake_calls("write", size // chunk, size, 100000 + 50 * chunk)
-            phases.append((f"L1,{size},{chunk}", f"{fake_counts(programmed=size, allocated=size // 4096)} {calls}"))
-            phases.append((f"L1,cleanup,{size},{chunk}", f"{fake_counts(erased=size // 4096)} {fake_calls('remove', 1, 0, 3000000)}"))
+            phases.append((f"L1,{size},{chunk}", f"{counts(programmed=size, allocated=size // 4096)} {calls}"))
+            phases.append((f"L1,cleanup,{size},{chunk}", f"{counts(erased=size // 4096)} {fake_calls('remove', 1, 0, 3000000)}"))
     return phases
 
 
-def fake_data_logger(scale: int) -> list[tuple[str, str]]:
+def fake_data_logger(scale: int, counts: Counts) -> list[tuple[str, str]]:
     size = scaled(4 << 20, scale)
     phases = []
     for phase, log in (("L2", size), ("L2,second,log", min(size, 128 << 10))):
@@ -406,43 +448,43 @@ def fake_data_logger(scale: int) -> list[tuple[str, str]]:
         calls = " ".join(
             (fake_calls("write", appends, log, 300000), fake_calls("sync", appends, 0, 900000), fake_calls("idle", appends, 0, 100000000))
         )
-        phases.append((phase, f"{fake_counts(programmed=log * 2, allocated=log // 4096)} {calls}"))
+        phases.append((phase, f"{counts(programmed=log * 2, allocated=log // 4096)} {calls}"))
     return phases
 
 
-def fake_random_overwrite(scale: int) -> list[tuple[str, str]]:
+def fake_random_overwrite(scale: int, counts: Counts) -> list[tuple[str, str]]:
     phases = []
     for size in (max(scaled(64 << 10, scale), 512), max(scaled(1 << 20, scale), 512), max(scaled(4 << 20, scale), 512)):
-        phases.append((f"L3,create,{size}", f"{fake_counts(programmed=size)} {fake_calls('write', -(-size // 4096), size, 2000000)}"))
+        phases.append((f"L3,create,{size}", f"{counts(programmed=size)} {fake_calls('write', -(-size // 4096), size, 2000000)}"))
         calls = f"{fake_calls('seek', 64, 0, 1000)} {fake_calls('write', 64, 32768, 400000)} {fake_calls('sync', 64, 0, 1200000)}"
-        phases.append((f"L3,{size}", f"{fake_counts(read_bytes=32768, programmed=40000, allocated=16)} {calls}"))
-        phases.append((f"L3,cleanup,{size}", f"{fake_counts(erased=size // 4096)} {fake_calls('remove', 1, 0, 3000000)}"))
+        phases.append((f"L3,{size}", f"{counts(read_bytes=32768, programmed=40000, allocated=16)} {calls}"))
+        phases.append((f"L3,cleanup,{size}", f"{counts(erased=size // 4096)} {fake_calls('remove', 1, 0, 3000000)}"))
     return phases
 
 
-def fake_small_files(scale: int) -> list[tuple[str, str]]:
+def fake_small_files(scale: int, counts: Counts) -> list[tuple[str, str]]:
     del scale
     calls = f"{fake_calls('open', 200, 0, 200000)} {fake_calls('write', 200, 840000, 2000000)} {fake_calls('remove', 184, 0, 1000000)}"
-    return [("L4", f"{fake_counts(programmed=900000, erased=200, allocated=220)} {calls}")]
+    return [("L4", f"{counts(programmed=900000, erased=200, allocated=220)} {calls}")]
 
 
-def fake_read_patterns(scale: int) -> list[tuple[str, str]]:
+def fake_read_patterns(scale: int, counts: Counts) -> list[tuple[str, str]]:
     size = scaled(1 << 20, scale)
     phases = [
-        ("L6,create", f"{fake_counts(programmed=size)} {fake_calls('write', size // 4096, size, 2000000)}"),
-        ("L6,sequential", f"{fake_counts(read_bytes=size)} {fake_calls('read', size // 4096 + 1, size, 90000)}"),
+        ("L6,create", f"{counts(programmed=size)} {fake_calls('write', size // 4096, size, 2000000)}"),
+        ("L6,sequential", f"{counts(read_bytes=size)} {fake_calls('read', size // 4096 + 1, size, 90000)}"),
     ]
     for random_size in (max(scaled(64 << 10, scale), 512), max(scaled(1 << 20, scale), 512), max(scaled(4 << 20, scale), 512)):
-        phases.append((f"L6,random,{random_size}", f"{fake_counts(read_bytes=40000)} {fake_calls('read', 64, 32768, 20000)}"))
+        phases.append((f"L6,random,{random_size}", f"{counts(read_bytes=40000)} {fake_calls('read', 64, 32768, 20000)}"))
     for entries in (10, 100, 1000):
-        phases.append((f"L6,lookup,{entries}", f"{fake_counts(read_bytes=entries * 64)} {fake_calls('open', 32, 0, 15000 + 10 * entries)}"))
+        phases.append((f"L6,lookup,{entries}", f"{counts(read_bytes=entries * 64)} {fake_calls('open', 32, 0, 15000 + 10 * entries)}"))
     return phases
 
 
-def fake_mount_scaling(scale: int) -> list[tuple[str, str]]:
+def fake_mount_scaling(scale: int, counts: Counts) -> list[tuple[str, str]]:
     del scale
     mounts = ((percent, fake_calls("mount", 1, 0, 100000 * percent)) for percent in (10, 50, 90))
-    return [(f"L7,{percent}", f"{fake_counts(read_bytes=percent * 1000)} {calls}") for percent, calls in mounts]
+    return [(f"L7,{percent}", f"{counts(read_bytes=percent * 1000)} {calls}") for percent, calls in mounts]
 
 
 FAKE_PHASES = {

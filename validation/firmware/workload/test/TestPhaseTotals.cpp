@@ -7,6 +7,7 @@
 namespace
 {
     const validation::WorkloadContext workloadContext{ "qspi", "embedded-filesystem/nor", "L1", 10, 16, 17764 };
+    const validation::WorkloadContext blockContext{ "sd", "embedded-filesystem/fat", "L2", 50, 16, 7748, validation::DeviceKind::block };
 
     class PhaseTotalsTest
         : public services::HilFixture
@@ -47,8 +48,8 @@ TEST_F(PhaseTotalsTest, a_new_phase_starts_without_calls)
 
 TEST_F(PhaseTotalsTest, prints_the_phase_with_what_the_device_and_the_volume_counted_since_it_started)
 {
-    validation::FlashCounts start{ 1, 100, 1'000, 2, 200, 3, 2'000, 0, 0, 0 };
-    validation::FlashCounts end{ 3, 612, 3'000, 2, 200, 3, 2'000, 1, 1, 45'000 };
+    validation::DeviceCounts start{ { 1, 100, 1'000, 2, 200, 3, 2'000, 0, 0, 0 }, {} };
+    validation::DeviceCounts end{ { 3, 612, 3'000, 2, 200, 3, 2'000, 1, 1, 45'000 }, {} };
     totals.Start("L1,4096,64", start, validation::VolumeCounts{ 1, 2, 3, 4 });
 
     totals.Print(results, workloadContext, { 5'000, end, validation::VolumeCounts{ 2, 2, 5, 4 } });
@@ -73,4 +74,24 @@ TEST_F(PhaseTotalsTest, prints_the_operations_that_were_called_with_their_histog
     EXPECT_THAT(output, testing::HasSubstr("write.calls=2 write.userBytes=128 write.latencyNs=4000 write.maxNs=3000 write.histogram=35,1,41,1"));
     EXPECT_THAT(output, testing::Not(testing::HasSubstr("sync.")));
     EXPECT_THAT(output, testing::Not(testing::HasSubstr("allocatedSectors")));
+}
+
+TEST_F(PhaseTotalsTest, prints_what_a_block_device_counted_in_the_phase)
+{
+    validation::DeviceCounts start;
+    start.blocks.writeRequests = 1;
+    validation::DeviceCounts end;
+    end.blocks = { 2, 3, 4'000, 6, 7, 8'000, { 9, 10, 11, 12 }, 13, 14, 15, 16, 17'000, 18, 19, 20'000, 21 };
+    end.flash.readRequests = 99;
+    totals.Start("L2", start, std::nullopt);
+
+    totals.Print(results, blockContext, { 5'000, end, std::nullopt });
+
+    auto output = Output();
+    EXPECT_THAT(output, testing::HasSubstr("readRequests=2 blocksRead=3 readNs=4000 writeRequests=5 blocksWritten=7 writeNs=8000 "));
+    EXPECT_THAT(output, testing::HasSubstr("unitsRecent1=9 unitsRecent2=10 unitsRecent3=11"));
+    EXPECT_THAT(output, testing::HasSubstr("unitsRecent4=12 unitsNotRecent=13 alignedBlocks=14 "));
+    EXPECT_THAT(output, testing::HasSubstr("distinctUnits=15 flushRequests=16 flushNs=17000 discardRequests=18 blocksDiscarded=19 "));
+    EXPECT_THAT(output, testing::HasSubstr("discardNs=20000 failedRequests=21"));
+    EXPECT_THAT(output, testing::Not(testing::HasSubstr("bytesRead")));
 }

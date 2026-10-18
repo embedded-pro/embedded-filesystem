@@ -206,6 +206,18 @@ TEST_F(CountingFlashTest, a_flash_that_completes_within_the_call_can_be_asked_ag
     EXPECT_EQ(0, counting.Counts().readNs);
 }
 
+TEST_F(CountingFlashTest, its_snapshot_holds_its_flash_counts_whatever_the_phase)
+{
+    EXPECT_CALL(flash, ReadBuffer(testing::_, 0, testing::_)).WillOnce(testing::SaveArg<2>(&pending));
+    counting.ReadBuffer(infra::MakeRange(buffer), 0, Done());
+    Complete();
+    validation::CountedDevice& counted = counting;
+    counted.StartPhase();
+
+    EXPECT_EQ(counting.Counts(), counted.Snapshot().flash);
+    EXPECT_EQ(validation::BlockCounts{}, counted.Snapshot().blocks);
+}
+
 TEST(FlashCountsTest, subtracts_and_adds_every_count)
 {
     validation::FlashCounts later{ 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 };

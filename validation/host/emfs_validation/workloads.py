@@ -1,4 +1,4 @@
-"""The metrics of the workloads on a board (docs/Validation.md): W-1 to W-6, R-1 to R-5, C-1 and C-2.
+"""The metrics of the workloads on a board (docs/Validation.md): W-1 to W-6, R-1 to R-5, M-1 to M-3, C-1 and C-2.
 
 The firmware totals the calls of every phase instead of keeping a record per call, so the metrics are computed from the
 totals of the phases as metrics/suite/Measurements.cpp computes them from the records of the calls on the host. Only the
@@ -10,7 +10,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import re
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any
 
 OPERATION_STATISTICS = ("calls", "userBytes", "latencyNs", "maxNs", "histogram")
@@ -27,11 +27,30 @@ COUNTS = (
     "eraseRequests",
     "sectorsErased",
     "eraseNs",
+    "blocksRead",
+    "writeRequests",
+    "blocksWritten",
+    "writeNs",
+    "unitsRecent1",
+    "unitsRecent2",
+    "unitsRecent3",
+    "unitsRecent4",
+    "unitsNotRecent",
+    "alignedBlocks",
+    "distinctUnits",
+    "flushRequests",
+    "flushNs",
+    "discardRequests",
+    "blocksDiscarded",
+    "discardNs",
+    "failedRequests",
     "allocatedSectors",
     "erasedBlocks",
     "checkpoints",
     "movedBlocks",
 )
+UNITS_BY_RECENCY = ("unitsRecent1", "unitsRecent2", "unitsRecent3", "unitsRecent4")
+MEBIBYTE = 1024 * 1024
 LATENCY_FILL = 50
 DATA_LOGGER_PHASES = ("L2", "L2 second log")
 OVERWRITE_PHASE = re.compile(r"^L3 (\d+)$")
@@ -111,7 +130,13 @@ class Totals:
         return self.operations[operation].user_bytes if operation in self.operations else 0
 
     def device_ns(self) -> int:
-        return self.count("readNs") + self.count("programNs") + self.count("eraseNs")
+        return sum(self.count(key) for key in ("readNs", "programNs", "eraseNs", "writeNs", "flushNs", "discardNs"))
+
+    def bytes_written(self, block_size: int) -> int:
+        return self.count("bytesProgrammed") + self.count("blocksWritten") * block_size
+
+    def bytes_read(self, block_size: int) -> int:
+        return self.count("bytesRead") + self.count("blocksRead") * block_size
 
     def charged_ns(self, sector_erase_ns: float) -> float:
         """The device time with the erases charged when sectors are allocated, as metrics::ChargedDeviceTime does."""
@@ -154,6 +179,15 @@ class DeviceRuns:
     subject: str
     runs: dict[tuple[str, int], WorkloadRun]
     model: dict[str, str]
+    parameters: dict[str, str] = dataclasses.field(default_factory=dict)
+
+    @property
+    def block(self) -> bool:
+        return self.parameters.get("kind") == "block"
+
+    @property
+    def block_size(self) -> int:
+        return int(self.parameters.get("blockSize", "0"))
 
     def run(self, workload: str, fill: int) -> WorkloadRun | None:
         run = self.runs.get((workload, fill))
@@ -222,12 +256,29 @@ class Results:
         self.entries.append(entry)
 
 
+def share(numerator: float, denominator: float) -> float:
+    """A quotient that is 0 without a denominator, as metrics::WritesOfPhase computes M-1 to M-3."""
+    return numerator / denominator if denominator != 0 else 0.0
+
+
+def card_writes(results: Results, name: str, totals: Totals, ram_bytes: int, fill: int | None = None) -> None:
+    """M-1 to M-3 of a phase on a block device; the counting device restarts its distinct units at every phase."""
+    if not results.runs.block:
+        return
+    results.add("M-1", name, "blocks", "higher", share(totals.count("blocksWritten"), totals.count("writeRequests")), ram_bytes, fill)
+    results.add("M-2", name, "share", "higher", share(totals.count("alignedBlocks"), totals.count("blocksWritten")), ram_bytes, fill)
+    mebibytes = totals.user_bytes("write") / MEBIBYTE
+    results.add("M-3", name, "units/MiB", "lower", share(totals.count("distinctUnits"), mebibytes), ram_bytes, fill)
+
+
 def sequential_write(results: Results, run: WorkloadRun, sector_erase_ns: float) -> None:
     for name, totals in run.phases.items():
         if SEQUENTIAL_WRITE_PHASE.match(name):
             written = totals.user_bytes("write")
+            amplification = quotient(totals.bytes_written(results.runs.block_size), written, 0)
             results.add("W-1", name, "B/s", "higher", quotient(written, totals.charged_ns(sector_erase_ns) / 1e9, 0), run.ram_bytes)
-            results.add("W-4", name, "ratio", "lower", quotient(totals.count("bytesProgrammed"), written, 0), run.ram_bytes)
+            results.add("W-4", name, "ratio", "lower", amplification, run.ram_bytes)
+            card_writes(results, name, totals, run.ram_bytes)
 
 
 def append_time_ns(window: Totals | None, sector_erase_ns: float) -> float | None:
@@ -243,8 +294,16 @@ def data_logger(results: Results, run: WorkloadRun, fill: int, sector_erase_ns: 
     first = append_time_ns(run.windows.get("first"), sector_erase_ns)
     second = append_time_ns(run.windows.get("second"), sector_erase_ns)
     ratio = math.inf if first is None or second is None else quotient(first, second, 1)
+    amplification = quotient(log.bytes_written(results.runs.block_size), log.user_bytes("write"), 0)
     results.add("W-2", "L2", "ratio", "lower", ratio, run.ram_bytes, fill)
-    results.add("W-4", "L2", "ratio", "lower", quotient(log.count("bytesProgrammed"), log.user_bytes("write"), 0), run.ram_bytes, fill)
+    results.add("W-4", "L2", "ratio", "lower", amplification, run.ram_bytes, fill)
+    card_writes(results, "L2", log, run.ram_bytes, fill)
+
+
+def small_files(results: Results, run: WorkloadRun, fill: int) -> None:
+    files = run.phase("L4")
+    if files is not None:
+        card_writes(results, "L4", files, run.ram_bytes, fill)
 
 
 def per_append_ns(run: WorkloadRun | None, sector_erase_ns: float) -> float | None:
@@ -297,12 +356,13 @@ def reads(results: Results, run: WorkloadRun) -> None:
     if sequential is not None:
         read = sequential.user_bytes("read")
         results.add("R-1", "L6 sequential", "B/s", "higher", quotient(read, sequential.device_ns() / 1e9, 0), run.ram_bytes)
-        results.add("R-5", "L6 sequential", "ratio", "lower", quotient(sequential.count("bytesRead"), read, 0), run.ram_bytes)
+        amplification = quotient(sequential.bytes_read(results.runs.block_size), read, 0)
+        results.add("R-5", "L6 sequential", "ratio", "lower", amplification, run.ram_bytes)
     random_reads = sized_phases(run, RANDOM_READ_PHASE)
     requests = [quotient(totals.count("readRequests"), totals.calls("read"), 0) for _, totals in random_reads]
     for (size, _), value in zip(random_reads, requests, strict=True):
         results.add("R-2", f"L6 random {size}", "requests", "lower", value, run.ram_bytes)
-    if len(requests) >= 2:
+    if len(requests) >= 2 and not results.runs.block:
         results.add("R-2", "L6 random ratio", "ratio", "lower", quotient(requests[-1], requests[0], 1), run.ram_bytes)
     for entries, totals in sized_phases(run, LOOKUP_PHASE):
         per_open_ns = quotient(totals.device_ns(), totals.calls("open"), 0)
@@ -323,15 +383,41 @@ def model_time_ns(totals: Totals, model: dict[str, str]) -> float:
     )
 
 
+def block_model_time_ns(totals: Totals, model: dict[str, str]) -> float:
+    """The device time that a block device model gives the requests of a phase, as metrics::MeteredBlockDevice charges them: a
+    write opens an allocation unit that is not among the recentAllocationUnits most recently written ones, and the counts of
+    the units by recency among the four most recently written give those openings for a model that keeps up to four open."""
+    requests = sum(totals.count(key) for key in ("readRequests", "writeRequests", "flushRequests", "discardRequests"))
+    recent = int(model["recentAllocationUnits"])
+    openings = totals.count("unitsNotRecent") + sum(totals.count(key) for key in UNITS_BY_RECENCY[recent:])
+    return (
+        int(model["typical.commandNs"]) * requests
+        + int(model["typical.blockReadNs"]) * totals.count("blocksRead")
+        + int(model["typical.blockWrittenNs"]) * totals.count("blocksWritten")
+        + int(model["typical.writeBusyNs"]) * totals.count("writeRequests")
+        + int(model["typical.allocationUnitOpeningNs"]) * openings
+    )
+
+
+def model_times(runs: DeviceRuns) -> Callable[[Totals], float] | None:
+    """The model time of the requests of a phase, for a device whose model counts allocation units as the device does."""
+    model = runs.model
+    if "typical.pageProgramNs" in model:
+        return lambda totals: model_time_ns(totals, model)
+    if "typical.commandNs" in model and model.get("blocksPerAllocationUnit") == runs.parameters.get("unitBlocks"):
+        return lambda totals: block_model_time_ns(totals, model)
+    return None
+
+
 def model_error(results: Results) -> None:
-    model = results.runs.model
-    if "typical.pageProgramNs" not in model:
+    model_time = model_times(results.runs)
+    if model_time is None:
         return
     for workload, fill, run in results.runs.completed():
         for name, totals in run.phases.items():
             measured = totals.device_ns()
             if measured != 0:
-                error = abs(model_time_ns(totals, model) - measured) / measured
+                error = abs(model_time(totals) - measured) / measured
                 phase = name if name.startswith(workload) else f"{workload} {name}"
                 results.add("C-1", phase, "ratio", "lower", error, run.ram_bytes, fill if fill != 0 else None)
 
@@ -357,6 +443,8 @@ def workload_results(runs: DeviceRuns) -> list[dict[str, Any]]:
             data_logger(results, run, fill, sector_erase_ns)
         elif workload == "L3":
             overwrite_scaling(results, run, fill, sector_erase_ns)
+        elif workload == "L4":
+            small_files(results, run, fill)
         elif workload == "L6":
             reads(results, run)
         elif workload == "L7":

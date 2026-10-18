@@ -302,9 +302,16 @@ def test_dev_check_checks_a_nor_device_of_the_board(terminal, line, reason):
 
 @pytest.mark.parametrize(
     ("line", "reason"),
-    [("fs.format qspi", None), ("fs.format", "usage"), ("fs.format qspi fmc", "usage"), ("fs.format ramflash", "unsupported")],
+    [
+        ("fs.format qspi", None),
+        ("fs.format sd", None),
+        ("fs.format", "usage"),
+        ("fs.format qspi fmc", "usage"),
+        ("fs.format ramflash", "unsupported"),
+        ("fs.format emmc", "unsupported"),
+    ],
 )
-def test_fs_format_formats_a_nor_device_of_the_board(terminal, line, reason):
+def test_fs_format_formats_a_nor_or_block_device_of_the_board(terminal, line, reason):
     if reason is None:
         assert terminal.command(line).ok
         return
@@ -448,7 +455,6 @@ def test_the_benchmark_of_allocation_units_names_its_units(terminal):
         ("bench.discard sd blocks=524288 n=1", None),
         ("bench.read sd size=512 n=1", "unsupported"),
         ("dev.check sd", "unsupported"),
-        ("fs.format sd", "unsupported"),
     ],
 )
 def test_block_benchmarks_check_their_arguments_as_the_firmware_does(terminal, line, reason):
@@ -497,3 +503,58 @@ def test_the_records_of_block_benchmarks_convert_into_the_parameters_of_a_model(
         "measured.flushNs": "1200000",
         "measured.discardNs": "3000000",
     }
+
+
+def test_wl_run_on_a_block_device_runs_the_fat_subject_and_prints_the_counts_of_blocks(terminal):
+    terminal.drain_events("workload")
+    terminal.drain_events("phase")
+
+    assert terminal.command("wl.run sd L1 scale=16").ok
+
+    (workload,) = terminal.drain_events("workload")
+    assert workload.values["subject"] == "embedded-filesystem/fat"
+    phases = [event.values for event in terminal.drain_events("phase") if "phase" in event.values]
+    assert all(phase["subject"] == "embedded-filesystem/fat" for phase in phases)
+    assert all("blocksWritten" in phase and "programNs" not in phase for phase in phases)
+
+
+def test_wl_run_of_the_data_logger_on_a_block_device_prints_windows_of_appends_without_volume_counts(disco):
+    disco.drain_events("window")
+
+    assert disco.command("wl.run emmc L2 fill=50").ok
+
+    windows = [event.values for event in disco.drain_events("window") if "log" in event.values]
+    assert [(window["log"], window["appends"]) for window in windows] == [("first", "64"), ("second", "64")]
+    assert all("checkpoints" not in window for window in windows)
+
+
+def test_the_records_of_wl_run_on_a_block_device_convert_into_the_metrics_of_the_workloads(board, tmp_path):
+    terminal = FirmwareTerminal(serial=FakeFirmware(board), timeout=0.5)
+    terminal.sync()
+    terminal.command("dev.info sd")
+    for workload in ("L1", "L2 fill=10", "L2 fill=50", "L2 fill=90", "L3 fill=50", "L4 fill=50", "L6", "L7"):
+        terminal.command(f"wl.run sd {workload}")
+    kinds = ("device", "workload", "phase", "window", "workload.done")
+    events = [event.raw for kind in kinds for event in terminal.drain_events(kind)]
+    run = tmp_path / "2026_10_20"
+    run.mkdir()
+    (run / "transcript.log").write_text("\n".join(events) + "\n", encoding="utf-8")
+    (run / "run.json").write_text('{"board": "stm32h757i-eval"}', encoding="utf-8")
+    model = {
+        "model": "sd-card-256m",
+        "blocksPerAllocationUnit": "8192",
+        "recentAllocationUnits": "2",
+        "typical.commandNs": "100000",
+        "typical.blockReadNs": "25000",
+        "typical.blockWrittenNs": "50000",
+        "typical.writeBusyNs": "0",
+        "typical.allocationUnitOpeningNs": "10000000",
+        "w6BoundMs": "1021.025",
+    }
+
+    fragment = convert.convert_run(run, {"stm32h757i-eval/sd": model})
+
+    metrics = {entry["metric"] for entry in fragment["results"]}
+    expected = {"W-1", "W-2", "W-3", "W-4", "W-5", "W-6", "R-1", "R-2", "R-3", "R-4", "R-5", "M-1", "M-2", "M-3", "C-1", "C-2"}
+    assert metrics == expected
+    assert all(entry["subject"] == "embedded-filesystem/fat" for entry in fragment["results"])

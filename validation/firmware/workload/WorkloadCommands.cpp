@@ -34,7 +34,7 @@ namespace validation
 
         target = found;
         operation = pending.Start(formatTimeout);
-        target->flash.OnTimeout([this]
+        target->counted.OnTimeout([this]
             {
                 FormatTimedOut();
             });
@@ -95,7 +95,7 @@ namespace validation
     // After a timeout the volume may go on with what timed out, so it takes no command until the board is reset
     bool WorkloadCommands::Claimed(const WorkloadTarget& candidate) const
     {
-        return pending.Busy() || runner.Running() || runner.Interrupted() || timedOut || candidate.flash.InUse();
+        return pending.Busy() || runner.Running() || runner.Interrupted() || timedOut || candidate.counted.InUse();
     }
 
     const WorkloadTarget* WorkloadCommands::FindTarget(infra::BoundedConstString name) const
@@ -121,7 +121,7 @@ namespace validation
         if (!pending.Complete(operation))
             return;
 
-        target->flash.OnTimeout(nullptr);
+        target->counted.OnTimeout(nullptr);
         if (result == fs::Result::success)
             context.response.Ok();
         else
@@ -137,7 +137,7 @@ namespace validation
 
     void WorkloadCommands::Begin()
     {
-        runner.Begin(target->volume, target->flash, { target->device.description.name, target->volume.Subject(), workload->Name(), parameters.fillPercent, parameters.scaleDivisor, target->volume.RamBytes() }, [this]
+        runner.Begin(target->volume, target->counted, { target->device.description.name, target->volume.Subject(), workload->Name(), parameters.fillPercent, parameters.scaleDivisor, target->volume.RamBytes(), target->device.description.kind }, [this]
             {
                 Interrupted();
             });
