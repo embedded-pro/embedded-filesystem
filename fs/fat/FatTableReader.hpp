@@ -25,8 +25,8 @@ namespace fs
 
     private:
         void Locate(uint32_t cluster);
+        void ReadSector();
         void OnSector(Result result, infra::ConstByteRange contents);
-        void OnNextSector(Result result, infra::ConstByteRange contents);
         void Complete(Result result, uint32_t value);
 
     private:
@@ -36,6 +36,7 @@ namespace fs
         uint32_t sector{ 0 };
         uint32_t offset{ 0 };
         uint8_t lowByte{ 0 };
+        bool nextSector{ false };
         infra::AutoResetFunction<void(Result result, uint32_t value)> onRead;
         infra::AutoResetFunction<void(Result result, std::optional<uint32_t> next)> onNext;
     };

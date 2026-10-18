@@ -31,8 +31,13 @@ namespace fs
         auto location = LocateEntry(geometry.type, cluster, sectors.SectorSize());
         sector = geometry.ActiveFatSector() + location.sector;
         offset = location.offset;
+        nextSector = false;
+        ReadSector();
+    }
 
-        sectors.Read(sector, [this](Result result, infra::ConstByteRange contents)
+    void FatTableReader::ReadSector()
+    {
+        sectors.Read(nextSector ? sector + 1 : sector, [this](Result result, infra::ConstByteRange contents)
             {
                 OnSector(result, contents);
             });
@@ -42,24 +47,16 @@ namespace fs
     {
         if (result != Result::success)
             Complete(result, 0);
+        else if (nextSector)
+            Complete(Result::success, DecodeFat12(cluster, static_cast<uint16_t>(lowByte | (contents[0] << 8))));
         else if (offset + 1 != contents.size() || geometry.type != FatType::fat12)
             Complete(Result::success, ReadEntry(geometry.type, cluster, contents, infra::ConstByteRange()));
         else
         {
             lowByte = contents[offset];
-            sectors.Read(sector + 1, [this](Result result, infra::ConstByteRange contents)
-                {
-                    OnNextSector(result, contents);
-                });
+            nextSector = true;
+            ReadSector();
         }
-    }
-
-    void FatTableReader::OnNextSector(Result result, infra::ConstByteRange contents)
-    {
-        if (result != Result::success)
-            Complete(result, 0);
-        else
-            Complete(Result::success, DecodeFat12(cluster, static_cast<uint16_t>(lowByte | (contents[0] << 8))));
     }
 
     void FatTableReader::Complete(Result result, uint32_t value)

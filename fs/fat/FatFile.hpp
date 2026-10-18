@@ -62,13 +62,9 @@ namespace fs
 
         void UnReferenced() override;
         bool Pending() const;
-        void Claim(Call call);
+        void Claim(Call claimed);
+        void Enqueue(Call claimed);
         void Granted();
-        void StartRead();
-        void StartWrite();
-        void StartTruncate();
-        void StartExpectSize();
-        void StartSync();
         void ReadDone(Result result, std::size_t bytesRead);
         void Done(Result result);
         Result Unwritable() const;

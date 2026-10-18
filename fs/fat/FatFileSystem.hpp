@@ -69,13 +69,10 @@ namespace fs
         Result Unavailable() const;
         bool IsMounted() const;
 
-        void BeginMount();
-        void StartMount();
-        void BeginUnmount();
-        void StartUnmount();
+        void BeginChange();
+        void StartChange();
         void LifecycleOperationDone(Result result);
         void Entered(Result result);
-        void DeferCompletion(infra::Function<void(Result result)>& onDone, Result result);
 
         Result Refusal(infra::BoundedConstString path, bool supported = true) const;
         Result Refusal(Result validation, bool supported = true) const;
@@ -89,8 +86,7 @@ namespace fs
         OperationQueue::Claimer lifecycleClaimer;
         infra::MemoryRange<FatPathSlot> pathSlots;
         Machine::WithStorage<2> lifecycle;
-        infra::Function<void(Result result)> onMountDone;
-        infra::Function<void(Result result)> onUnmountDone;
+        infra::Function<void(Result result)> onChanged;
         infra::Function<void(Result result)> lifecycleDone;
         Result lifecycleResult{ Result::success };
     };
@@ -245,12 +241,12 @@ namespace fs
         return {
             Machine::Row<FatUnmounted, FatMountRequested, FatMounting>(nullptr, [](FatFileSystem& volume, FatUnmounted&, const FatMountRequested&)
                 {
-                    volume.BeginMount();
+                    volume.BeginChange();
                     return FatMounting{};
                 }),
             Machine::Row<FatFault, FatMountRequested, FatMounting>(nullptr, [](FatFileSystem& volume, FatFault&, const FatMountRequested&)
                 {
-                    volume.BeginMount();
+                    volume.BeginChange();
                     return FatMounting{};
                 }),
             Machine::Row<FatMounting, FatMountDone, FatMounted>([](FatFileSystem&, const FatMounting&, const FatMountDone& done)
@@ -263,7 +259,7 @@ namespace fs
                 }),
             Machine::Row<FatMounted, FatUnmountRequested, FatUnmounting>(nullptr, [](FatFileSystem& volume, FatMounted&, const FatUnmountRequested&)
                 {
-                    volume.BeginUnmount();
+                    volume.BeginChange();
                     return FatUnmounting{};
                 }),
             Machine::Row<FatMounted, FatMediaRemoved, FatFault>(nullptr, [](FatFileSystem&, FatMounted&, const FatMediaRemoved&)

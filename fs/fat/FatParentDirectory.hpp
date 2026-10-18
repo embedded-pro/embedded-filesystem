@@ -35,16 +35,26 @@ namespace fs
         FatScannedEntry Written() const;
 
     private:
+        enum class Step : uint8_t
+        {
+            parentFound,
+            aliasScanned,
+            done
+        };
+
         void Locate(infra::BoundedConstString path, uint32_t outside, const infra::Function<void(Result result)>& onDone);
         void OnParent(Result result);
         Result VerifyParent(Result result) const;
         void OnAliasScanned(Result result);
         void Prepared(const ShortName& prepared);
+        const infra::Function<void(Result result)>& Then(Step next);
+        void Resume(Result result);
 
     private:
         FatVolume& volume;
         infra::BoundedConstString name;
         bool forCreation{ false };
+        Step step{ Step::parentFound };
         std::optional<FatEntryPosition> except;
         uint32_t cluster{ 0 };
         std::optional<ShortName> exact;
@@ -52,6 +62,7 @@ namespace fs
         ShortName shortName;
         FatNameScan scan;
         FatEntrySetWriter writer;
+        infra::Function<void(Result result)> resume;
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }

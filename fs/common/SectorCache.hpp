@@ -72,6 +72,13 @@ namespace fs
             flush
         };
 
+        enum class Step : uint8_t
+        {
+            load,
+            write,
+            flush
+        };
+
         void Start(Request newRequest, uint32_t sector, uint8_t rank);
         void Access();
         void Hit();
@@ -84,7 +91,8 @@ namespace fs
         void WriteNextModified();
         void AllWritten();
         void WriteRunOf(Entry& entry);
-        void WriteCopy();
+        void Transfer(Step next);
+        void Transferred(hal::BlockDevice::Result deviceResult);
         void OnWritten(hal::BlockDevice::Result deviceResult);
         void Complete(Result completionResult);
         void Deliver();
@@ -114,6 +122,7 @@ namespace fs
         infra::MemoryRange<Entry> writing;
         uint8_t copy{ 0 };
         bool writingVictim{ false };
+        Step step{ Step::load };
         Result result{ Result::success };
 
         infra::AutoResetFunction<void(Result result, infra::ConstByteRange contents)> onRead;

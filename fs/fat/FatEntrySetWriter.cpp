@@ -103,13 +103,8 @@ namespace fs
 
     void FatEntrySetWriter::ZeroSector()
     {
-        cache.Overwrite(sector, dataRank, [this](Result result, infra::ByteRange contents)
-            {
-                if (result == Result::success)
-                    Fill(contents);
-
-                OnZeroed(result);
-            });
+        zeroing = true;
+        UpdateSector();
     }
 
     void FatEntrySetWriter::OnZeroed(Result result)
@@ -142,13 +137,27 @@ namespace fs
         }
 
         sector = SectorOfSlot(slot);
-        cache.Modify(sector, RankOf(sector), [this](Result result, infra::ByteRange contents)
-            {
-                if (result == Result::success)
-                    Fill(contents);
+        zeroing = false;
+        UpdateSector();
+    }
 
+    void FatEntrySetWriter::UpdateSector()
+    {
+        auto onSector = [this](Result result, infra::ByteRange contents)
+        {
+            if (result == Result::success)
+                Fill(contents);
+
+            if (zeroing)
+                OnZeroed(result);
+            else
                 OnWritten(result);
-            });
+        };
+
+        if (zeroing)
+            cache.Overwrite(sector, dataRank, onSector);
+        else
+            cache.Modify(sector, RankOf(sector), onSector);
     }
 
     void FatEntrySetWriter::OnWritten(Result result)

@@ -23,14 +23,23 @@ namespace fs
         void Start();
 
     private:
-        void OnFound(Result result);
-        void OnPrepared(Result result);
+        enum class Step : uint8_t
+        {
+            found,
+            prepared,
+            written,
+            finish
+        };
+
+        void OnFound();
+        void Allocate();
         void OnAllocated(Result result, uint32_t first);
         void InitializeSector();
         void OnInitialized(Result result);
-        void OnWritten(Result result);
         void WriteDotEntries(infra::ByteRange contents) const;
         void Finish(Result result);
+        infra::Function<void(Result result)> Then(Step next);
+        void Resume(Result result);
 
     private:
         FatVolume& volume;
@@ -39,6 +48,7 @@ namespace fs
         FatParentDirectory parent;
         uint32_t cluster{ 0 };
         uint32_t sector{ 0 };
+        Step step{ Step::found };
     };
 }
 

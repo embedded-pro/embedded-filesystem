@@ -37,16 +37,7 @@ namespace fs
         if (mark != Mark::markedDirty)
             CompleteLater();
         else
-            cache.Modify(FirstSector(), cleanRank, [this](Result result, infra::ByteRange contents)
-                {
-                    if (result == Result::success)
-                    {
-                        WriteCleanBit(contents, true);
-                        mark = Mark::untouched;
-                    }
-
-                    this->onDone(result);
-                });
+            ModifyFirstSector();
     }
 
     void FatDirtyFlag::Skip(const infra::Function<void(Result result)>& onDone)
@@ -65,25 +56,35 @@ namespace fs
             onDone(Result::success);
         }
         else
-            ClearCleanBit();
+            ModifyFirstSector();
     }
 
-    void FatDirtyFlag::ClearCleanBit()
+    void FatDirtyFlag::ModifyFirstSector()
     {
-        cache.Modify(FirstSector(), tableRank, [this](Result result, infra::ByteRange contents)
+        cache.Modify(FirstSector(), mark == Mark::markedDirty ? cleanRank : tableRank, [this](Result result, infra::ByteRange contents)
             {
-                if (result != Result::success)
-                {
-                    onDone(result);
-                    return;
-                }
-
-                WriteCleanBit(contents, false);
-                cache.Flush([this](Result result)
-                    {
-                        OnFlushed(result);
-                    });
+                OnFirstSectorModified(result, contents);
             });
+    }
+
+    void FatDirtyFlag::OnFirstSectorModified(Result result, infra::ByteRange contents)
+    {
+        if (result != Result::success)
+            onDone(result);
+        else if (mark == Mark::markedDirty)
+        {
+            WriteCleanBit(contents, true);
+            mark = Mark::untouched;
+            onDone(result);
+        }
+        else
+        {
+            WriteCleanBit(contents, false);
+            cache.Flush([this](Result result)
+                {
+                    OnFlushed(result);
+                });
+        }
     }
 
     void FatDirtyFlag::OnFlushed(Result result)
