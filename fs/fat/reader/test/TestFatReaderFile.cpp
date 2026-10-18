@@ -1,3 +1,4 @@
+#include "fs/common/TransferAlignment.hpp"
 #include "fs/fat/FatTable.hpp"
 #include "fs/fat/reader/test/FatReaderFixture.hpp"
 #include <algorithm>
@@ -12,6 +13,23 @@ namespace
         : public testing::Test
         , public FatReaderFixture
     {};
+
+    class FatReaderFileWithTransferAlignmentTest
+        : public testing::Test
+        , public FatReaderFixture
+    {
+    public:
+        FatReaderFileWithTransferAlignmentTest()
+            : FatReaderFixture(fat12Volume, fs::bufferAlignment)
+        {}
+
+        infra::ByteRange At(std::size_t offset, std::size_t size)
+        {
+            return infra::Head(infra::DiscardHead(infra::MakeRange(aligned), offset), size);
+        }
+
+        alignas(fs::bufferAlignment) std::array<uint8_t, 4096 + fs::bufferAlignment> aligned{};
+    };
 
     class FatReaderFileFat12Test
         : public testing::Test
@@ -238,4 +256,34 @@ TEST_F(FatReaderFileFat12Test, fat12_entries_that_straddle_two_sectors_are_follo
     ExpectRead(*file, infra::MakeRange(buffer), fs::Result::success, 2048);
 
     EXPECT_TRUE(std::equal(contents.begin(), contents.end(), buffer.begin()));
+}
+
+TEST_F(FatReaderFileWithTransferAlignmentTest, whole_sectors_go_directly_into_a_buffer_at_the_transfer_alignment)
+{
+    auto contents = Pattern<4096>();
+    builder->AddFile(0, "", "DATA    BIN", infra::MakeRange(contents));
+    ExpectMount();
+    auto file = ExpectOpen("/data.bin");
+    auto reads = device.ReadRequests();
+
+    ExpectRead(*file, At(fs::bufferAlignment, 4096), fs::Result::success, 4096);
+
+    EXPECT_EQ(reads + 1, device.ReadRequests());
+    EXPECT_TRUE(std::ranges::equal(contents, At(fs::bufferAlignment, 4096)));
+    EXPECT_LE(fs::bufferAlignment, device.BufferAlignment());
+}
+
+TEST_F(FatReaderFileWithTransferAlignmentTest, whole_sectors_go_through_the_window_into_a_buffer_off_the_transfer_alignment)
+{
+    auto contents = Pattern<4096>();
+    builder->AddFile(0, "", "DATA    BIN", infra::MakeRange(contents));
+    ExpectMount();
+    auto file = ExpectOpen("/data.bin");
+    auto reads = device.ReadRequests();
+
+    ExpectRead(*file, At(4, 4096), fs::Result::success, 4096);
+
+    EXPECT_EQ(reads + 8, device.ReadRequests());
+    EXPECT_TRUE(std::ranges::equal(contents, At(4, 4096)));
+    EXPECT_LE(fs::bufferAlignment, device.BufferAlignment());
 }

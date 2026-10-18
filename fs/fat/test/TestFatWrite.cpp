@@ -1,3 +1,4 @@
+#include "fs/common/TransferAlignment.hpp"
 #include "fs/fat/FatFsInfo.hpp"
 #include "fs/fat/FatTable.hpp"
 #include "fs/fat/test/FatFileSystemFixture.hpp"
@@ -23,8 +24,8 @@ namespace
         : public FatFileSystemFixture
     {
     public:
-        explicit FatWriteTest(uint32_t blocks = 16384)
-            : FatFileSystemFixture(blocks)
+        explicit FatWriteTest(uint32_t blocks = 16384, const fs::FatConfig& volumeConfig = {})
+            : FatFileSystemFixture(blocks, ClusterSize(1), volumeConfig)
         {}
 
         void SetUp() override
@@ -82,6 +83,22 @@ namespace
 
         static constexpr uint32_t entriesPerFatSector = 256;
         std::array<uint8_t, 700> original{ Pattern<700>(1) };
+    };
+
+    class FatWriteWithTransferAlignmentTest
+        : public FatWriteTest
+    {
+    public:
+        FatWriteWithTransferAlignmentTest()
+            : FatWriteTest(16384, fs::FatConfig{ .transferAlignment = fs::bufferAlignment })
+        {}
+
+        infra::ByteRange At(std::size_t offset, std::size_t size)
+        {
+            return infra::Head(infra::DiscardHead(infra::MakeRange(aligned), offset), size);
+        }
+
+        alignas(fs::bufferAlignment) std::array<uint8_t, 4096 + fs::bufferAlignment> aligned{};
     };
 }
 
@@ -712,4 +729,31 @@ TEST_F(FatWriteOnFat32Test, unmount_of_a_volume_with_an_unknown_count_marks_the_
     auto after = FsInfoOnDevice();
     ASSERT_TRUE(after.has_value());
     EXPECT_EQ(std::nullopt, after->freeClusters);
+}
+
+TEST_F(FatWriteWithTransferAlignmentTest, a_long_run_at_the_transfer_alignment_is_written_directly_in_one_request)
+{
+    auto file = ExpectOpen("/empty.txt", fs::OpenMode::append);
+    auto contents = Pattern<4096>(4);
+    infra::Copy(infra::MakeRange(contents), At(fs::bufferAlignment, 4096));
+    auto writes = device.WriteRequests();
+
+    ExpectWrite(*file, At(fs::bufferAlignment, 4096));
+
+    EXPECT_EQ(writes + 1, device.WriteRequests());
+    EXPECT_LE(fs::bufferAlignment, device.BufferAlignment());
+}
+
+TEST_F(FatWriteWithTransferAlignmentTest, a_long_run_off_the_transfer_alignment_is_written_through_the_cache)
+{
+    auto file = ExpectOpen("/empty.txt", fs::OpenMode::append);
+    auto contents = Pattern<4096>(4);
+    infra::Copy(infra::MakeRange(contents), At(4, 4096));
+
+    ExpectWrite(*file, At(4, 4096));
+    ExpectSync(*file);
+
+    EXPECT_LE(fs::bufferAlignment, device.BufferAlignment());
+    file = nullptr;
+    ExpectContents("/empty.txt", contents);
 }

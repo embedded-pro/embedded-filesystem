@@ -4,6 +4,7 @@
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/Deliver.hpp"
 #include "fs/common/SectorSource.hpp"
+#include "fs/common/TransferAlignment.hpp"
 #include "fs/fat/FatDirectoryReader.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatGeometry.hpp"
@@ -21,7 +22,7 @@ namespace fs
     class FatReaderVolume
     {
     public:
-        FatReaderVolume(hal::BlockDevice& device, SectorSource& sectors, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved);
+        FatReaderVolume(hal::BlockDevice& device, SectorSource& sectors, std::size_t transferAlignment, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved);
         FatReaderVolume(const FatReaderVolume& other) = delete;
         FatReaderVolume& operator=(const FatReaderVolume& other) = delete;
         ~FatReaderVolume();
@@ -29,6 +30,7 @@ namespace fs
         infra::ClaimableResource& Queue();
         hal::BlockDevice& Device() const;
         SectorSource& Sectors() const;
+        const TransferAlignment& Alignment() const;
         FatGeometry& Geometry();
         FatTableReader& Table();
         FatDirectoryReader& Reader();
@@ -53,6 +55,7 @@ namespace fs
         infra::Function<void()> onMediaRemoved;
         FatGeometry geometry;
         SectorSource& sectors;
+        TransferAlignment alignment;
         FatTableReader table{ sectors, geometry };
         FatEntryAssembler assembler;
         FatDirectoryReader reader{ sectors, geometry, assembler };

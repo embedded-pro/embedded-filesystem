@@ -1,4 +1,5 @@
 #include "fs/common/SectorCache.hpp"
+#include "fs/common/TransferAlignment.hpp"
 #include "hal/interfaces/test_doubles/BlockDeviceMock.hpp"
 #include "hal/interfaces/test_doubles/BlockDeviceStub.hpp"
 #include "infra/event/test_helper/EventDispatcherFixture.hpp"
@@ -872,4 +873,32 @@ TEST_F(SectorCacheOnStubTest, written_sectors_are_read_back_after_clear)
 
     EXPECT_CALL(readDone, callback(fs::Result::success, testing::Optional(a)));
     ExecuteAllActions();
+}
+
+namespace
+{
+    class SectorCacheAlignmentTest
+        : public testing::Test
+        , public infra::EventDispatcherFixture
+    {
+    public:
+        hal::BlockDeviceStub::WithStorage<3 * 512> device{ 512 };
+        fs::FlushBarrier barrier{ device };
+        fs::SectorCache::WithStorage<3, 512> cache{ barrier };
+        fs::TransferAlignment alignment{ fs::bufferAlignment };
+        testing::StrictMock<infra::MockCallback<void(fs::Result, bool)>> readDone;
+    };
+}
+
+TEST_F(SectorCacheAlignmentTest, every_sector_is_aligned_for_a_driver_that_uses_dma)
+{
+    for (uint32_t sector = 0; sector != 3; ++sector)
+    {
+        cache.Read(sector, [this](fs::Result result, infra::ConstByteRange contents)
+            {
+                readDone.callback(result, alignment.Accepts(contents));
+            });
+        EXPECT_CALL(readDone, callback(fs::Result::success, true));
+        ExecuteAllActions();
+    }
 }

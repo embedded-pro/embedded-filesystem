@@ -343,7 +343,7 @@ namespace fs
         {
             auto remaining = std::min<std::size_t>(readBuffer.size() - transferred, size - position);
 
-            if (position % sectorSize != 0 || remaining < sectorSize)
+            if (position % sectorSize != 0 || remaining < sectorSize || !volume.Alignment().Accepts(infra::DiscardHead(readBuffer, transferred)))
                 ReadPart();
             else
                 ReadSectors(static_cast<uint32_t>(std::min<std::size_t>(remaining / sectorSize, sectorsLeft)));
@@ -352,7 +352,7 @@ namespace fs
         {
             auto remaining = std::min<std::size_t>(writeData.size() - transferred, maxSize - position);
 
-            if (position % sectorSize != 0 || remaining < sectorSize)
+            if (position % sectorSize != 0 || remaining < sectorSize || !volume.Alignment().Accepts(infra::DiscardHead(writeData, transferred)))
                 WritePart(remaining);
             else
                 WriteSectors(static_cast<uint32_t>(std::min<std::size_t>(remaining / sectorSize, sectorsLeft)));

@@ -3,6 +3,7 @@
 
 #include "fs/common/FlushBarrier.hpp"
 #include "fs/common/SectorStore.hpp"
+#include "fs/common/TransferAlignment.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -126,7 +127,7 @@ namespace fs
         struct SectorCacheStorage
         {
             std::array<SectorCache::Entry, Sectors> entryStorage;
-            std::array<uint8_t, Sectors * BytesPerSector> bufferStorage;
+            alignas(bufferAlignment) std::array<uint8_t, Sectors * BytesPerSector> bufferStorage;
         };
     }
 

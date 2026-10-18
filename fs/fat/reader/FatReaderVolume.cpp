@@ -2,11 +2,12 @@
 
 namespace fs
 {
-    FatReaderVolume::FatReaderVolume(hal::BlockDevice& device, SectorSource& sectors, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved)
+    FatReaderVolume::FatReaderVolume(hal::BlockDevice& device, SectorSource& sectors, std::size_t transferAlignment, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const infra::Function<void()>& onMediaRemoved)
         : device(device)
         , deferred(deferred)
         , onMediaRemoved(onMediaRemoved)
         , sectors(sectors)
+        , alignment(transferAlignment)
         , assembler(nameBuffer, reading)
     {}
 
@@ -25,6 +26,11 @@ namespace fs
     SectorSource& FatReaderVolume::Sectors() const
     {
         return sectors;
+    }
+
+    const TransferAlignment& FatReaderVolume::Alignment() const
+    {
+        return alignment;
     }
 
     FatGeometry& FatReaderVolume::Geometry()

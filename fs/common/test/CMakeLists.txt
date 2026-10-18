@@ -25,4 +25,5 @@ target_sources(fs.common_test PRIVATE
     TestOperationQueue.cpp
     TestPath.cpp
     TestSectorCache.cpp
+    TestTransferAlignment.cpp
 )

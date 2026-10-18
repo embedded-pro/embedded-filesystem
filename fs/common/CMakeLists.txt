@@ -38,6 +38,8 @@ target_sources(fs.common PRIVATE
     SectorCache.hpp
     SectorSource.hpp
     SectorStore.hpp
+    TransferAlignment.cpp
+    TransferAlignment.hpp
 )
 
 if (EMFS_BUILD_TESTS)

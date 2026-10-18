@@ -3,9 +3,9 @@
 
 namespace fs
 {
-    FatReader::FatReader(hal::BlockDevice& device, infra::ByteRange sector, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const PathLimits& limits)
+    FatReader::FatReader(hal::BlockDevice& device, infra::ByteRange sector, std::size_t transferAlignment, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const PathLimits& limits)
         : window(device, sector)
-        , volume(device, window, nameBuffer, reading, deferred, [this]
+        , volume(device, window, transferAlignment, nameBuffer, reading, deferred, [this]
               {
                   if (lifecycle.RemoveMedia())
                       volume.MarkUnmounted(Result::mediaRemoved);

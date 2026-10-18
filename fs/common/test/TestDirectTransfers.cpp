@@ -1,4 +1,5 @@
 #include "fs/common/DirectTransfers.hpp"
+#include "fs/common/TransferAlignment.hpp"
 #include "hal/interfaces/test_doubles/BlockDeviceMock.hpp"
 #include "infra/event/test_helper/EventDispatcherFixture.hpp"
 #include "infra/util/test_helper/MemoryRangeMatcher.hpp"
@@ -57,7 +58,7 @@ namespace
         testing::StrictMock<hal::BlockDeviceMock> device;
         fs::FlushBarrier barrier{ device };
         fs::SectorCache::WithStorage<3, 4> cache{ barrier };
-        fs::DirectTransfers direct{ barrier, cache };
+        fs::DirectTransfers direct{ barrier, cache, 1 };
         infra::Function<void(hal::BlockDevice::Result)> deviceDone;
         testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
     };
@@ -171,4 +172,24 @@ TEST_F(DirectTransfersTest, failed_erase_is_reported)
         });
 
     ExpectDone(fs::Result::deviceError, hal::BlockDevice::Result::failed);
+}
+
+TEST_F(DirectTransfersTest, accepts_the_buffers_at_its_transfer_alignment)
+{
+    alignas(fs::bufferAlignment) std::array<uint8_t, 16> buffer{};
+    fs::DirectTransfers aligned{ barrier, cache, 4 };
+
+    EXPECT_TRUE(direct.Accepts(infra::DiscardHead(infra::MakeRange(buffer), 1)));
+    EXPECT_TRUE(aligned.Accepts(infra::DiscardHead(infra::MakeRange(buffer), 4)));
+    EXPECT_FALSE(aligned.Accepts(infra::DiscardHead(infra::MakeRange(buffer), 2)));
+}
+
+TEST_F(DirectTransfersTest, a_buffer_off_the_transfer_alignment_is_never_transferred)
+{
+    alignas(fs::bufferAlignment) std::array<uint8_t, 12> buffer{};
+    fs::DirectTransfers aligned{ barrier, cache, 4 };
+    auto misaligned = infra::Head(infra::DiscardHead(infra::MakeRange(buffer), 2), 8);
+
+    EXPECT_DEATH(aligned.Read(10, misaligned, [](fs::Result) {}), "");
+    EXPECT_DEATH(aligned.Write(10, misaligned, 0, [](fs::Result) {}), "");
 }

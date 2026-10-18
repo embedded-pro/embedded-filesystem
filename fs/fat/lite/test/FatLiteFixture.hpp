@@ -61,8 +61,9 @@ class FatLiteFixture
     : public infra::ClockFixture
 {
 public:
-    explicit FatLiteFixture(const FatLiteVolumeCase& volumeCase = fat16Volume)
+    explicit FatLiteFixture(const FatLiteVolumeCase& volumeCase = fat16Volume, std::size_t transferAlignment = 1)
         : device(volumeCase.blocks)
+        , volume(device, transferAlignment)
     {
         fs::FatFormatConfig config;
         config.sectorsPerCluster = volumeCase.sectorsPerCluster;
@@ -244,7 +245,7 @@ public:
     fs::SparseBlockDevice::WithStorage<192> device;
     fs::FatFormatter::WithStorage<8> formatter{ device };
     std::optional<fs::FatImageBuilder> builder;
-    fs::FatLite::WithStorage<2, 1> volume{ device };
+    fs::FatLite::WithStorage<2, 1> volume;
     testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
     testing::StrictMock<infra::MockCallback<void(fs::Result, const fs::EntryInfo&)>> statDone;
     testing::StrictMock<infra::MockCallback<void(fs::Result, std::size_t)>> readDone;

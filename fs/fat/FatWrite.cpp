@@ -144,7 +144,7 @@ namespace fs
         auto sectorsInRun = uint64_t{ run.End() - index } * volume.Geometry().sectorsPerCluster - sectorInCluster;
         auto sectors = static_cast<uint32_t>(std::min<uint64_t>(data.size() / SectorSize(), sectorsInRun));
 
-        if (sectors > volume.CacheSectors() - 2)
+        if (sectors > volume.CacheSectors() - 2 && volume.Transfers().Accepts(data))
             TransferSectors(sector, sectors);
         else
             TransferSector(sector, 0, SectorSize());

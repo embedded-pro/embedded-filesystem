@@ -2,6 +2,7 @@
 #include "infra/event/EventDispatcher.hpp"
 #include "infra/util/ReallyAssert.hpp"
 #include <algorithm>
+#include <bit>
 #include <limits>
 #include <utility>
 
@@ -31,6 +32,7 @@ namespace fs
     {
         really_assert(buffer.size() % blockSize == 0);
         ++readRequests;
+        bufferAddresses |= std::bit_cast<std::uintptr_t>(buffer.begin());
         if (observer)
             observer(Request::read, firstBlock);
 
@@ -47,6 +49,7 @@ namespace fs
     {
         really_assert(buffer.size() % blockSize == 0);
         ++writeRequests;
+        bufferAddresses |= std::bit_cast<std::uintptr_t>(buffer.begin());
         if (observer)
             observer(Request::write, firstBlock);
 
@@ -160,6 +163,11 @@ namespace fs
     uint32_t SparseBlockDevice::FlushRequests() const
     {
         return flushRequests;
+    }
+
+    std::size_t SparseBlockDevice::BufferAlignment() const
+    {
+        return std::size_t{ 1 } << std::countr_zero(bufferAddresses | maximumBufferAlignment);
     }
 
     bool SparseBlockDevice::Start(uint32_t firstBlock, uint32_t blocks, const infra::Function<void(Result)>& onDone)
