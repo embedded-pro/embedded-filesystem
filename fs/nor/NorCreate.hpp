@@ -30,16 +30,32 @@ namespace fs
         infra::ConstByteRange FoundInlineBytes() const;
 
     private:
+        enum class Step : uint8_t
+        {
+            parentFound,
+            nameLookedUp,
+            inodeFetched,
+            parentFetched,
+            entryFetched,
+            checkpointed,
+            committed,
+            finish
+        };
+
         void Start();
         void ParentFound(Result result);
         void NameLookedUp(Result result);
         void FetchPaths();
-        void Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, const infra::Function<void()>& onFetchedDone);
+        void Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, Step next);
+        void Fetched();
         void CheckRoom();
         void CheckpointAndRestart();
+        void Checkpointed(Result result);
         void Commit();
         void Committed(Result result);
         void Finish(Result result);
+        const infra::Function<void(Result result)>& Then(Step next);
+        void Resume(Result result);
         NorMapId InodeTable() const;
         NorMapId DirectoryMap() const;
 
@@ -47,6 +63,7 @@ namespace fs
         NorVolume& volume;
         infra::BoundedConstString path;
         NorInodeType type{ NorInodeType::file };
+        Step step{ Step::parentFound };
         infra::BoundedConstString name;
         uint32_t parent{ 0 };
         NorMapRoot parentMap;
@@ -55,7 +72,7 @@ namespace fs
         NorFoundInode found;
         infra::ConstByteRange foundInlineBytes;
         infra::Function<Result()> prepare;
-        infra::AutoResetFunction<void()> onFetched;
+        infra::Function<void(Result result)> resume;
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }

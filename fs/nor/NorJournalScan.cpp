@@ -25,10 +25,7 @@ namespace fs
         end = volume.checkpoint.recordsOffset;
         volume.epoch.clear();
         volume.epoch.push_back(block);
-        ReadHeader(block, [this]
-            {
-                OnFirstHeader();
-            });
+        ReadHeader(block, Step::firstHeader);
     }
 
     void NorJournalScan::OnFirstHeader()
@@ -46,10 +43,7 @@ namespace fs
 
     void NorJournalScan::ReadRecord()
     {
-        records.Read(*volume.geometry, block, end, [this](const std::optional<OpenedRecord>& record)
-            {
-                OnRecord(record);
-            });
+        ReadRecordAt(block, end, Step::record);
     }
 
     void NorJournalScan::OnRecord(const std::optional<OpenedRecord>& record)
@@ -82,10 +76,7 @@ namespace fs
         else if (candidate == geometry.blocks)
             Finish();
         else
-            ReadHeader(candidate, [this]
-                {
-                    OnCandidateHeader();
-                });
+            ReadHeader(candidate, Step::candidateHeader);
     }
 
     void NorJournalScan::OnCandidateHeader()
@@ -94,10 +85,7 @@ namespace fs
         if (allocation.type == NorBlockType::journal && allocation.sequence > sequence && (!next.has_value() || allocation.sequence < nextSequence))
         {
             candidateSequence = allocation.sequence;
-            records.Read(*volume.geometry, candidate, volume.geometry->HeaderSize(), [this](const std::optional<OpenedRecord>& record)
-                {
-                    OnCandidateRecord(record);
-                });
+            ReadRecordAt(candidate, volume.geometry->HeaderSize(), Step::candidateRecord);
             return;
         }
 
@@ -152,13 +140,28 @@ namespace fs
         onDone(Result::success);
     }
 
-    void NorJournalScan::ReadHeader(uint32_t headerBlock, const infra::Function<void()>& onRead)
+    void NorJournalScan::ReadHeader(uint32_t headerBlock, Step next)
     {
         const auto& geometry = *volume.geometry;
-        onHeader = onRead;
+        step = next;
         flash.ReadBuffer(infra::Head(buffer, geometry.HeaderSize()), geometry.AddressOfBlock(headerBlock), [this]
             {
-                onHeader();
+                if (step == Step::firstHeader)
+                    OnFirstHeader();
+                else
+                    OnCandidateHeader();
+            });
+    }
+
+    void NorJournalScan::ReadRecordAt(uint32_t recordBlock, uint32_t offset, Step next)
+    {
+        step = next;
+        records.Read(*volume.geometry, recordBlock, offset, [this](const std::optional<OpenedRecord>& record)
+            {
+                if (step == Step::record)
+                    OnRecord(record);
+                else
+                    OnCandidateRecord(record);
             });
     }
 

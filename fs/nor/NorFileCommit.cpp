@@ -16,6 +16,10 @@ namespace fs
 
     NorFileCommit::NorFileCommit(NorVolume& volume)
         : volume(volume)
+        , resume([this](Result result)
+              {
+                  Resume(result);
+              })
     {}
 
     NorFileCommit::~NorFileCommit() = default;
@@ -34,24 +38,23 @@ namespace fs
 
         auto whole = file->size / volume.Geometry().programUnit * volume.Geometry().programUnit;
         if (file->tailBlock.has_value() && whole > file->programmed)
-            volume.FileFlush().Flush(*file, whole, reserve, [this](Result result)
-                {
-                    if (result == Result::success)
-                        FetchPaths();
-                    else
-                        Finish(result);
-                });
+            volume.FileFlush().Flush(*file, whole, reserve, Then(Step::retry));
         else
             FetchPaths();
+    }
+
+    void NorFileCommit::Retry(Result result)
+    {
+        if (result == Result::success)
+            FetchPaths();
+        else
+            Finish(result);
     }
 
     void NorFileCommit::FetchPaths()
     {
         volume.Cache().UnpinAll();
-        Fetch(InodeTable(), volume.State().inodeTable, file->inode, [this]
-            {
-                RecordFetched();
-            });
+        Fetch(InodeTable(), volume.State().inodeTable, file->inode, Step::recordFetched);
     }
 
     void NorFileCommit::RecordFetched()
@@ -68,27 +71,31 @@ namespace fs
         if (file->entries.empty())
             CheckRoom();
         else
-            Fetch(DataMap(), dataMap, file->entries.front().index, [this]
-                {
-                    Fetch(DataMap(), dataMap, secondLeafIndex.value_or(file->entries.front().index), [this]
-                        {
-                            CheckRoom();
-                        });
-                });
+            Fetch(DataMap(), dataMap, file->entries.front().index, Step::firstLeafFetched);
     }
 
-    void NorFileCommit::Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, const infra::Function<void()>& onFetchedDone)
+    void NorFileCommit::Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, Step next)
     {
-        onFetched = onFetchedDone;
+        step = next;
         volume.Fetch().Fetch(map, root, key, [this](NorFetchResult result)
             {
                 if (result == NorFetchResult::fetched)
-                    onFetched();
+                    Fetched();
                 else if (result == NorFetchResult::cacheFull)
                     CheckpointAndRetry();
                 else
                     Finish(Result::corrupted);
             });
+    }
+
+    void NorFileCommit::Fetched()
+    {
+        if (step == Step::recordFetched)
+            RecordFetched();
+        else if (step == Step::firstLeafFetched)
+            Fetch(DataMap(), dataMap, secondLeafIndex.value_or(file->entries.front().index), Step::secondLeafFetched);
+        else
+            CheckRoom();
     }
 
     void NorFileCommit::CheckRoom()
@@ -111,13 +118,7 @@ namespace fs
 
     void NorFileCommit::CheckpointAndRetry()
     {
-        volume.Checkpoints().Write([this](Result result)
-            {
-                if (result == Result::success)
-                    FetchPaths();
-                else
-                    Finish(result);
-            });
+        volume.Checkpoints().Write(Then(Step::retry));
     }
 
     void NorFileCommit::Write()
@@ -129,10 +130,7 @@ namespace fs
                     AddNorEntry(record, NorBlockSet{ file->inode, entry.index, entry.previous, entry.block });
                 AddNorEntry(record, NorSize{ file->inode, file->size, file->Pending() });
             },
-            [this](Result result)
-            {
-                Committed(result);
-            });
+            Then(Step::committed));
     }
 
     void NorFileCommit::Committed(Result result)
@@ -147,10 +145,7 @@ namespace fs
         file->committedSize = file->size;
         file->entries.clear();
         if (cache.Capacity() - cache.ModifiedNodes() < unmodifiedNodesOfALookup)
-            volume.Checkpoints().Write([this](Result written)
-                {
-                    Finish(written);
-                });
+            volume.Checkpoints().Write(Then(Step::finish));
         else
             Finish(Result::success);
     }
@@ -159,6 +154,28 @@ namespace fs
     {
         volume.Cache().UnpinAll();
         onDone(result);
+    }
+
+    const infra::Function<void(Result result)>& NorFileCommit::Then(Step next)
+    {
+        step = next;
+        return resume;
+    }
+
+    void NorFileCommit::Resume(Result result)
+    {
+        switch (step)
+        {
+            case Step::retry:
+                Retry(result);
+                break;
+            case Step::committed:
+                Committed(result);
+                break;
+            default:
+                Finish(result);
+                break;
+        }
     }
 
     NorMapId NorFileCommit::InodeTable() const

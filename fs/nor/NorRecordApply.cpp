@@ -79,10 +79,7 @@ namespace fs
         }
 
         inodePut = put;
-        Fetch(InodeTable(), volume.State().inodeTable, put.inode, [this]
-            {
-                InodeFetched();
-            });
+        Fetch(InodeTable(), volume.State().inodeTable, put.inode, Step::inodeFetched);
     }
 
     void NorRecordApply::InodeFetched()
@@ -115,10 +112,7 @@ namespace fs
     void NorRecordApply::RemoveInode(const NorInodeRemove& remove)
     {
         removedInode = remove.inode;
-        Fetch(InodeTable(), volume.State().inodeTable, remove.inode, [this]
-            {
-                RemovedInodeFetched();
-            });
+        Fetch(InodeTable(), volume.State().inodeTable, remove.inode, Step::removedInodeFetched);
     }
 
     void NorRecordApply::RemovedInodeFetched()
@@ -137,29 +131,25 @@ namespace fs
         {
             dataInode = removedInode;
             dataMap = MapOf(*record);
-            ReleaseBlocks(0, BlocksOfSize(LoadLittle32(*record, norInodeSizeOffset)), [this]
-                {
-                    RemoveRecord();
-                });
+            ReleaseBlocks(0, BlocksOfSize(LoadLittle32(*record, norInodeSizeOffset)), Step::removeRecord);
         }
     }
 
     void NorRecordApply::RemoveRecord()
     {
-        Fetch(InodeTable(), volume.State().inodeTable, removedInode, [this]
-            {
-                NorBTree(volume.Cache(), InodeTable()).Remove(volume.State().inodeTable, removedInode);
-                ApplyNext();
-            });
+        Fetch(InodeTable(), volume.State().inodeTable, removedInode, Step::recordFetched);
+    }
+
+    void NorRecordApply::RecordFetched()
+    {
+        NorBTree(volume.Cache(), InodeTable()).Remove(volume.State().inodeTable, removedInode);
+        ApplyNext();
     }
 
     void NorRecordApply::PutDirectoryEntry(const NorDirectoryEntryPut& put)
     {
         entryPut = put;
-        FetchDirectory(put.directory, put.key, [this]
-            {
-                EntryFetched();
-            });
+        FetchDirectory(put.directory, put.key, Step::entryFetched);
     }
 
     void NorRecordApply::EntryFetched()
@@ -186,10 +176,7 @@ namespace fs
     void NorRecordApply::RemoveDirectoryEntry(const NorDirectoryEntryRemove& remove)
     {
         entryRemove = remove;
-        FetchDirectory(remove.directory, remove.key, [this]
-            {
-                RemovedEntryFetched();
-            });
+        FetchDirectory(remove.directory, remove.key, Step::removedEntryFetched);
     }
 
     void NorRecordApply::RemovedEntryFetched()
@@ -207,34 +194,31 @@ namespace fs
         ApplyNext();
     }
 
-    void NorRecordApply::FetchDirectory(uint32_t directory, uint32_t key, const infra::Function<void()>& onFetchedDone)
+    void NorRecordApply::FetchDirectory(uint32_t directory, uint32_t key, Step next)
     {
-        onDirectory = onFetchedDone;
+        afterDirectory = next;
+        directoryInode = directory;
         directoryKey = key;
-        Fetch(InodeTable(), volume.State().inodeTable, directory, [this, directory]
-            {
-                auto record = RecordOfType(directory, NorInodeType::directory);
-                if (!record.has_value())
-                {
-                    onDone(Result::corrupted);
-                    return;
-                }
+        Fetch(InodeTable(), volume.State().inodeTable, directory, Step::directoryFetched);
+    }
 
-                directoryMap = MapOf(*record);
-                Fetch(DirectoryMap(directory), directoryMap, directoryKey, [this]
-                    {
-                        onDirectory();
-                    });
-            });
+    void NorRecordApply::DirectoryFetched()
+    {
+        auto record = RecordOfType(directoryInode, NorInodeType::directory);
+        if (!record.has_value())
+        {
+            onDone(Result::corrupted);
+            return;
+        }
+
+        directoryMap = MapOf(*record);
+        Fetch(DirectoryMap(directoryInode), directoryMap, directoryKey, afterDirectory);
     }
 
     void NorRecordApply::SetBlock(const NorBlockSet& set)
     {
         blockSet = set;
-        Fetch(InodeTable(), volume.State().inodeTable, set.inode, [this]
-            {
-                FileFetched();
-            });
+        Fetch(InodeTable(), volume.State().inodeTable, set.inode, Step::fileFetched);
     }
 
     void NorRecordApply::FileFetched()
@@ -247,10 +231,7 @@ namespace fs
         }
 
         dataMap = MapOf(*record);
-        Fetch(DataMap(blockSet.inode), dataMap, blockSet.index, [this]
-            {
-                SlotFetched();
-            });
+        Fetch(DataMap(blockSet.inode), dataMap, blockSet.index, Step::slotFetched);
     }
 
     void NorRecordApply::SlotFetched()
@@ -290,10 +271,7 @@ namespace fs
     void NorRecordApply::SetSize(const NorSize& size)
     {
         sizeEntry = size;
-        Fetch(InodeTable(), volume.State().inodeTable, size.inode, [this]
-            {
-                SizedFileFetched();
-            });
+        Fetch(InodeTable(), volume.State().inodeTable, size.inode, Step::sizedFileFetched);
     }
 
     void NorRecordApply::SizedFileFetched()
@@ -305,14 +283,13 @@ namespace fs
         {
             dataInode = sizeEntry.inode;
             dataMap = MapOf(*record);
-            ReleaseBlocks(BlocksOfSize(sizeEntry.size), BlocksOfSize(LoadLittle32(*record, norInodeSizeOffset)), [this]
-                {
-                    Fetch(InodeTable(), volume.State().inodeTable, sizeEntry.inode, [this]
-                        {
-                            WriteSize();
-                        });
-                });
+            ReleaseBlocks(BlocksOfSize(sizeEntry.size), BlocksOfSize(LoadLittle32(*record, norInodeSizeOffset)), Step::sizeReleased);
         }
+    }
+
+    void NorRecordApply::SizeReleased()
+    {
+        Fetch(InodeTable(), volume.State().inodeTable, sizeEntry.inode, Step::writeSize);
     }
 
     void NorRecordApply::WriteSize()
@@ -327,11 +304,11 @@ namespace fs
         ApplyNext();
     }
 
-    void NorRecordApply::ReleaseBlocks(uint32_t from, uint32_t to, const infra::Function<void()>& onReleasedDone)
+    void NorRecordApply::ReleaseBlocks(uint32_t from, uint32_t to, Step next)
     {
         releaseFrom = from;
         releaseIndex = std::min(to, NorRadixTree::IndicesCovered(dataMap, volume.Geometry().nodeSize));
-        onReleased = onReleasedDone;
+        afterRelease = next;
         ReleaseNextBlock();
     }
 
@@ -342,29 +319,26 @@ namespace fs
         {
             if (releaseIndex <= releaseFrom)
             {
-                onReleased();
+                Continue(afterRelease);
                 return;
             }
 
             --releaseIndex;
             releasing = true;
             fetchedWhileReleasing = false;
-            volume.Fetch().Fetch(DataMap(dataInode), dataMap, releaseIndex, [this](NorFetchResult result)
-                {
-                    ReleaseFetched(result);
-                });
+            Fetch(DataMap(dataInode), dataMap, releaseIndex, Step::released);
             releasing = false;
             fetchedAtOnce = fetchedWhileReleasing;
         }
     }
 
-    void NorRecordApply::ReleaseFetched(NorFetchResult result)
+    void NorRecordApply::BlockFetched()
     {
         NorRadixTree data{ volume.Cache(), dataInode };
-        auto block = result == NorFetchResult::fetched ? data.Find(dataMap, releaseIndex) : 0;
-        if (result != NorFetchResult::fetched || (block != 0 && !IsInVolume(block)))
+        auto block = data.Find(dataMap, releaseIndex);
+        if (block != 0 && !IsInVolume(block))
         {
-            onDone(result == NorFetchResult::cacheFull ? Result::unsupported : Result::corrupted);
+            onDone(Result::corrupted);
             return;
         }
 
@@ -426,16 +400,62 @@ namespace fs
         return IsInVolume(block) && volume.State().blocks.State(block) != NorBlockState::inUse;
     }
 
-    void NorRecordApply::Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, const infra::Function<void()>& onFetchedDone)
+    void NorRecordApply::Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, Step next)
     {
-        onFetched = onFetchedDone;
+        step = next;
         volume.Fetch().Fetch(map, root, key, [this](NorFetchResult result)
             {
                 if (result == NorFetchResult::fetched)
-                    onFetched();
+                    Continue(step);
                 else
                     onDone(result == NorFetchResult::cacheFull ? Result::unsupported : Result::corrupted);
             });
+    }
+
+    void NorRecordApply::Continue(Step next)
+    {
+        switch (next)
+        {
+            case Step::inodeFetched:
+                InodeFetched();
+                break;
+            case Step::removedInodeFetched:
+                RemovedInodeFetched();
+                break;
+            case Step::removeRecord:
+                RemoveRecord();
+                break;
+            case Step::recordFetched:
+                RecordFetched();
+                break;
+            case Step::directoryFetched:
+                DirectoryFetched();
+                break;
+            case Step::entryFetched:
+                EntryFetched();
+                break;
+            case Step::removedEntryFetched:
+                RemovedEntryFetched();
+                break;
+            case Step::fileFetched:
+                FileFetched();
+                break;
+            case Step::slotFetched:
+                SlotFetched();
+                break;
+            case Step::sizedFileFetched:
+                SizedFileFetched();
+                break;
+            case Step::sizeReleased:
+                SizeReleased();
+                break;
+            case Step::writeSize:
+                WriteSize();
+                break;
+            default:
+                BlockFetched();
+                break;
+        }
     }
 
     NorMapId NorRecordApply::InodeTable() const

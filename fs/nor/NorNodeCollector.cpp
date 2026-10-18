@@ -164,22 +164,11 @@ namespace fs
         else if (header.map == NorMap::inodeTable)
             Check(volume.State().inodeTable);
         else
-            volume.Fetch().Fetch(InodeTable(), volume.State().inodeTable, header.owner, [this](NorFetchResult result)
-                {
-                    OwnerFetched(result);
-                });
+            Fetch(InodeTable(), volume.State().inodeTable, header.owner, 0, Step::owner);
     }
 
-    void NorNodeCollector::OwnerFetched(NorFetchResult result)
+    void NorNodeCollector::OwnerFetched()
     {
-        really_assert(result != NorFetchResult::cacheFull);
-
-        if (result != NorFetchResult::fetched)
-        {
-            Skip();
-            return;
-        }
-
         auto record = NorBTree(volume.Cache(), InodeTable()).Find(volume.State().inodeTable, header.owner);
         auto type = header.map == NorMap::directory ? NorInodeType::directory : NorInodeType::file;
         if (!record.has_value() || (*record)[norInodeTypeOffset] != static_cast<uint8_t>(type))
@@ -196,20 +185,7 @@ namespace fs
         else if (header.level + 1 == root.height)
             Compare(root.address);
         else
-            volume.Fetch().Fetch(Map(), root, header.lowestKey, static_cast<uint8_t>(header.level + 1), [this](NorFetchResult result)
-                {
-                    ParentFetched(result);
-                });
-    }
-
-    void NorNodeCollector::ParentFetched(NorFetchResult result)
-    {
-        really_assert(result != NorFetchResult::cacheFull);
-
-        if (result != NorFetchResult::fetched)
-            Skip();
-        else
-            Compare(AddressAt(header.level));
+            Fetch(Map(), root, header.lowestKey, static_cast<uint8_t>(header.level + 1), Step::parent);
     }
 
     void NorNodeCollector::Compare(uint32_t address)
@@ -222,23 +198,28 @@ namespace fs
             Next();
         }
         else
-            volume.Fetch().Fetch(Map(), root, header.lowestKey, header.level, [this](NorFetchResult result)
-                {
-                    NodeFetched(result);
-                });
+            Fetch(Map(), root, header.lowestKey, header.level, Step::node);
     }
 
-    void NorNodeCollector::NodeFetched(NorFetchResult result)
+    void NorNodeCollector::Fetch(const NorMapId& map, const NorMapRoot& fetchRoot, uint32_t key, uint8_t level, Step next)
     {
-        really_assert(result != NorFetchResult::cacheFull);
+        step = next;
+        volume.Fetch().Fetch(map, fetchRoot, key, level, [this](NorFetchResult result)
+            {
+                really_assert(result != NorFetchResult::cacheFull);
 
-        if (result != NorFetchResult::fetched)
-            Skip();
-        else
-        {
-            Relocate();
-            Next();
-        }
+                if (result != NorFetchResult::fetched)
+                    Skip();
+                else if (step == Step::owner)
+                    OwnerFetched();
+                else if (step == Step::parent)
+                    Compare(AddressAt(header.level));
+                else
+                {
+                    Relocate();
+                    Next();
+                }
+            });
     }
 
     void NorNodeCollector::Relocate() const

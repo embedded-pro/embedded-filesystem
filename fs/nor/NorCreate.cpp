@@ -15,6 +15,10 @@ namespace fs
 
     NorCreate::NorCreate(NorVolume& volume)
         : volume(volume)
+        , resume([this](Result result)
+              {
+                  Resume(result);
+              })
     {}
 
     NorCreate::~NorCreate() = default;
@@ -55,10 +59,7 @@ namespace fs
 
         auto split = SplitLast(path);
         name = split.name;
-        volume.Walk().Find(volume.State().inodeTable, split.parent, [this](Result result)
-            {
-                ParentFound(result);
-            });
+        volume.Walk().Find(volume.State().inodeTable, split.parent, Then(Step::parentFound));
     }
 
     void NorCreate::ParentFound(Result result)
@@ -72,10 +73,7 @@ namespace fs
         {
             parent = found.inode;
             parentMap = found.map;
-            volume.NameLookup().Find(volume.State().inodeTable, parent, parentMap, name, [this](Result lookedUp)
-                {
-                    NameLookedUp(lookedUp);
-                });
+            volume.NameLookup().Find(volume.State().inodeTable, parent, parentMap, name, Then(Step::nameLookedUp));
         }
     }
 
@@ -106,30 +104,31 @@ namespace fs
     void NorCreate::FetchPaths()
     {
         volume.Cache().UnpinAll();
-        Fetch(InodeTable(), volume.State().inodeTable, inode, [this]
-            {
-                Fetch(InodeTable(), volume.State().inodeTable, parent, [this]
-                    {
-                        Fetch(DirectoryMap(), parentMap, key, [this]
-                            {
-                                CheckRoom();
-                            });
-                    });
-            });
+        Fetch(InodeTable(), volume.State().inodeTable, inode, Step::inodeFetched);
     }
 
-    void NorCreate::Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t fetchKey, const infra::Function<void()>& onFetchedDone)
+    void NorCreate::Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t fetchKey, Step next)
     {
-        onFetched = onFetchedDone;
+        step = next;
         volume.Fetch().Fetch(map, root, fetchKey, [this](NorFetchResult result)
             {
                 if (result == NorFetchResult::fetched)
-                    onFetched();
+                    Fetched();
                 else if (result == NorFetchResult::cacheFull)
                     CheckpointAndRestart();
                 else
                     Finish(Result::corrupted);
             });
+    }
+
+    void NorCreate::Fetched()
+    {
+        if (step == Step::inodeFetched)
+            Fetch(InodeTable(), volume.State().inodeTable, parent, Step::parentFetched);
+        else if (step == Step::parentFetched)
+            Fetch(DirectoryMap(), parentMap, key, Step::entryFetched);
+        else
+            CheckRoom();
     }
 
     void NorCreate::CheckRoom()
@@ -156,13 +155,15 @@ namespace fs
 
     void NorCreate::CheckpointAndRestart()
     {
-        volume.Checkpoints().Write([this](Result result)
-            {
-                if (result == Result::success)
-                    Start();
-                else
-                    Finish(result);
-            });
+        volume.Checkpoints().Write(Then(Step::checkpointed));
+    }
+
+    void NorCreate::Checkpointed(Result result)
+    {
+        if (result == Result::success)
+            Start();
+        else
+            Finish(result);
     }
 
     void NorCreate::Commit()
@@ -173,20 +174,14 @@ namespace fs
                 AddNorInodePut(record, inode, NorInodeRecord{ parent, type, 0, 0, 0, {}, infra::StringAsByteRange(name) }, volume.Config());
                 AddNorEntry(record, NorDirectoryEntryPut{ parent, key, inode });
             },
-            [this](Result result)
-            {
-                Committed(result);
-            });
+            Then(Step::committed));
     }
 
     void NorCreate::Committed(Result result)
     {
         const auto& cache = volume.Cache();
         if (result == Result::success && cache.Capacity() - cache.ModifiedNodes() < unmodifiedNodesOfALookup)
-            volume.Checkpoints().Write([this](Result written)
-                {
-                    Finish(written);
-                });
+            volume.Checkpoints().Write(Then(Step::finish));
         else
             Finish(result);
     }
@@ -195,6 +190,34 @@ namespace fs
     {
         volume.Cache().UnpinAll();
         onDone(result);
+    }
+
+    const infra::Function<void(Result result)>& NorCreate::Then(Step next)
+    {
+        step = next;
+        return resume;
+    }
+
+    void NorCreate::Resume(Result result)
+    {
+        switch (step)
+        {
+            case Step::parentFound:
+                ParentFound(result);
+                break;
+            case Step::nameLookedUp:
+                NameLookedUp(result);
+                break;
+            case Step::checkpointed:
+                Checkpointed(result);
+                break;
+            case Step::committed:
+                Committed(result);
+                break;
+            default:
+                Finish(result);
+                break;
+        }
     }
 
     NorMapId NorCreate::InodeTable() const

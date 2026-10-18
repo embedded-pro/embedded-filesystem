@@ -157,11 +157,7 @@ namespace fs
     {
         if (open && state.Writable() && state.Uncommitted() && volume.Available(generation))
         {
-            call = Call::implicitClose;
-            claimer.Claim([this]
-                {
-                    Granted();
-                });
+            Enqueue(Call::implicitClose);
             return;
         }
 
@@ -186,8 +182,13 @@ namespace fs
 
     void NorFile::Claim(Call claimed)
     {
-        call = claimed;
         self = Share(*this);
+        Enqueue(claimed);
+    }
+
+    void NorFile::Enqueue(Call claimed)
+    {
+        call = claimed;
         claimer.Claim([this]
             {
                 Granted();
@@ -196,6 +197,11 @@ namespace fs
 
     void NorFile::Granted()
     {
+        auto onCallDone = [this](Result result)
+        {
+            Done(result);
+        };
+
         if (!volume.Available(generation))
         {
             if (call == Call::read)
@@ -210,21 +216,11 @@ namespace fs
                                   })
                 .Start();
         else if (call == Call::write)
-            volume.Operation().emplace<NorWrite>(volume, state, writeData, [this](Result result)
-                                  {
-                                      Done(result);
-                                  })
-                .Start();
+            volume.Operation().emplace<NorWrite>(volume, state, writeData, onCallDone).Start();
         else if (call == Call::truncate)
-            volume.Operations().truncate(volume, state, state.position, [this](Result result)
-                {
-                    Done(result);
-                });
+            volume.Operations().truncate(volume, state, state.position, onCallDone);
         else
-            volume.FileCommit().Commit(state, NorReserve::used, [this](Result result)
-                {
-                    Done(result);
-                });
+            volume.FileCommit().Commit(state, NorReserve::used, onCallDone);
     }
 
     void NorFile::ReadDone(Result result, std::size_t bytesRead)

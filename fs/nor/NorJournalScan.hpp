@@ -26,6 +26,14 @@ namespace fs
         void Start();
 
     private:
+        enum class Step : uint8_t
+        {
+            firstHeader,
+            candidateHeader,
+            record,
+            candidateRecord
+        };
+
         void OnFirstHeader();
         void ReadRecord();
         void OnRecord(const std::optional<OpenedRecord>& record);
@@ -36,7 +44,8 @@ namespace fs
         bool LinksToEnd(const OpenedRecord& record) const;
         void Follow(uint32_t next);
         void Finish();
-        void ReadHeader(uint32_t block, const infra::Function<void()>& onRead);
+        void ReadHeader(uint32_t block, Step next);
+        void ReadRecordAt(uint32_t block, uint32_t offset, Step next);
         NorAllocation AllocationInBuffer() const;
 
     private:
@@ -47,12 +56,12 @@ namespace fs
         NorRecordReader records;
         uint32_t block{ 0 };
         uint32_t end{ 0 };
+        Step step{ Step::firstHeader };
         uint64_t sequence{ 0 };
         uint32_t candidate{ 0 };
         uint64_t candidateSequence{ 0 };
         std::optional<uint32_t> next;
         uint64_t nextSequence{ 0 };
-        infra::AutoResetFunction<void()> onHeader;
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }

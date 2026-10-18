@@ -27,26 +27,46 @@ namespace fs
         void Apply(const OpenedRecord& record, bool linked, const infra::Function<void(Result result)>& onDone);
 
     private:
+        enum class Step : uint8_t
+        {
+            inodeFetched,
+            removedInodeFetched,
+            removeRecord,
+            recordFetched,
+            directoryFetched,
+            entryFetched,
+            removedEntryFetched,
+            fileFetched,
+            slotFetched,
+            sizedFileFetched,
+            sizeReleased,
+            writeSize,
+            released
+        };
+
         void ApplyNext();
         void PutInode(const NorInodePut& put);
         void InodeFetched();
         void RemoveInode(const NorInodeRemove& remove);
         void RemovedInodeFetched();
         void RemoveRecord();
+        void RecordFetched();
         void PutDirectoryEntry(const NorDirectoryEntryPut& put);
         void EntryFetched();
         void RemoveDirectoryEntry(const NorDirectoryEntryRemove& remove);
         void RemovedEntryFetched();
-        void FetchDirectory(uint32_t directory, uint32_t key, const infra::Function<void()>& onFetchedDone);
+        void FetchDirectory(uint32_t directory, uint32_t key, Step next);
+        void DirectoryFetched();
         void SetBlock(const NorBlockSet& set);
         void FileFetched();
         void SlotFetched();
         void SetSize(const NorSize& size);
         void SizedFileFetched();
+        void SizeReleased();
         void WriteSize();
-        void ReleaseBlocks(uint32_t from, uint32_t to, const infra::Function<void()>& onReleasedDone);
+        void ReleaseBlocks(uint32_t from, uint32_t to, Step next);
         void ReleaseNextBlock();
-        void ReleaseFetched(NorFetchResult result);
+        void BlockFetched();
         void Release(uint32_t block) const;
         bool IsOfEpoch(uint32_t block) const;
         uint32_t BlocksOfSize(uint32_t size) const;
@@ -54,7 +74,8 @@ namespace fs
         bool HasRoomFor(uint32_t createdNodes) const;
         bool IsInVolume(uint32_t block) const;
         bool IsFreeBlock(uint32_t block) const;
-        void Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, const infra::Function<void()>& onFetchedDone);
+        void Fetch(const NorMapId& map, const NorMapRoot& root, uint32_t key, Step next);
+        void Continue(Step next);
         NorMapId InodeTable() const;
         NorMapId DirectoryMap(uint32_t directory) const;
         NorMapId DataMap(uint32_t file) const;
@@ -68,6 +89,7 @@ namespace fs
         uint32_t removedInode{ 0 };
         NorDirectoryEntryPut entryPut;
         NorDirectoryEntryRemove entryRemove;
+        uint32_t directoryInode{ 0 };
         uint32_t directoryKey{ 0 };
         NorMapRoot directoryMap;
         NorBlockSet blockSet;
@@ -78,9 +100,9 @@ namespace fs
         uint32_t releaseIndex{ 0 };
         bool releasing{ false };
         bool fetchedWhileReleasing{ false };
-        infra::AutoResetFunction<void()> onReleased;
-        infra::AutoResetFunction<void()> onDirectory;
-        infra::AutoResetFunction<void()> onFetched;
+        Step step{ Step::inodeFetched };
+        Step afterDirectory{ Step::entryFetched };
+        Step afterRelease{ Step::removeRecord };
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
