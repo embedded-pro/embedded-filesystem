@@ -22,10 +22,7 @@ namespace fs
             return;
         }
 
-        parent.Find(call.path, false, [this](Result result)
-            {
-                OnFound(result);
-            });
+        parent.Find(call.path, false, Then(Step::found));
     }
 
     bool FatRemove::Visit(const FatScannedEntry&)
@@ -37,18 +34,17 @@ namespace fs
     void FatRemove::FreeSlot(FatEntryPosition, bool)
     {}
 
-    void FatRemove::OnFound(Result result)
+    void FatRemove::OnFound()
     {
-        if (result == Result::success && !parent.Found())
-            result = Result::notFound;
-
-        if (result == Result::success)
+        if (!parent.Found())
         {
-            target = *parent.Found();
-            result = Check();
+            Finish(Result::notFound);
+            return;
         }
 
-        if (result != Result::success)
+        target = *parent.Found();
+
+        if (auto result = Check(); result != Result::success)
             Finish(result);
         else if (IsDirectory(target))
             CheckEmpty();
@@ -67,17 +63,12 @@ namespace fs
     void FatRemove::CheckEmpty()
     {
         cursor = volume.Reader().Start(target.entry.firstCluster);
-        volume.Reader().Read(cursor, *this, [this](Result result)
-            {
-                OnChecked(result);
-            });
+        volume.Reader().Read(cursor, *this, Then(Step::checked));
     }
 
-    void FatRemove::OnChecked(Result result)
+    void FatRemove::OnChecked()
     {
-        if (result != Result::success)
-            Finish(result);
-        else if (!empty)
+        if (!empty)
             Finish(Result::notEmpty);
         else
             ClearEntry();
@@ -85,60 +76,69 @@ namespace fs
 
     void FatRemove::ClearEntry()
     {
-        volume.MarkDirty([this](Result result)
-            {
-                if (result != Result::success)
-                    Finish(result);
-                else
-                    ClearMarkedEntry();
-            });
+        volume.MarkDirty(Then(Step::dirtied));
     }
 
     void FatRemove::ClearMarkedEntry()
     {
         volume.ClosedFiles().Forget(target.shortEntry);
-        clear.Clear(target, [this](Result result)
-            {
-                OnCleared(result);
-            });
+        clear.Clear(target, Then(Step::cleared));
     }
 
-    void FatRemove::OnCleared(Result result)
+    void FatRemove::FreeChain()
     {
-        if (result != Result::success)
-            Finish(result);
+        if (target.entry.firstCluster == 0)
+            Finish(Result::success);
         else
-            volume.Cache().Flush([this](Result result)
-                {
-                    OnFlushed(result);
-                });
-    }
-
-    void FatRemove::OnFlushed(Result result)
-    {
-        if (result != Result::success || target.entry.firstCluster == 0)
-            Finish(result);
-        else
-            volume.ChainFree().Free(target.entry.firstCluster, [this](Result result)
-                {
-                    OnFreed(result);
-                });
-    }
-
-    void FatRemove::OnFreed(Result result)
-    {
-        if (result != Result::success)
-            Finish(result);
-        else
-            volume.Cache().Flush([this](Result result)
-                {
-                    Finish(result);
-                });
+            volume.ChainFree().Free(target.entry.firstCluster, Then(Step::freed));
     }
 
     void FatRemove::Finish(Result result)
     {
         onFinished(result);
         call.onDone(result);
+    }
+
+    infra::Function<void(Result result)> FatRemove::Then(Step next)
+    {
+        step = next;
+        return [this](Result result)
+        {
+            Resume(result);
+        };
+    }
+
+    void FatRemove::Resume(Result result)
+    {
+        if (result != Result::success)
+        {
+            Finish(result);
+            return;
+        }
+
+        switch (step)
+        {
+            case Step::found:
+                OnFound();
+                break;
+            case Step::checked:
+                OnChecked();
+                break;
+            case Step::dirtied:
+                ClearMarkedEntry();
+                break;
+            case Step::cleared:
+                volume.Cache().Flush(Then(Step::flushed));
+                break;
+            case Step::flushed:
+                FreeChain();
+                break;
+            case Step::freed:
+                volume.Cache().Flush(Then(Step::finish));
+                break;
+            default:
+                Finish(Result::success);
+                break;
+        }
     }
 }
