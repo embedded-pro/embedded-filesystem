@@ -48,16 +48,6 @@ def has_device(board, device):
         pytest.skip(f"{board.name} has no {device}")
 
 
-@when("the devices of the board are listed")
-def list_devices(terminal, context):
-    context["devices"] = terminal.command("dev.list").values["devices"].split(",")
-
-
-@then(parsers.parse("{device} is among them"))
-def is_listed(context, device):
-    assert device in context["devices"]
-
-
 @then(parsers.parse("it describes {device} with its geometry, its chip and its clock"))
 def describes_device(terminal, device):
     terminal.drain_events("device")

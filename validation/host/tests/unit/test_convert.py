@@ -528,3 +528,110 @@ def test_reads_slower_than_a_byte_per_second_give_no_rate(tmp_path):
     parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/qspi"]
 
     assert "measured.readBytesPerSecond" not in parameters
+
+
+SD = "EVT device id=1 device=sd kind=block blocks=524288 blockSize=512 unitBlocks=8192 chip=035344534431364780 clockHz=25000000"
+
+
+def block_bench(record_id: int, op: str, size: int, median: int, units: int | None = None) -> str:
+    extra = f" units={units}" if units is not None else ""
+    return (
+        f"EVT bench id={record_id} device=sd op={op} size={size}{extra} n=64 minNs={median - 10} medianNs={median} "
+        f"p99Ns={median + 20} maxNs={median + 30} meanNs={median + 5}"
+    )
+
+
+def unit_benches(first_id: int, medians: list[int]) -> list[str]:
+    return [block_bench(first_id + index, "units", 512, median, units=index + 1) for index, median in enumerate(medians)]
+
+
+def test_a_bench_record_of_allocation_units_is_named_by_its_units(tmp_path):
+    lines = [SD, block_bench(2, "units", 512, 600000, units=4)]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/sd"]
+
+    assert parameters["bench.units.4.n"] == "64"
+    assert parameters["bench.units.4.medianNs"] == "600000"
+    assert not [key for key in parameters if key.startswith("bench.units.512.")]
+
+
+def test_the_benchmarks_give_the_parameters_of_a_block_device_model(tmp_path):
+    lines = [
+        SD,
+        block_bench(2, "read", 512, 300000),
+        block_bench(3, "read", 65536, 2840000),
+        block_bench(4, "write", 512, 500000),
+        block_bench(5, "write", 65536, 5580000),
+        *unit_benches(6, [500000, 510000, 505000, 520000, 8500000, 8600000, 8550000, 8700000]),
+        block_bench(14, "flush", 512, 1200000),
+        block_bench(15, "discard", 8192 * 512, 3000000),
+    ]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/sd"]
+
+    assert {key: value for key, value in parameters.items() if key.startswith("measured.")} == {
+        "measured.blockReadNs": "20000",
+        "measured.readCommandNs": "280000",
+        "measured.blockWrittenNs": "40000",
+        "measured.writeCommandNs": "460000",
+        "measured.recentAllocationUnits": "4",
+        "measured.allocationUnitOpeningNs": "8000000",
+        "measured.flushNs": "1200000",
+        "measured.discardNs": "3000000",
+    }
+
+
+def test_units_written_in_turn_without_a_slower_write_give_no_opening(tmp_path):
+    lines = [SD, *unit_benches(2, [500000, 510000, 505000, 520000, 530000, 515000, 525000, 990000])]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/sd"]
+
+    assert "measured.recentAllocationUnits" not in parameters
+    assert "measured.allocationUnitOpeningNs" not in parameters
+
+
+def test_the_open_units_are_those_measured_below_the_first_slower_write(tmp_path):
+    lines = [
+        SD,
+        block_bench(2, "units", 512, 500000, units=1),
+        block_bench(3, "units", 512, 500000, units=2),
+        block_bench(4, "units", 512, 7500000, units=8),
+    ]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/sd"]
+
+    assert parameters["measured.recentAllocationUnits"] == "2"
+    assert parameters["measured.allocationUnitOpeningNs"] == "7000000"
+
+
+def test_an_opening_waits_for_the_benchmark_of_one_unit(tmp_path):
+    lines = [SD, block_bench(2, "units", 512, 500000, units=2), block_bench(3, "units", 512, 7500000, units=8)]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/sd"]
+
+    assert "measured.allocationUnitOpeningNs" not in parameters
+
+
+def test_writes_that_take_no_longer_with_their_blocks_give_no_time_per_block(tmp_path):
+    lines = [SD, block_bench(2, "write", 512, 500000), block_bench(3, "write", 65536, 500000)]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/sd"]
+
+    assert "measured.blockWrittenNs" not in parameters
+
+
+def test_a_command_faster_than_its_blocks_costs_nothing(tmp_path):
+    lines = [SD, block_bench(2, "read", 4096, 100000), block_bench(3, "read", 65536, 2500000)]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/sd"]
+
+    assert parameters["measured.blockReadNs"] == "20000"
+    assert parameters["measured.readCommandNs"] == "0"
+
+
+def test_a_discard_of_other_than_one_allocation_unit_gives_no_discard(tmp_path):
+    lines = [SD, block_bench(2, "discard", 512, 400000)]
+
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/sd"]
+
+    assert "measured.discardNs" not in parameters
