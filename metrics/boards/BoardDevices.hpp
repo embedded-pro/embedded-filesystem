@@ -17,9 +17,16 @@ namespace metrics
         fs::NorConfig config;
     };
 
-    extern const std::array<NorBoardDevice, 2> norBoardDevices;
+    struct BlockBoardDevice
+    {
+        std::string_view name;
+        const BlockDeviceModel* model;
+    };
 
-    std::string DeviceModelsJson(std::span<const NorBoardDevice> devices);
+    extern const std::array<NorBoardDevice, 2> norBoardDevices;
+    extern const std::array<BlockBoardDevice, 1> blockBoardDevices;
+
+    std::string DeviceModelsJson(std::span<const NorBoardDevice> norDevices, std::span<const BlockBoardDevice> blockDevices = {});
 }
 
 #endif

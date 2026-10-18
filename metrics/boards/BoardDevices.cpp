@@ -1,4 +1,5 @@
 #include "metrics/boards/BoardDevices.hpp"
+#include "metrics/fat/FatTargets.hpp"
 #include "metrics/nor/NorConfigurations.hpp"
 #include "metrics/nor/NorTargets.hpp"
 #include <charconv>
@@ -19,14 +20,35 @@ namespace metrics
             return std::string{ text.data(), end };
         }
 
-        std::string DeviceJson(const NorBoardDevice& device)
+        template<class Model>
+        std::string DeviceJson(std::string_view name, const Model& model, double w6BoundMs)
         {
-            auto json = Quoted(device.name) + ": { " + Quoted("model") + ": " + Quoted(device.model->name);
-            for (const auto& [key, value] : Parameters(*device.model))
+            auto json = Quoted(name) + ": { " + Quoted("model") + ": " + Quoted(model.name);
+            for (const auto& [key, value] : Parameters(model))
                 json += ", " + Quoted(key) + ": " + Quoted(value);
 
-            NorTargets targets{ *device.model, device.config, 1 };
-            return json + ", " + Quoted("w6BoundMs") + ": " + Quoted(Number(targets.CommitMilliseconds())) + " }";
+            return json + ", " + Quoted("w6BoundMs") + ": " + Quoted(Number(w6BoundMs)) + " }";
+        }
+
+        std::string DeviceJson(const NorBoardDevice& device)
+        {
+            return DeviceJson(device.name, *device.model, NorTargets{ *device.model, device.config, 1 }.CommitMilliseconds());
+        }
+
+        std::string DeviceJson(const BlockBoardDevice& device)
+        {
+            return DeviceJson(device.name, *device.model, FatTargets{ *device.model }.CommitMilliseconds());
+        }
+
+        template<class Device>
+        void AppendDevices(std::string& json, std::string_view& separator, std::span<const Device> devices)
+        {
+            for (const auto& device : devices)
+            {
+                json += separator;
+                json += "  " + DeviceJson(device);
+                separator = ",\n";
+            }
         }
     }
 
@@ -35,17 +57,16 @@ namespace metrics
         { "stm32h757i-eval/qspi", &norQspi16m, norQspi16mConfig },
     } };
 
-    std::string DeviceModelsJson(std::span<const NorBoardDevice> devices)
+    const std::array<BlockBoardDevice, 1> blockBoardDevices{ {
+        { "stm32h757i-eval/sd", &sdCard256m },
+    } };
+
+    std::string DeviceModelsJson(std::span<const NorBoardDevice> norDevices, std::span<const BlockBoardDevice> blockDevices)
     {
         std::string json{ "{" };
         std::string_view separator{ "\n" };
-        for (const auto& device : devices)
-        {
-            json += separator;
-            json += "  " + DeviceJson(device);
-            separator = ",\n";
-        }
-
+        AppendDevices(json, separator, norDevices);
+        AppendDevices(json, separator, blockDevices);
         return json + "\n}\n";
     }
 }

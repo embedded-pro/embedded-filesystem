@@ -15,10 +15,10 @@ namespace metrics
         explicit FatTargets(const BlockDeviceModel& model);
 
         std::optional<Target> For(std::string_view metric, std::string_view workload) const override;
+        double CommitMilliseconds() const;
 
     private:
         std::optional<Target> WriteTarget(std::string_view metric, std::string_view workload) const;
-        double CommitMilliseconds() const;
 
     private:
         const BlockDeviceModel& model;
