@@ -23,7 +23,6 @@ target_sources(validation.workload PRIVATE
     CountRecords.hpp
     DataLogger.cpp
     DataLogger.hpp
-    FatWorkloadVolume.cpp
     FatWorkloadVolume.hpp
     FileWriter.cpp
     FileWriter.hpp
