@@ -13,6 +13,10 @@ target_link_libraries(validation.devices PUBLIC
 )
 
 target_sources(validation.devices PRIVATE
+    BlockDeviceRegion.cpp
+    BlockDeviceRegion.hpp
+    CountingBlockDevice.cpp
+    CountingBlockDevice.hpp
     CountingFlash.cpp
     CountingFlash.hpp
     NullBlockDevice.cpp
@@ -26,6 +30,8 @@ target_sources(validation.devices PRIVATE
     RamCompletion.hpp
     RamFlash.cpp
     RamFlash.hpp
+    RequestMeter.cpp
+    RequestMeter.hpp
 )
 
 if (EMFS_BUILD_TESTS)

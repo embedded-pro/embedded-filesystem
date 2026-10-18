@@ -23,6 +23,8 @@ namespace validation
         infra::BoundedConstString chip;
         uint32_t clockHz;
         infra::BoundedConstString memory;
+        uint32_t unitBlocks{ 0 };
+        infra::BoundedConstString cache{};
     };
 
     void PrintDevice(ResultLines& results, const DeviceDescription& device);

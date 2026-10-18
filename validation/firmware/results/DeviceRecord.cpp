@@ -11,6 +11,9 @@ namespace validation
             .Add(nor ? "sectors" : "blocks", device.units)
             .Add(nor ? "sectorSize" : "blockSize", device.unitBytes);
 
+        if (device.unitBlocks != 0)
+            record.Add("unitBlocks", device.unitBlocks);
+
         if (device.pageBytes != 0)
             record.Add("pageSize", device.pageBytes);
 
@@ -22,5 +25,8 @@ namespace validation
 
         if (!device.memory.empty())
             record.Add("memory", device.memory);
+
+        if (!device.cache.empty())
+            record.Add("cache", device.cache);
     }
 }
