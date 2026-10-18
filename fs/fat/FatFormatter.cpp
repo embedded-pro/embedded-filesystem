@@ -44,49 +44,31 @@ namespace fs
     void FatFormatter::WriteMbr()
     {
         SerializeMbr(*layout->partition, FirstSector());
-        WriteBuffer(0, 1, [this]
-            {
-                WriteBootSector();
-            });
+        WriteBuffer(0, 1, Step::bootSector);
     }
 
     void FatFormatter::WriteBootSector()
     {
         SerializeBootSector(layout->parameters, layout->type, FirstSector());
-        WriteBuffer(layout->volumeStart, 1, [this]
-            {
-                if (IsFat32())
-                    WriteFsInfo();
-                else
-                    WriteFatStart();
-            });
+        WriteBuffer(layout->volumeStart, 1, IsFat32() ? Step::fsInfo : Step::fatStart);
     }
 
     void FatFormatter::WriteFsInfo()
     {
         SerializeFsInfo(FsInfo{ layout->clusterCount - 1, rootCluster + 1 }, FirstSector());
-        WriteBuffer(layout->volumeStart + fsInfoOffset, 1, [this]
-            {
-                WriteBackupBootSector();
-            });
+        WriteBuffer(layout->volumeStart + fsInfoOffset, 1, Step::backupBootSector);
     }
 
     void FatFormatter::WriteBackupBootSector()
     {
         SerializeBootSector(layout->parameters, layout->type, FirstSector());
-        WriteBuffer(layout->volumeStart + backupOffset, 1, [this]
-            {
-                WriteBackupFsInfo();
-            });
+        WriteBuffer(layout->volumeStart + backupOffset, 1, Step::backupFsInfo);
     }
 
     void FatFormatter::WriteBackupFsInfo()
     {
         SerializeFsInfo(FsInfo{ layout->clusterCount - 1, rootCluster + 1 }, FirstSector());
-        WriteBuffer(layout->volumeStart + backupOffset + fsInfoOffset, 1, [this]
-            {
-                WriteFatStart();
-            });
+        WriteBuffer(layout->volumeStart + backupOffset + fsInfoOffset, 1, Step::fatStart);
     }
 
     void FatFormatter::WriteFatStart()
@@ -99,18 +81,12 @@ namespace fs
         if (IsFat32())
             WriteEntry(layout->type, rootCluster, EndOfChain(layout->type), sector, infra::ByteRange());
 
-        WriteBuffer(FatSector(), 1, [this]
-            {
-                ZeroFatRest();
-            });
+        WriteBuffer(FatSector(), 1, Step::fatRest);
     }
 
     void FatFormatter::ZeroFatRest()
     {
-        ZeroSectors(FatSector() + 1, FatSector() + layout->parameters.sectorsPerFat, [this]
-            {
-                NextFatCopy();
-            });
+        ZeroSectors(FatSector() + 1, FatSector() + layout->parameters.sectorsPerFat, Step::nextFatCopy);
     }
 
     void FatFormatter::NextFatCopy()
@@ -126,21 +102,14 @@ namespace fs
         auto rootStart = layout->volumeStart + layout->parameters.reservedSectors + layout->parameters.fatCopies * layout->parameters.sectorsPerFat;
         auto rootEnd = IsFat32() ? layout->dataStart + layout->parameters.sectorsPerCluster : layout->dataStart;
 
-        ZeroSectors(rootStart, rootEnd, [this]
-            {
-                DiscardData();
-            });
+        ZeroSectors(rootStart, rootEnd, Step::discardData);
     }
 
     void FatFormatter::DiscardData()
     {
         auto begin = IsFat32() ? layout->dataStart + layout->parameters.sectorsPerCluster : layout->dataStart;
 
-        onDeviceDone = [this]
-        {
-            FlushDevice();
-        };
-
+        afterDevice = Step::flushDevice;
         device.EraseBlocks(begin, device.NumberOfBlocks(), [this](hal::BlockDevice::Result deviceResult)
             {
                 OnDevice(deviceResult);
@@ -149,32 +118,28 @@ namespace fs
 
     void FatFormatter::FlushDevice()
     {
-        onDeviceDone = [this]
-        {
-            Complete(Result::success);
-        };
-
+        afterDevice = Step::complete;
         device.Flush([this](hal::BlockDevice::Result deviceResult)
             {
                 OnDevice(deviceResult);
             });
     }
 
-    void FatFormatter::WriteBuffer(uint32_t sector, uint32_t sectors, const infra::Function<void()>& onWritten)
+    void FatFormatter::WriteBuffer(uint32_t sector, uint32_t sectors, Step next)
     {
-        onDeviceDone = onWritten;
+        afterDevice = next;
         device.WriteBlocks(infra::Head(buffer, sectors * sectorBytes), sector, [this](hal::BlockDevice::Result deviceResult)
             {
                 OnDevice(deviceResult);
             });
     }
 
-    void FatFormatter::ZeroSectors(uint32_t begin, uint32_t end, const infra::Function<void()>& onZeroedDone)
+    void FatFormatter::ZeroSectors(uint32_t begin, uint32_t end, Step next)
     {
         std::ranges::fill(buffer, uint8_t{ 0 });
         zeroNext = begin;
         zeroEnd = end;
-        onZeroed = onZeroedDone;
+        afterZeroed = next;
         ZeroNextChunk();
     }
 
@@ -182,17 +147,14 @@ namespace fs
     {
         if (zeroNext == zeroEnd)
         {
-            onZeroed();
+            Continue(afterZeroed);
             return;
         }
 
         auto sectors = std::min(static_cast<uint32_t>(buffer.size() / sectorBytes), zeroEnd - zeroNext);
         auto sector = zeroNext;
         zeroNext += sectors;
-        WriteBuffer(sector, sectors, [this]
-            {
-                ZeroNextChunk();
-            });
+        WriteBuffer(sector, sectors, Step::zeroChunk);
     }
 
     void FatFormatter::OnDevice(hal::BlockDevice::Result deviceResult)
@@ -200,14 +162,52 @@ namespace fs
         if (deviceResult != hal::BlockDevice::Result::success)
             Complete(ToResult(deviceResult));
         else
-            onDeviceDone();
+            Continue(afterDevice);
+    }
+
+    void FatFormatter::Continue(Step next)
+    {
+        switch (next)
+        {
+            case Step::bootSector:
+                WriteBootSector();
+                break;
+            case Step::fsInfo:
+                WriteFsInfo();
+                break;
+            case Step::backupBootSector:
+                WriteBackupBootSector();
+                break;
+            case Step::backupFsInfo:
+                WriteBackupFsInfo();
+                break;
+            case Step::fatStart:
+                WriteFatStart();
+                break;
+            case Step::fatRest:
+                ZeroFatRest();
+                break;
+            case Step::zeroChunk:
+                ZeroNextChunk();
+                break;
+            case Step::nextFatCopy:
+                NextFatCopy();
+                break;
+            case Step::discardData:
+                DiscardData();
+                break;
+            case Step::flushDevice:
+                FlushDevice();
+                break;
+            default:
+                Complete(Result::success);
+                break;
+        }
     }
 
     void FatFormatter::Complete(Result completionResult)
     {
         result = completionResult;
-        onDeviceDone = nullptr;
-        onZeroed = nullptr;
 
         infra::EventDispatcher::Instance().Schedule([this]
             {

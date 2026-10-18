@@ -29,6 +29,21 @@ namespace fs
         void Format(const FatFormatConfig& config, const infra::Function<void(Result result)>& onDone);
 
     private:
+        enum class Step : uint8_t
+        {
+            bootSector,
+            fsInfo,
+            backupBootSector,
+            backupFsInfo,
+            fatStart,
+            fatRest,
+            zeroChunk,
+            nextFatCopy,
+            discardData,
+            flushDevice,
+            complete
+        };
+
         void WriteMbr();
         void WriteBootSector();
         void WriteFsInfo();
@@ -41,10 +56,11 @@ namespace fs
         void DiscardData();
         void FlushDevice();
 
-        void WriteBuffer(uint32_t sector, uint32_t sectors, const infra::Function<void()>& onWritten);
-        void ZeroSectors(uint32_t begin, uint32_t end, const infra::Function<void()>& onZeroedDone);
+        void WriteBuffer(uint32_t sector, uint32_t sectors, Step next);
+        void ZeroSectors(uint32_t begin, uint32_t end, Step next);
         void ZeroNextChunk();
         void OnDevice(hal::BlockDevice::Result deviceResult);
+        void Continue(Step next);
         void Complete(Result completionResult);
 
         infra::ByteRange FirstSector() const;
@@ -56,11 +72,11 @@ namespace fs
         infra::ByteRange buffer;
         std::optional<FatFormatLayout> layout;
         uint8_t copy{ 0 };
+        Step afterDevice{ Step::complete };
+        Step afterZeroed{ Step::complete };
         uint32_t zeroNext{ 0 };
         uint32_t zeroEnd{ 0 };
         Result result{ Result::success };
-        infra::AutoResetFunction<void()> onDeviceDone;
-        infra::AutoResetFunction<void()> onZeroed;
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 

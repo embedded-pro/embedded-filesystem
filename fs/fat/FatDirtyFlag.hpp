@@ -33,7 +33,8 @@ namespace fs
         };
 
         void OnFirstSector(Result result, infra::ConstByteRange contents);
-        void ClearCleanBit();
+        void ModifyFirstSector();
+        void OnFirstSectorModified(Result result, infra::ByteRange contents);
         void OnFlushed(Result result);
         void WriteCleanBit(infra::ByteRange contents, bool clean) const;
         void CompleteLater();

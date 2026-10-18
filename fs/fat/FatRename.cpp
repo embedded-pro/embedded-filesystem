@@ -28,45 +28,34 @@ namespace fs
             return;
         }
 
-        parent.Find(call.from, false, [this](Result result)
-            {
-                OnSourceFound(result);
-            });
+        parent.Find(call.from, false, Then(Step::sourceFound));
     }
 
-    void FatRename::OnSourceFound(Result result)
+    void FatRename::OnSourceFound()
     {
-        if (result == Result::success && !parent.Found().has_value())
-            result = Result::notFound;
-
-        if (result == Result::success)
+        if (!parent.Found().has_value())
         {
-            source = *parent.Found();
-            sourceParent = parent.Cluster();
-            result = volume.Changeable(source);
+            Finish(Result::notFound);
+            return;
         }
 
-        if (result != Result::success)
+        source = *parent.Found();
+        sourceParent = parent.Cluster();
+
+        if (auto result = volume.Changeable(source); result != Result::success)
             Finish(result);
         else
-            parent.FindTarget(call.to, source, [this](Result result)
-                {
-                    OnTargetFound(result);
-                });
+            parent.FindTarget(call.to, source, Then(Step::targetFound));
     }
 
-    void FatRename::OnTargetFound(Result result)
+    void FatRename::OnTargetFound()
     {
-        if (result == Result::success && parent.Found().has_value())
-            result = Result::alreadyExists;
-
-        if (result != Result::success || SameName())
-            Finish(result);
+        if (parent.Found().has_value())
+            Finish(Result::alreadyExists);
+        else if (SameName())
+            Finish(Result::success);
         else
-            parent.PrepareAlias([this](Result result)
-                {
-                    OnPrepared(result);
-                });
+            parent.PrepareAlias(Then(Step::prepared));
     }
 
     bool FatRename::SameName() const
@@ -74,27 +63,18 @@ namespace fs
         return parent.Cluster() == sourceParent && SplitLast(call.from).name == SplitLast(call.to).name;
     }
 
-    void FatRename::OnPrepared(Result result)
-    {
-        if (result != Result::success)
-            Finish(result);
-        else
-            parent.WriteEntry(source.entry, [this](Result result)
-                {
-                    FlushThen(result, &FatRename::ClearSource);
-                });
-    }
-
     void FatRename::ClearSource()
     {
         volume.ClosedFiles().Forget(source.shortEntry);
-        clear.Clear(source, [this](Result result)
-            {
-                if (result != Result::success || !Moved())
-                    FlushThen(result, &FatRename::Succeed);
-                else
-                    UpdateParentEntry();
-            });
+        clear.Clear(source, Then(Step::sourceCleared));
+    }
+
+    void FatRename::OnSourceCleared()
+    {
+        if (Moved())
+            UpdateParentEntry();
+        else
+            Flush(Step::succeed);
     }
 
     void FatRename::UpdateParentEntry()
@@ -104,7 +84,10 @@ namespace fs
                 if (result == Result::success && !SetParent(contents))
                     result = Result::corrupted;
 
-                FlushThen(result, &FatRename::Succeed);
+                if (result != Result::success)
+                    Finish(result);
+                else
+                    Flush(Step::succeed);
             });
     }
 
@@ -126,12 +109,27 @@ namespace fs
         return true;
     }
 
-    void FatRename::Succeed()
+    void FatRename::Flush(Step next)
     {
-        Finish(Result::success);
+        volume.Cache().Flush(Then(next));
     }
 
-    void FatRename::FlushThen(Result result, Step next)
+    void FatRename::Finish(Result result)
+    {
+        onFinished(result);
+        call.onDone(result);
+    }
+
+    infra::Function<void(Result result)> FatRename::Then(Step next)
+    {
+        step = next;
+        return [this](Result result)
+        {
+            Resume(result);
+        };
+    }
+
+    void FatRename::Resume(Result result)
     {
         if (result != Result::success)
         {
@@ -139,19 +137,29 @@ namespace fs
             return;
         }
 
-        afterFlush = next;
-        volume.Cache().Flush([this](Result result)
-            {
-                if (result != Result::success)
-                    Finish(result);
-                else
-                    (this->*afterFlush)();
-            });
-    }
-
-    void FatRename::Finish(Result result)
-    {
-        onFinished(result);
-        call.onDone(result);
+        switch (step)
+        {
+            case Step::sourceFound:
+                OnSourceFound();
+                break;
+            case Step::targetFound:
+                OnTargetFound();
+                break;
+            case Step::prepared:
+                parent.WriteEntry(source.entry, Then(Step::entryWritten));
+                break;
+            case Step::entryWritten:
+                Flush(Step::clearSource);
+                break;
+            case Step::clearSource:
+                ClearSource();
+                break;
+            case Step::sourceCleared:
+                OnSourceCleared();
+                break;
+            default:
+                Finish(Result::success);
+                break;
+        }
     }
 }

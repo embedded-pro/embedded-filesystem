@@ -304,7 +304,7 @@ The template arguments of `fs::FatReader::WithStorage<Files, Directories, Limits
 The longest name also sizes the buffer that holds a name while it is reported, as `FatLimits::maxNameBytes` does for `fs::FatFileSystem`.
 The constructor takes the device and the alignment of the buffers that the driver transfers, 1 by default, as described under [Direct transfers](#direct-transfers).
 With `fs::FatReaderFeatures::longNames` left out, the volume reads only short names, as FatFs does without `FF_USE_LFN`: it skips the long name entries, finds and lists every entry by its 8.3 name, and its name buffer holds one short name, 34 bytes.
-On a Cortex-M4, F-1 measures 17.5 KB of flash and 1.9 KB of RAM for `fs::FatReader::WithStorage<1>`, against 60.2 KB and 7.9 KB for `fs::FatFileSystem` with the same calls and 5.8 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+On a Cortex-M4, F-1 measures 17.5 KB of flash and 1.9 KB of RAM for `fs::FatReader::WithStorage<1>`, against 60.0 KB and 7.9 KB for `fs::FatFileSystem` with the same calls and 5.8 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 
 ## Lite volume
 

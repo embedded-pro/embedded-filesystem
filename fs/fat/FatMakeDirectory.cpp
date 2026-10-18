@@ -39,34 +39,23 @@ namespace fs
             return;
         }
 
-        parent.Find(call.path, true, [this](Result result)
-            {
-                OnFound(result);
-            });
+        parent.Find(call.path, true, Then(Step::found));
     }
 
-    void FatMakeDirectory::OnFound(Result result)
+    void FatMakeDirectory::OnFound()
     {
-        if (result != Result::success)
-            Finish(result);
-        else if (parent.Found())
+        if (parent.Found())
             Finish(Result::alreadyExists);
         else
-            parent.PrepareAlias([this](Result result)
-                {
-                    OnPrepared(result);
-                });
+            parent.PrepareAlias(Then(Step::prepared));
     }
 
-    void FatMakeDirectory::OnPrepared(Result result)
+    void FatMakeDirectory::Allocate()
     {
-        if (result != Result::success)
-            Finish(result);
-        else
-            volume.Allocator().Grow(std::nullopt, 1, [this](Result result, uint32_t first, uint32_t)
-                {
-                    OnAllocated(result, first);
-                });
+        volume.Allocator().Grow(std::nullopt, 1, [this](Result result, uint32_t first, uint32_t)
+            {
+                OnAllocated(result, first);
+            });
     }
 
     void FatMakeDirectory::OnAllocated(Result result, uint32_t first)
@@ -100,21 +89,7 @@ namespace fs
         else if (++sector != volume.Geometry().SectorOfCluster(cluster) + volume.Geometry().sectorsPerCluster)
             InitializeSector();
         else
-            parent.Write(FatAttributes::directory, cluster, [this](Result result)
-                {
-                    OnWritten(result);
-                });
-    }
-
-    void FatMakeDirectory::OnWritten(Result result)
-    {
-        if (result != Result::success)
-            Finish(result);
-        else
-            volume.Cache().Flush([this](Result result)
-                {
-                    Finish(result);
-                });
+            parent.Write(FatAttributes::directory, cluster, Then(Step::written));
     }
 
     void FatMakeDirectory::WriteDotEntries(infra::ByteRange contents) const
@@ -128,5 +103,39 @@ namespace fs
     {
         onFinished(result);
         call.onDone(result);
+    }
+
+    infra::Function<void(Result result)> FatMakeDirectory::Then(Step next)
+    {
+        step = next;
+        return [this](Result result)
+        {
+            Resume(result);
+        };
+    }
+
+    void FatMakeDirectory::Resume(Result result)
+    {
+        if (result != Result::success)
+        {
+            Finish(result);
+            return;
+        }
+
+        switch (step)
+        {
+            case Step::found:
+                OnFound();
+                break;
+            case Step::prepared:
+                Allocate();
+                break;
+            case Step::written:
+                volume.Cache().Flush(Then(Step::finish));
+                break;
+            default:
+                Finish(Result::success);
+                break;
+        }
     }
 }

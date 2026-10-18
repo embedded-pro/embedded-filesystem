@@ -25,19 +25,29 @@ namespace fs
         void Start();
 
     private:
-        using Step = void (FatRename::*)();
+        enum class Step : uint8_t
+        {
+            sourceFound,
+            targetFound,
+            prepared,
+            entryWritten,
+            clearSource,
+            sourceCleared,
+            succeed
+        };
 
-        void OnSourceFound(Result result);
-        void OnTargetFound(Result result);
+        void OnSourceFound();
+        void OnTargetFound();
         bool SameName() const;
-        void OnPrepared(Result result);
         void ClearSource();
+        void OnSourceCleared();
         void UpdateParentEntry();
         bool Moved() const;
         bool SetParent(infra::ByteRange contents) const;
-        void Succeed();
-        void FlushThen(Result result, Step next);
+        void Flush(Step next);
         void Finish(Result result);
+        infra::Function<void(Result result)> Then(Step next);
+        void Resume(Result result);
 
     private:
         FatVolume& volume;
@@ -47,7 +57,7 @@ namespace fs
         FatEntrySetClear clear;
         FatScannedEntry source;
         uint32_t sourceParent{ 0 };
-        Step afterFlush{ nullptr };
+        Step step{ Step::sourceFound };
     };
 }
 

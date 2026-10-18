@@ -8,6 +8,7 @@
 #include "fs/fat/FatPathSlot.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/Function.hpp"
+#include <cstdint>
 
 namespace fs
 {
@@ -28,16 +29,27 @@ namespace fs
         bool Visit(const FatScannedEntry& entry) override;
         void FreeSlot(FatEntryPosition position, bool end) override;
 
-        void OnFound(Result result);
+        enum class Step : uint8_t
+        {
+            found,
+            checked,
+            dirtied,
+            cleared,
+            flushed,
+            freed,
+            finish
+        };
+
+        void OnFound();
         Result Check() const;
         void CheckEmpty();
-        void OnChecked(Result result);
+        void OnChecked();
         void ClearEntry();
         void ClearMarkedEntry();
-        void OnCleared(Result result);
-        void OnFlushed(Result result);
-        void OnFreed(Result result);
+        void FreeChain();
         void Finish(Result result);
+        infra::Function<void(Result result)> Then(Step next);
+        void Resume(Result result);
 
     private:
         FatVolume& volume;
@@ -48,6 +60,7 @@ namespace fs
         FatScannedEntry target;
         FatDirectoryCursor cursor;
         bool empty{ true };
+        Step step{ Step::found };
     };
 }
 
