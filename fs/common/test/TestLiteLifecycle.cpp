@@ -35,6 +35,20 @@ TEST_F(LiteLifecycleTest, a_mount_that_succeeds_mounts)
     EXPECT_FALSE(lifecycle.Changing());
 }
 
+TEST_F(LiteLifecycleTest, only_a_mount_in_progress_is_mounting)
+{
+    EXPECT_FALSE(lifecycle.Mounting());
+
+    ASSERT_TRUE(lifecycle.StartMount());
+    EXPECT_TRUE(lifecycle.Mounting());
+
+    lifecycle.Mounted(fs::Result::success);
+    EXPECT_FALSE(lifecycle.Mounting());
+
+    ASSERT_TRUE(lifecycle.StartUnmount());
+    EXPECT_FALSE(lifecycle.Mounting());
+}
+
 TEST_F(LiteLifecycleTest, a_mount_is_refused_while_mounting_mounted_or_unmounting)
 {
     ASSERT_TRUE(lifecycle.StartMount());

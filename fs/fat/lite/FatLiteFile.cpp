@@ -25,6 +25,10 @@ namespace fs
     FatLiteFile::FatLiteFile(FatLiteVolume& volume)
         : volume(volume)
         , claimer(volume.Queue())
+        , resume([this](Result result)
+              {
+                  Resume(result);
+              })
     {}
 
     FatLiteFile::~FatLiteFile()
@@ -188,16 +192,55 @@ namespace fs
     {
         if (open && Writable() && Uncommitted() && volume.Available(generation))
         {
-            call = Call::implicitClose;
-            claimer.Claim([this]
-                {
-                    Granted();
-                });
+            Enqueue(Call::implicitClose);
             return;
         }
 
         Detach();
         Release();
+    }
+
+    const infra::Function<void(Result result)>& FatLiteFile::Then(Step next)
+    {
+        step = next;
+        return resume;
+    }
+
+    void FatLiteFile::Resume(Result result)
+    {
+        if (result != Result::success)
+        {
+            Done(result);
+            return;
+        }
+
+        switch (step)
+        {
+            case Step::link:
+                Link();
+                break;
+            case Step::linked:
+                Linked();
+                break;
+            case Step::truncationCommitted:
+                TruncationCommitted();
+                break;
+            case Step::endChain:
+                EndChain();
+                break;
+            case Step::chainEnded:
+                ChainEnded();
+                break;
+            case Step::freeCut:
+                FreeCut();
+                break;
+            case Step::flush:
+                Flush();
+                break;
+            default:
+                Done(Result::success);
+                break;
+        }
     }
 
     bool FatLiteFile::Pending() const
@@ -217,8 +260,13 @@ namespace fs
 
     void FatLiteFile::Claim(Call newCall)
     {
-        call = newCall;
         self = Share(*this);
+        Enqueue(newCall);
+    }
+
+    void FatLiteFile::Enqueue(Call newCall)
+    {
+        call = newCall;
         claimer.Claim([this]
             {
                 Granted();
@@ -261,16 +309,23 @@ namespace fs
         else if (clusterIndex == index)
             Reached();
         else
-            volume.Table().Next(cluster, [this](Result result, std::optional<uint32_t> next)
-                {
-                    Followed(result, next);
-                });
+            Follow();
+    }
+
+    void FatLiteFile::Follow()
+    {
+        volume.Table().Next(cluster, [this](Result result, std::optional<uint32_t> next)
+            {
+                Followed(result, next);
+            });
     }
 
     void FatLiteFile::Followed(Result result, std::optional<uint32_t> next)
     {
         if (result != Result::success)
             Done(result);
+        else if (clusterIndex == target)
+            Cut(next);
         else if (next.has_value())
         {
             cluster = *next;
@@ -303,35 +358,21 @@ namespace fs
             Reach(target);
         }
         else if (volume.TableWriter().SectorOf(taken) != volume.TableWriter().SectorOf(cluster))
-            volume.Window().Flush([this](Result result)
-                {
-                    if (result != Result::success)
-                        Done(result);
-                    else
-                        Link();
-                });
+            volume.Window().Flush(Then(Step::link));
         else
             Link();
     }
 
     void FatLiteFile::Link()
     {
-        volume.TableWriter().Write(cluster, taken, [this](Result result)
-            {
-                Linked(result);
-            });
+        volume.TableWriter().Write(cluster, taken, Then(Step::linked));
     }
 
-    void FatLiteFile::Linked(Result result)
+    void FatLiteFile::Linked()
     {
-        if (result != Result::success)
-            Done(result);
-        else
-        {
-            cluster = taken;
-            ++clusterIndex;
-            Reach(target);
-        }
+        cluster = taken;
+        ++clusterIndex;
+        Reach(target);
     }
 
     void FatLiteFile::Reached()
@@ -346,7 +387,7 @@ namespace fs
             if (position % sectorSize != 0 || remaining < sectorSize || !volume.Alignment().Accepts(infra::DiscardHead(readBuffer, transferred)))
                 ReadPart();
             else
-                ReadSectors(static_cast<uint32_t>(std::min<std::size_t>(remaining / sectorSize, sectorsLeft)));
+                TransferSectors(static_cast<uint32_t>(std::min<std::size_t>(remaining / sectorSize, sectorsLeft)));
         }
         else if (call == Call::write)
         {
@@ -355,13 +396,10 @@ namespace fs
             if (position % sectorSize != 0 || remaining < sectorSize || !volume.Alignment().Accepts(infra::DiscardHead(writeData, transferred)))
                 WritePart(remaining);
             else
-                WriteSectors(static_cast<uint32_t>(std::min<std::size_t>(remaining / sectorSize, sectorsLeft)));
+                TransferSectors(static_cast<uint32_t>(std::min<std::size_t>(remaining / sectorSize, sectorsLeft)));
         }
         else
-            volume.Table().Next(cluster, [this](Result result, std::optional<uint32_t> next)
-                {
-                    Cut(result, next);
-                });
+            Follow();
     }
 
     void FatLiteFile::ReadStep()
@@ -385,19 +423,6 @@ namespace fs
                     infra::Copy(infra::Head(infra::DiscardHead(contents, offset), moving), infra::Head(infra::DiscardHead(readBuffer, transferred), moving));
 
                 Moved(result);
-            });
-    }
-
-    void FatLiteFile::ReadSectors(uint32_t sectors)
-    {
-        transferSector = Sector();
-        moving = std::size_t{ sectors } * volume.Window().SectorSize();
-        volume.Device().ReadBlocks(infra::Head(infra::DiscardHead(readBuffer, transferred), moving), transferSector, [this](hal::BlockDevice::Result result)
-            {
-                if (result == hal::BlockDevice::Result::success)
-                    volume.Window().Overlay(transferSector, infra::Head(infra::DiscardHead(readBuffer, transferred), moving));
-
-                Moved(ToResult(result));
             });
     }
 
@@ -429,15 +454,25 @@ namespace fs
             volume.Window().Modify(Sector(), dataRank, onSector);
     }
 
-    void FatLiteFile::WriteSectors(uint32_t sectors)
+    void FatLiteFile::TransferSectors(uint32_t sectors)
     {
         transferSector = Sector();
         moving = std::size_t{ sectors } * volume.Window().SectorSize();
-        volume.Window().Drop(transferSector, sectors);
-        volume.Barrier().Write(infra::Head(infra::DiscardHead(writeData, transferred), moving), transferSector, dataRank, [this](hal::BlockDevice::Result result)
-            {
-                Moved(ToResult(result));
-            });
+        auto onTransferred = [this](hal::BlockDevice::Result result)
+        {
+            if (call == Call::read && result == hal::BlockDevice::Result::success)
+                volume.Window().Overlay(transferSector, infra::Head(infra::DiscardHead(readBuffer, transferred), moving));
+
+            Moved(ToResult(result));
+        };
+
+        if (call == Call::read)
+            volume.Device().ReadBlocks(infra::Head(infra::DiscardHead(readBuffer, transferred), moving), transferSector, onTransferred);
+        else
+        {
+            volume.Window().Drop(transferSector, sectors);
+            volume.Barrier().Write(infra::Head(infra::DiscardHead(writeData, transferred), moving), transferSector, dataRank, onTransferred);
+        }
     }
 
     void FatLiteFile::Moved(Result result)
@@ -481,91 +516,54 @@ namespace fs
             firstCluster = 0;
             cluster = 0;
             clusterIndex = 0;
-            Commit([this](Result result)
-                {
-                    TruncationCommitted(result);
-                });
+            Commit(Then(Step::truncationCommitted));
         }
     }
 
-    void FatLiteFile::Cut(Result result, std::optional<uint32_t> next)
+    void FatLiteFile::Cut(std::optional<uint32_t> next)
     {
-        if (result != Result::success)
-        {
-            Done(result);
-            return;
-        }
-
         size = position;
         written = true;
         cut = next.value_or(0);
-        Commit([this](Result result)
-            {
-                TruncationCommitted(result);
-            });
+        Commit(Then(Step::truncationCommitted));
     }
 
-    void FatLiteFile::TruncationCommitted(Result result)
+    void FatLiteFile::TruncationCommitted()
     {
-        if (result != Result::success)
-            Done(result);
-        else
-            volume.Window().Flush([this](Result result)
-                {
-                    EndChain(result);
-                });
+        volume.Window().Flush(Then(Step::endChain));
     }
 
-    void FatLiteFile::EndChain(Result result)
+    void FatLiteFile::EndChain()
     {
-        if (result != Result::success || cut == 0)
-            Done(result);
+        if (cut == 0)
+            Done(Result::success);
         else if (firstCluster == 0)
-            FreeCut(Result::success);
+            FreeCut();
         else
-            volume.TableWriter().Write(cluster, EndOfChain(volume.Geometry().type), [this](Result result)
-                {
-                    if (result != Result::success)
-                        Done(result);
-                    else
-                        volume.Window().Flush([this](Result result)
-                            {
-                                FreeCut(result);
-                            });
-                });
+            volume.TableWriter().Write(cluster, EndOfChain(volume.Geometry().type), Then(Step::chainEnded));
     }
 
-    void FatLiteFile::FreeCut(Result result)
+    void FatLiteFile::ChainEnded()
     {
-        if (result != Result::success)
-            Done(result);
-        else
-            volume.Allocator().Free(cut, [this](Result result)
-                {
-                    Flush(result);
-                });
+        volume.Window().Flush(Then(Step::freeCut));
+    }
+
+    void FatLiteFile::FreeCut()
+    {
+        volume.Allocator().Free(cut, Then(Step::flush));
     }
 
     void FatLiteFile::StartSync()
     {
         if (Uncommitted())
-            Commit([this](Result result)
-                {
-                    Flush(result);
-                });
+            Commit(Then(Step::flush));
         else
-            Flush(Result::success);
+            Flush();
     }
 
-    void FatLiteFile::Flush(Result result)
+    void FatLiteFile::Flush()
     {
-        if (result != Result::success)
-            Done(result);
-        else
-            volume.Window().Flush([this](Result result)
-                {
-                    Done(result);
-                });
+        volume.Window().Flush(Then(Step::done));
     }
 
     void FatLiteFile::Done(Result result)

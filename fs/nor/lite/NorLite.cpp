@@ -25,19 +25,13 @@ namespace fs
         if (!lifecycle.StartMount())
             volume.Defer(onDone, Result::busy);
         else
-        {
-            onMountDone = onDone;
-            BeginMount();
-        }
+            BeginChange(onDone);
     }
 
     void NorLite::Unmount(const infra::Function<void(Result result)>& onDone)
     {
         if (lifecycle.StartUnmount())
-        {
-            onUnmountDone = onDone;
-            BeginUnmount();
-        }
+            BeginChange(onDone);
         else
             volume.Defer(onDone, lifecycle.Changing() ? Result::busy : Result::notMounted);
     }
@@ -139,11 +133,22 @@ namespace fs
                 .Start();
     }
 
-    void NorLite::BeginMount()
+    void NorLite::BeginChange(const infra::Function<void(Result result)>& onDone)
     {
+        onChanged = onDone;
         lifecycleClaimer.Claim([this]
             {
-                StartMount();
+                if (lifecycle.Mounting())
+                    StartMount();
+                else
+                    volume.Operation().emplace<NorUnmount>(volume, [this](Result result)
+                                          {
+                                              lifecycleClaimer.Release();
+                                              lifecycle.Unmounted();
+                                              volume.MarkUnmounted();
+                                              Entered(result);
+                                          })
+                        .Start();
             });
     }
 
@@ -160,26 +165,8 @@ namespace fs
         Entered(result);
     }
 
-    void NorLite::BeginUnmount()
-    {
-        lifecycleClaimer.Claim([this]
-            {
-                volume.Operation().emplace<NorUnmount>(volume, [this](Result result)
-                                      {
-                                          lifecycleClaimer.Release();
-                                          lifecycle.Unmounted();
-                                          volume.MarkUnmounted();
-                                          Entered(result);
-                                      })
-                    .Start();
-            });
-    }
-
     void NorLite::Entered(Result result)
     {
-        if (onMountDone)
-            volume.Defer(std::exchange(onMountDone, nullptr), result);
-        if (onUnmountDone)
-            volume.Defer(std::exchange(onUnmountDone, nullptr), result);
+        volume.Defer(std::exchange(onChanged, nullptr), result);
     }
 }

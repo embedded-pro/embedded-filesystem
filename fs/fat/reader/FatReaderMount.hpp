@@ -24,10 +24,9 @@ namespace fs
         void Start(const infra::Function<void(Result result)>& onDone);
 
     private:
-        void OnFirstSector(Result result, infra::ConstByteRange contents);
-        void ReadBootSector(uint32_t sector, uint32_t sectors);
-        void OnBootSector(Result result, infra::ConstByteRange contents);
-        void UseGeometry(const BiosParameterBlock& parameters, uint32_t start, uint32_t sectors);
+        void Read();
+        void OnSector(Result result, infra::ConstByteRange contents);
+        void UseGeometry(const BiosParameterBlock& parameters);
 
     private:
         hal::BlockDevice& device;
@@ -35,6 +34,7 @@ namespace fs
         FatGeometry& geometry;
         uint32_t volumeStart{ 0 };
         uint32_t volumeSectors{ 0 };
+        bool partitioned{ false };
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }

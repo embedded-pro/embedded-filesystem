@@ -77,9 +77,9 @@ namespace
             testing::Mock::VerifyAndClearExpectations(&done);
         }
 
-        void ExpectWriteBack(fs::Result expected)
+        void ExpectFlush(fs::Result expected)
         {
-            window.WriteBack([this](fs::Result result)
+            window.Flush([this](fs::Result result)
                 {
                     done.callback(result);
                 });
@@ -129,8 +129,10 @@ TEST_F(FatLiteWindowTest, the_held_sector_is_modified_again_without_the_device)
     Modify(7, 1, 0x11);
     Modify(7, 1, 0x12);
 
+    testing::InSequence sequence;
     ExpectDeviceWrite(7, 0x12);
-    ExpectWriteBack(fs::Result::success);
+    ExpectDeviceFlush();
+    ExpectFlush(fs::Result::success);
 }
 
 TEST_F(FatLiteWindowTest, a_modification_with_another_rank_writes_the_sector_back_first)
@@ -144,7 +146,8 @@ TEST_F(FatLiteWindowTest, a_modification_with_another_rank_writes_the_sector_bac
     testing::InSequence sequence;
     ExpectDeviceFlush();
     ExpectDeviceWrite(7, 0x12);
-    ExpectWriteBack(fs::Result::success);
+    ExpectDeviceFlush();
+    ExpectFlush(fs::Result::success);
 }
 
 TEST_F(FatLiteWindowTest, an_overwrite_reads_nothing_and_starts_from_zeros)
@@ -159,17 +162,19 @@ TEST_F(FatLiteWindowTest, an_overwrite_reads_nothing_and_starts_from_zeros)
     EXPECT_CALL(done, callback(fs::Result::success));
     ExecuteAllActions();
 
+    testing::InSequence sequence;
     ExpectDeviceWrite(9, 0x33);
-    ExpectWriteBack(fs::Result::success);
+    ExpectDeviceFlush();
+    ExpectFlush(fs::Result::success);
 }
 
-TEST_F(FatLiteWindowTest, write_back_of_an_unmodified_sector_writes_nothing)
+TEST_F(FatLiteWindowTest, a_flush_of_an_unmodified_sector_writes_nothing)
 {
-    ExpectWriteBack(fs::Result::success);
+    ExpectFlush(fs::Result::success);
 
     ExpectDeviceRead(7);
     Read(7, fs::Result::success, 0);
-    ExpectWriteBack(fs::Result::success);
+    ExpectFlush(fs::Result::success);
 }
 
 TEST_F(FatLiteWindowTest, a_sector_of_the_mirrored_region_is_written_to_every_copy)
@@ -181,12 +186,14 @@ TEST_F(FatLiteWindowTest, a_sector_of_the_mirrored_region_is_written_to_every_co
     testing::InSequence sequence;
     ExpectDeviceWrite(13, 0x44);
     ExpectDeviceWrite(23, 0x44);
-    ExpectWriteBack(fs::Result::success);
+    ExpectDeviceFlush();
+    ExpectFlush(fs::Result::success);
 
     ExpectDeviceRead(14);
     Modify(14, 1, 0x45);
     ExpectDeviceWrite(14, 0x45);
-    ExpectWriteBack(fs::Result::success);
+    ExpectDeviceFlush();
+    ExpectFlush(fs::Result::success);
 }
 
 TEST_F(FatLiteWindowTest, a_failed_write_back_keeps_the_sector_modified)
@@ -195,10 +202,12 @@ TEST_F(FatLiteWindowTest, a_failed_write_back_keeps_the_sector_modified)
     Modify(7, 0, 0x11);
 
     ExpectDeviceWrite(7, 0x11, DeviceResult::failed);
-    ExpectWriteBack(fs::Result::deviceError);
+    ExpectFlush(fs::Result::deviceError);
 
+    testing::InSequence sequence;
     ExpectDeviceWrite(7, 0x11);
-    ExpectWriteBack(fs::Result::success);
+    ExpectDeviceFlush();
+    ExpectFlush(fs::Result::success);
 }
 
 TEST_F(FatLiteWindowTest, a_failed_write_back_before_another_sector_fails_that_access)
@@ -235,12 +244,7 @@ TEST_F(FatLiteWindowTest, flush_writes_back_and_then_flushes_the_device)
     testing::InSequence sequence;
     ExpectDeviceWrite(7, 0x11);
     ExpectDeviceFlush();
-    window.Flush([this](fs::Result result)
-        {
-            done.callback(result);
-        });
-    EXPECT_CALL(done, callback(fs::Result::success));
-    ExecuteAllActions();
+    ExpectFlush(fs::Result::success);
 }
 
 TEST_F(FatLiteWindowTest, a_failed_write_back_fails_the_flush)
@@ -249,12 +253,7 @@ TEST_F(FatLiteWindowTest, a_failed_write_back_fails_the_flush)
     Modify(7, 2, 0x11);
 
     ExpectDeviceWrite(7, 0x11, DeviceResult::failed);
-    window.Flush([this](fs::Result result)
-        {
-            done.callback(result);
-        });
-    EXPECT_CALL(done, callback(fs::Result::deviceError));
-    ExecuteAllActions();
+    ExpectFlush(fs::Result::deviceError);
 }
 
 TEST_F(FatLiteWindowTest, drop_forgets_a_sector_in_its_range)
@@ -264,11 +263,12 @@ TEST_F(FatLiteWindowTest, drop_forgets_a_sector_in_its_range)
 
     window.Drop(8, 4);
     ExpectDeviceWrite(7, 0x11);
-    ExpectWriteBack(fs::Result::success);
+    ExpectDeviceFlush();
+    ExpectFlush(fs::Result::success);
 
     Modify(7, 0, 0x12);
     window.Drop(5, 3);
-    ExpectWriteBack(fs::Result::success);
+    ExpectFlush(fs::Result::success);
 
     ExpectDeviceRead(7, DeviceResult::success, 0x13);
     Read(7, fs::Result::success, 0x13);
@@ -297,7 +297,8 @@ TEST_F(FatLiteWindowTest, overlay_leaves_data_alone_outside_its_range_and_after_
     EXPECT_EQ((std::array<uint8_t, 1536>{}), data);
 
     ExpectDeviceWrite(7, 0x11);
-    ExpectWriteBack(fs::Result::success);
+    ExpectDeviceFlush();
+    ExpectFlush(fs::Result::success);
     window.Overlay(6, infra::MakeRange(data));
     EXPECT_EQ((std::array<uint8_t, 1536>{}), data);
 }

@@ -46,6 +46,11 @@ namespace fs
         return phase == Phase::mounted;
     }
 
+    bool LiteLifecycle::Mounting() const
+    {
+        return phase == Phase::mounting;
+    }
+
     bool LiteLifecycle::Changing() const
     {
         return phase == Phase::mounting || phase == Phase::unmounting;

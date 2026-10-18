@@ -58,12 +58,26 @@ namespace fs
         FatLiteVolume& Volume();
 
     private:
+        enum class Step : uint8_t
+        {
+            found,
+            parentFound,
+            scanned,
+            linked,
+            opened,
+            mounted,
+            committed,
+            unmounted
+        };
+
         virtual infra::SharedPtr<FatLiteFile> AllocateFile() = 0;
         virtual infra::SharedPtr<FatReaderDirectory> AllocateDirectory() = 0;
 
         Result Unsupported() const;
         Result Refusal(infra::BoundedConstString path) const;
         bool PathCallPending() const;
+        const infra::Function<void(Result result)>& Then(Step next);
+        void Resume(Result result);
         void Start(infra::BoundedConstString path);
         void Run();
         void Found(Result result);
@@ -78,14 +92,15 @@ namespace fs
         void Create();
         void GrowDirectory(uint32_t lastCluster);
         void ZeroNext();
+        void Linked(Result result);
         void WriteEntry(FatEntryPosition position);
         void Opened(Result result);
         void OpenDone(Result result);
 
-        void BeginMount();
+        void BeginChange(const infra::Function<void(Result result)>& onDone);
         void Mounted(Result result);
-        void BeginUnmount();
         void CommitNext();
+        void Committed(Result result);
         void WriteFsInfo();
         void UnmountDone(Result result);
         void Entered(Result result);
@@ -99,6 +114,8 @@ namespace fs
         PathLimits limits;
         infra::ClaimableResource::Claimer lifecycleClaimer;
         infra::ClaimableResource::Claimer pathClaimer;
+        Step step{ Step::found };
+        infra::Function<void(Result result)> resume;
         infra::BoundedConstString path;
         infra::BoundedConstString name;
         OpenMode mode{ OpenMode::read };
@@ -111,8 +128,7 @@ namespace fs
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<File> file)> onOpen;
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<Directory> directory)> onOpenDirectory;
         LiteLifecycle lifecycle;
-        infra::Function<void(Result result)> onMountDone;
-        infra::Function<void(Result result)> onUnmountDone;
+        infra::Function<void(Result result)> onChanged;
     };
 
     namespace detail
