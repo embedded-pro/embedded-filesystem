@@ -206,6 +206,21 @@ TEST_F(LayoutCommandsTest, a_request_that_does_not_complete_answers_timeout_and_
     EXPECT_EQ("", Output());
 }
 
+TEST_F(LayoutCommandsTest, a_guard_of_the_region_that_expires_while_a_command_holds_the_card_changes_nothing)
+{
+    infra::Function<void()> onTimeout;
+    EXPECT_CALL(claim, InUse()).WillOnce(testing::Return(false));
+    EXPECT_CALL(claim, OnTimeout(testing::_)).WillOnce(testing::SaveArg<0>(&onTimeout)).WillOnce(testing::Return());
+    EXPECT_CALL(mockCard, ReadBlocks(testing::_, 0, testing::_)).WillOnce(testing::SaveArg<2>(&pending));
+
+    Execute("layout.read mock");
+    onTimeout();
+    EXPECT_EQ("", Output());
+
+    CompleteMock(hal::BlockDevice::Result::crcError);
+    EXPECT_EQ("\r\nERR failed\r\n", Output());
+}
+
 TEST_F(LayoutCommandsTest, a_late_format_completion_releases_the_card)
 {
     ExpectClaimed();
