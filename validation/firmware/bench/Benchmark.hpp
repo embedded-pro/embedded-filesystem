@@ -48,7 +48,7 @@ namespace validation
         void Report(const char* extraKey = nullptr, uint32_t extraValue = 0);
 
     private:
-        void PrintRecord(const char* extraKey, uint32_t extraValue);
+        void PrintRecord(const char* extraKey, uint32_t extraValue) const;
         void TimedOut();
 
     private:

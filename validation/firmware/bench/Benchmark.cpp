@@ -63,7 +63,7 @@ namespace validation
         Finish(BenchOutcome::done);
     }
 
-    void Benchmark::PrintRecord(const char* extraKey, uint32_t extraValue)
+    void Benchmark::PrintRecord(const char* extraKey, uint32_t extraValue) const
     {
         auto record = results.Record("bench");
         record.Add("device", run.device)
