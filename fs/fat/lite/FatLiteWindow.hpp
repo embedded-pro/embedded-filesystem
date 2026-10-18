@@ -27,7 +27,6 @@ namespace fs
         void Read(uint32_t sector, const infra::Function<void(Result result, infra::ConstByteRange contents)>& onDone) override;
         void Modify(uint32_t sector, uint8_t rank, const infra::Function<void(Result result, infra::ByteRange contents)>& onDone) override;
         void Overwrite(uint32_t sector, uint8_t rank, const infra::Function<void(Result result, infra::ByteRange contents)>& onDone);
-        void WriteBack(const infra::Function<void(Result result)>& onDone);
         void Flush(const infra::Function<void(Result result)>& onDone);
 
         void SetMirroredRegion(std::optional<SectorCache::MirroredRegion> region);
@@ -40,15 +39,15 @@ namespace fs
         {
             read,
             modify,
-            overwrite
+            overwrite,
+            flush
         };
 
         void Start(Access access, uint32_t sector, uint8_t rank);
-        void Load();
-        void Loaded(hal::BlockDevice::Result result);
+        void Proceed();
+        void Transfer();
+        void Transferred(hal::BlockDevice::Result result);
         void Deliver(Result result);
-        void WriteCopy();
-        void CopyWritten(hal::BlockDevice::Result result);
         uint8_t Copies() const;
 
     private:
@@ -66,7 +65,6 @@ namespace fs
         Access access{ Access::read };
         infra::AutoResetFunction<void(Result result, infra::ConstByteRange contents)> onRead;
         infra::AutoResetFunction<void(Result result, infra::ByteRange contents)> onModify;
-        infra::AutoResetFunction<void(Result result)> onWrittenBack;
         infra::AutoResetFunction<void(Result result)> onFlushed;
     };
 }

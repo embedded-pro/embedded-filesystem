@@ -76,10 +76,7 @@ namespace fs
             if (!LocateEntry(geometry.type, candidate, volume.Window().SectorSize()).straddles && ReadEntry(geometry.type, candidate, contents, infra::ConstByteRange()) == 0)
             {
                 // The window holds the sector of the entry, so writing it cannot fail
-                volume.TableWriter().Write(candidate, EndOfChain(geometry.type), [this](Result)
-                    {
-                        Taken();
-                    });
+                WriteCandidate(EndOfChain(geometry.type));
                 return;
             }
         }
@@ -113,10 +110,18 @@ namespace fs
                 if (result != Result::success)
                     onFreed(result);
                 else
-                    volume.TableWriter().Write(candidate, 0, [this](Result result)
-                        {
-                            Freed(result);
-                        });
+                    WriteCandidate(0);
+            });
+    }
+
+    void FatLiteAllocator::WriteCandidate(uint32_t value)
+    {
+        volume.TableWriter().Write(candidate, value, [this](Result result)
+            {
+                if (onTaken)
+                    Taken();
+                else
+                    Freed(result);
             });
     }
 

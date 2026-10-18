@@ -63,9 +63,8 @@ namespace fs
         void Start(NorLitePathCall&& pathCall);
         void Run();
 
-        void BeginMount();
+        void BeginChange(const infra::Function<void(Result result)>& onDone);
         void Mounted(Result result);
-        void BeginUnmount();
         void Entered(Result result);
 
     private:
@@ -75,8 +74,7 @@ namespace fs
         OperationQueue::Claimer pathClaimer;
         std::optional<NorLitePathCall> pathCall;
         LiteLifecycle lifecycle;
-        infra::Function<void(Result result)> onMountDone;
-        infra::Function<void(Result result)> onUnmountDone;
+        infra::Function<void(Result result)> onChanged;
     };
 
     template<NorConfig Config, std::size_t Files>

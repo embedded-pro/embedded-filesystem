@@ -35,35 +35,10 @@ namespace fs
         Start(Access::overwrite, sector, rank);
     }
 
-    void FatLiteWindow::WriteBack(const infra::Function<void(Result result)>& onDone)
-    {
-        onWrittenBack = onDone;
-
-        if (dirty)
-        {
-            copy = 0;
-            WriteCopy();
-        }
-        else
-            infra::EventDispatcher::Instance().Schedule([this]
-                {
-                    onWrittenBack(Result::success);
-                });
-    }
-
     void FatLiteWindow::Flush(const infra::Function<void(Result result)>& onDone)
     {
         onFlushed = onDone;
-        WriteBack([this](Result result)
-            {
-                if (result != Result::success)
-                    onFlushed(result);
-                else
-                    barrier.Flush([this](hal::BlockDevice::Result result)
-                        {
-                            onFlushed(ToResult(result));
-                        });
-            });
+        Start(Access::flush, loaded, rank);
     }
 
     void FatLiteWindow::SetMirroredRegion(std::optional<SectorCache::MirroredRegion> region)
@@ -94,22 +69,19 @@ namespace fs
         this->access = access;
         requested = sector;
         requestedRank = rank;
+        copy = 0;
 
-        if (dirty && (sector != loaded || (access != Access::read && rank != this->rank)))
-            WriteBack([this](Result result)
-                {
-                    if (result != Result::success)
-                        Deliver(result);
-                    else
-                        Load();
-                });
+        if (dirty && (access == Access::flush || sector != loaded || (access != Access::read && rank != this->rank)))
+            Transfer();
         else
-            Load();
+            Proceed();
     }
 
-    void FatLiteWindow::Load()
+    void FatLiteWindow::Proceed()
     {
-        if (requested == loaded || access == Access::overwrite)
+        if (access == Access::flush)
+            Transfer();
+        else if (requested == loaded || access == Access::overwrite)
         {
             loaded = requested;
             infra::EventDispatcher::Instance().Schedule([this]
@@ -120,60 +92,61 @@ namespace fs
         else
         {
             loaded = none;
-            barrier.Device().ReadBlocks(buffer, requested, [this](hal::BlockDevice::Result result)
-                {
-                    Loaded(result);
-                });
+            Transfer();
         }
     }
 
-    void FatLiteWindow::Loaded(hal::BlockDevice::Result result)
+    void FatLiteWindow::Transfer()
     {
-        if (result == hal::BlockDevice::Result::success)
-            loaded = requested;
+        auto onTransferred = [this](hal::BlockDevice::Result result)
+        {
+            Transferred(result);
+        };
 
-        Deliver(ToResult(result));
+        if (dirty)
+            barrier.Write(buffer, copy == 0 ? loaded : loaded + copy * mirrored->sectors, rank, onTransferred);
+        else if (access == Access::flush)
+            barrier.Flush(onTransferred);
+        else
+            barrier.Device().ReadBlocks(buffer, requested, onTransferred);
+    }
+
+    void FatLiteWindow::Transferred(hal::BlockDevice::Result result)
+    {
+        if (result != hal::BlockDevice::Result::success)
+            Deliver(ToResult(result));
+        else if (!dirty)
+        {
+            loaded = requested;
+            Deliver(Result::success);
+        }
+        else if (++copy != Copies())
+            Transfer();
+        else
+        {
+            dirty = false;
+            Proceed();
+        }
     }
 
     void FatLiteWindow::Deliver(Result result)
     {
         if (access == Access::read)
-        {
             onRead(result, buffer);
-            return;
-        }
-
-        if (result == Result::success)
-        {
-            if (access == Access::overwrite)
-                std::ranges::fill(buffer, uint8_t{ 0 });
-
-            dirty = true;
-            rank = requestedRank;
-        }
-
-        onModify(result, buffer);
-    }
-
-    void FatLiteWindow::WriteCopy()
-    {
-        auto sector = copy == 0 ? loaded : loaded + copy * mirrored->sectors;
-        barrier.Write(buffer, sector, rank, [this](hal::BlockDevice::Result result)
-            {
-                CopyWritten(result);
-            });
-    }
-
-    void FatLiteWindow::CopyWritten(hal::BlockDevice::Result result)
-    {
-        if (result != hal::BlockDevice::Result::success)
-            onWrittenBack(ToResult(result));
-        else if (++copy != Copies())
-            WriteCopy();
+        else if (access == Access::flush)
+            onFlushed(result);
         else
         {
-            dirty = false;
-            onWrittenBack(Result::success);
+            if (result == Result::success)
+            {
+                if (access == Access::overwrite)
+                    std::ranges::fill(buffer, uint8_t{ 0 });
+
+                dirty = true;
+                rank = requestedRank;
+            }
+
+            onModify(result, buffer);
         }
     }
 

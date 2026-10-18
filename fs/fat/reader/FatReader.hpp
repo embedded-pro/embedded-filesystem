@@ -67,9 +67,8 @@ namespace fs
         void OpenFound(Result result);
         void OpenDirectoryFound(Result result);
 
-        void BeginMount();
+        void BeginChange(const infra::Function<void(Result result)>& onDone);
         void Mounted(Result result);
-        void BeginUnmount();
         void Entered(Result result);
 
     private:
@@ -84,8 +83,7 @@ namespace fs
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<File> file)> onOpen;
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<Directory> directory)> onOpenDirectory;
         LiteLifecycle lifecycle;
-        infra::Function<void(Result result)> onMountDone;
-        infra::Function<void(Result result)> onUnmountDone;
+        infra::Function<void(Result result)> onChanged;
     };
 
     namespace detail

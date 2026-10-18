@@ -32,6 +32,7 @@ namespace fs
         void Advance();
         void Taken();
         void FreeNext();
+        void WriteCandidate(uint32_t value);
         void Freed(Result result);
         uint32_t SectorOf(uint32_t cluster) const;
 

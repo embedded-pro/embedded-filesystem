@@ -21,6 +21,10 @@ namespace fs
         , limits(limits)
         , lifecycleClaimer(volume.Queue())
         , pathClaimer(volume.Queue())
+        , resume([this](Result result)
+              {
+                  Resume(result);
+              })
     {}
 
     FatLite::~FatLite() = default;
@@ -30,19 +34,13 @@ namespace fs
         if (!lifecycle.StartMount())
             volume.Defer(onDone, Result::busy);
         else
-        {
-            onMountDone = onDone;
-            BeginMount();
-        }
+            BeginChange(onDone);
     }
 
     void FatLite::Unmount(const infra::Function<void(Result result)>& onDone)
     {
         if (lifecycle.StartUnmount())
-        {
-            onUnmountDone = onDone;
-            BeginUnmount();
-        }
+            BeginChange(onDone);
         else
             volume.Defer(onDone, lifecycle.Changing() ? Result::busy : lifecycle.Unavailable());
     }
@@ -148,10 +146,7 @@ namespace fs
         else if (onOpen)
             FindParent();
         else
-            volume.Walk().Find(path, [this](Result result)
-                {
-                    Found(result);
-                });
+            volume.Walk().Find(path, Then(Step::found));
     }
 
     void FatLite::Found(Result result)
@@ -209,10 +204,7 @@ namespace fs
 
         auto split = SplitLast(path);
         name = split.name;
-        volume.Walk().FindOutside(split.parent, 0, [this](Result result)
-            {
-                ParentFound(result);
-            });
+        volume.Walk().FindOutside(split.parent, 0, Then(Step::parentFound));
     }
 
     void FatLite::ParentFound(Result result)
@@ -231,10 +223,7 @@ namespace fs
         else
         {
             parent = walk.FoundCluster();
-            scan.Scan(parent, name, [this](Result result)
-                {
-                    Scanned(result);
-                });
+            scan.Scan(parent, name, Then(Step::scanned));
         }
     }
 
@@ -267,10 +256,7 @@ namespace fs
         pathClaimer.Release();
 
         if (mode == OpenMode::write && (found.entry.size != 0 || found.entry.firstCluster != 0))
-            opening->Truncate([this](Result result)
-                {
-                    Opened(result);
-                });
+            opening->Truncate(Then(Step::opened));
         else
             OpenDone(Result::success);
     }
@@ -344,13 +330,15 @@ namespace fs
                         ZeroNext();
                 });
         else
-            volume.TableWriter().Write(parent, grown, [this](Result result)
-                {
-                    if (result != Result::success)
-                        Found(result);
-                    else
-                        WriteEntry(FatEntryPosition{ grown, 0 });
-                });
+            volume.TableWriter().Write(parent, grown, Then(Step::linked));
+    }
+
+    void FatLite::Linked(Result result)
+    {
+        if (result != Result::success)
+            Found(result);
+        else
+            WriteEntry(FatEntryPosition{ grown, 0 });
     }
 
     void FatLite::WriteEntry(FatEntryPosition position)
@@ -385,15 +373,55 @@ namespace fs
         onOpen(result, result == Result::success ? file : nullptr);
     }
 
-    void FatLite::BeginMount()
+    const infra::Function<void(Result result)>& FatLite::Then(Step next)
     {
+        step = next;
+        return resume;
+    }
+
+    void FatLite::Resume(Result result)
+    {
+        switch (step)
+        {
+            case Step::found:
+                Found(result);
+                break;
+            case Step::parentFound:
+                ParentFound(result);
+                break;
+            case Step::scanned:
+                Scanned(result);
+                break;
+            case Step::linked:
+                Linked(result);
+                break;
+            case Step::opened:
+                Opened(result);
+                break;
+            case Step::mounted:
+                Mounted(result);
+                break;
+            case Step::committed:
+                Committed(result);
+                break;
+            default:
+                UnmountDone(result);
+                break;
+        }
+    }
+
+    void FatLite::BeginChange(const infra::Function<void(Result result)>& onDone)
+    {
+        onChanged = onDone;
         lifecycleClaimer.Claim([this]
             {
-                window.Forget();
-                mount.Start([this](Result result)
-                    {
-                        Mounted(result);
-                    });
+                if (lifecycle.Mounting())
+                {
+                    window.Forget();
+                    mount.Start(Then(Step::mounted));
+                }
+                else
+                    CommitNext();
             });
     }
 
@@ -410,30 +438,24 @@ namespace fs
         Entered(result);
     }
 
-    void FatLite::BeginUnmount()
-    {
-        lifecycleClaimer.Claim([this]
-            {
-                CommitNext();
-            });
-    }
-
     void FatLite::CommitNext()
     {
         for (auto& file : volume.OpenFiles())
             if (file.Uncommitted())
             {
-                file.Commit([this](Result result)
-                    {
-                        if (result != Result::success)
-                            UnmountDone(result);
-                        else
-                            CommitNext();
-                    });
+                file.Commit(Then(Step::committed));
                 return;
             }
 
         WriteFsInfo();
+    }
+
+    void FatLite::Committed(Result result)
+    {
+        if (result != Result::success)
+            UnmountDone(result);
+        else
+            CommitNext();
     }
 
     void FatLite::WriteFsInfo()
@@ -448,17 +470,11 @@ namespace fs
                     else
                     {
                         SerializeFsInfo(FsInfo{ std::nullopt, volume.Allocator().Cursor() }, contents);
-                        window.Flush([this](Result result)
-                            {
-                                UnmountDone(result);
-                            });
+                        window.Flush(Then(Step::unmounted));
                     }
                 });
         else
-            window.Flush([this](Result result)
-                {
-                    UnmountDone(result);
-                });
+            window.Flush(Then(Step::unmounted));
     }
 
     void FatLite::UnmountDone(Result result)
@@ -472,9 +488,6 @@ namespace fs
 
     void FatLite::Entered(Result result)
     {
-        if (onMountDone)
-            volume.Defer(std::exchange(onMountDone, nullptr), result);
-        if (onUnmountDone)
-            volume.Defer(std::exchange(onUnmountDone, nullptr), result);
+        volume.Defer(std::exchange(onChanged, nullptr), result);
     }
 }

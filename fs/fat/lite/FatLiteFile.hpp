@@ -59,36 +59,53 @@ namespace fs
             implicitClose
         };
 
+        enum class Step : uint8_t
+        {
+            link,
+            linked,
+            truncationCommitted,
+            endChain,
+            chainEnded,
+            freeCut,
+            flush,
+            done
+        };
+
+        const infra::Function<void(Result result)>& Then(Step next);
+        void Resume(Result result);
+
         void UnReferenced() override;
         bool Pending() const;
         bool Writable() const;
         Result Unwritable() const;
         void Claim(Call call);
+        void Enqueue(Call call);
         void Granted();
 
         void Reach(uint32_t index);
+        void Follow();
         void Followed(Result result, std::optional<uint32_t> next);
         void Grow();
         void Taken(Result result, uint32_t newCluster);
         void Link();
-        void Linked(Result result);
+        void Linked();
         void Reached();
 
         void ReadStep();
         void ReadPart();
-        void ReadSectors(uint32_t sectors);
         void WriteStep();
         void WritePart(std::size_t remaining);
-        void WriteSectors(uint32_t sectors);
+        void TransferSectors(uint32_t sectors);
         void Moved(Result result);
 
         void StartTruncate();
-        void Cut(Result result, std::optional<uint32_t> next);
-        void TruncationCommitted(Result result);
-        void EndChain(Result result);
-        void FreeCut(Result result);
+        void Cut(std::optional<uint32_t> next);
+        void TruncationCommitted();
+        void EndChain();
+        void ChainEnded();
+        void FreeCut();
         void StartSync();
-        void Flush(Result result);
+        void Flush();
 
         void Done(Result result);
         void Finish(Result result);
@@ -115,6 +132,8 @@ namespace fs
         uint32_t cut{ 0 };
         uint32_t transferSector{ 0 };
         Call call{ Call::none };
+        Step step{ Step::done };
+        infra::Function<void(Result result)> resume;
         infra::ByteRange readBuffer;
         infra::ConstByteRange writeData;
         std::size_t transferred{ 0 };

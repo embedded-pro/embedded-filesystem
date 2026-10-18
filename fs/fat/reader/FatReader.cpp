@@ -21,19 +21,13 @@ namespace fs
         if (!lifecycle.StartMount())
             volume.Defer(onDone, Result::busy);
         else
-        {
-            onMountDone = onDone;
-            BeginMount();
-        }
+            BeginChange(onDone);
     }
 
     void FatReader::Unmount(const infra::Function<void(Result result)>& onDone)
     {
         if (lifecycle.StartUnmount())
-        {
-            onUnmountDone = onDone;
-            BeginUnmount();
-        }
+            BeginChange(onDone);
         else
             volume.Defer(onDone, lifecycle.Changing() ? Result::busy : lifecycle.Unavailable());
     }
@@ -207,15 +201,26 @@ namespace fs
         onOpenDirectory(result, directory);
     }
 
-    void FatReader::BeginMount()
+    void FatReader::BeginChange(const infra::Function<void(Result result)>& onDone)
     {
+        onChanged = onDone;
         lifecycleClaimer.Claim([this]
             {
-                window.Forget();
-                mount.Start([this](Result result)
-                    {
-                        Mounted(result);
-                    });
+                if (lifecycle.Mounting())
+                {
+                    window.Forget();
+                    mount.Start([this](Result result)
+                        {
+                            Mounted(result);
+                        });
+                }
+                else
+                {
+                    lifecycleClaimer.Release();
+                    lifecycle.Unmounted();
+                    volume.MarkUnmounted(Result::notMounted);
+                    Entered(Result::success);
+                }
             });
     }
 
@@ -232,22 +237,8 @@ namespace fs
         Entered(result);
     }
 
-    void FatReader::BeginUnmount()
-    {
-        lifecycleClaimer.Claim([this]
-            {
-                lifecycleClaimer.Release();
-                lifecycle.Unmounted();
-                volume.MarkUnmounted(Result::notMounted);
-                Entered(Result::success);
-            });
-    }
-
     void FatReader::Entered(Result result)
     {
-        if (onMountDone)
-            volume.Defer(std::exchange(onMountDone, nullptr), result);
-        if (onUnmountDone)
-            volume.Defer(std::exchange(onUnmountDone, nullptr), result);
+        volume.Defer(std::exchange(onChanged, nullptr), result);
     }
 }

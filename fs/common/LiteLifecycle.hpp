@@ -16,6 +16,7 @@ namespace fs
         bool RemoveMedia();
 
         bool IsMounted() const;
+        bool Mounting() const;
         bool Changing() const;
         Result Unavailable() const;
 
