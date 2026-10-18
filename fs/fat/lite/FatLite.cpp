@@ -1,6 +1,5 @@
 #include "fs/fat/lite/FatLite.hpp"
 #include "fs/fat/FatFsInfo.hpp"
-#include "fs/fat/FatName.hpp"
 #include "fs/fat/FatRanks.hpp"
 #include "fs/fat/FatShortNameGeneration.hpp"
 #include "fs/fat/FatTimestamp.hpp"
@@ -17,7 +16,7 @@ namespace fs
                       volume.EnterUnmounted(Result::mediaRemoved);
               })
         , mount(device, window, volume.Geometry())
-        , scan(volume.Reader())
+        , search(volume.Reader(), volume.Geometry())
         , limits(limits)
         , lifecycleClaimer(volume.Queue())
         , pathClaimer(volume.Queue())
@@ -143,10 +142,8 @@ namespace fs
     {
         if (!volume.Available())
             Found(lifecycle.Unavailable());
-        else if (onOpen)
-            FindParent();
         else
-            volume.Walk().Find(path, Then(Step::found));
+            search.Find(path, Then(onOpen ? Step::searched : Step::found));
     }
 
     void FatLite::Found(Result result)
@@ -164,84 +161,48 @@ namespace fs
 
     void FatLite::StatFound(Result result)
     {
-        const auto& walk = volume.Walk();
-
         if (result != Result::success)
             onStat(result, EntryInfo{});
-        else if (walk.FoundRoot())
+        else if (search.FoundRoot())
             onStat(result, EntryInfo{ infra::BoundedConstString(), EntryType::directory, 0 });
         else
-            onStat(result, InfoOf(walk.Found()));
+            onStat(result, InfoOf(search.Found()));
     }
 
     void FatLite::OpenDirectoryFound(Result result)
     {
-        const auto& walk = volume.Walk();
         infra::SharedPtr<FatReaderDirectory> directory;
 
-        if (result == Result::success && !walk.FoundDirectory())
+        if (result == Result::success && !search.FoundDirectory())
             result = Result::notADirectory;
-        else if (result == Result::success && !walk.FoundRoot() && !volume.Geometry().IsCluster(walk.FoundCluster()))
+        else if (result == Result::success && !search.FoundRoot() && !volume.Geometry().IsCluster(search.FoundCluster()))
             result = Result::corrupted;
         else if (result == Result::success)
             directory = AllocateDirectory();
 
         if (directory != nullptr)
-            directory->Open(walk.FoundCluster());
+            directory->Open(search.FoundCluster());
         else if (result == Result::success)
             result = Result::tooManyOpenFiles;
 
         onOpenDirectory(result, directory);
     }
 
-    void FatLite::FindParent()
+    void FatLite::Searched(Result result)
     {
-        if (IsRoot(path))
-        {
-            Found(Result::isADirectory);
-            return;
-        }
-
-        auto split = SplitLast(path);
-        name = split.name;
-        volume.Walk().FindOutside(split.parent, 0, Then(Step::parentFound));
-    }
-
-    void FatLite::ParentFound(Result result)
-    {
-        const auto& walk = volume.Walk();
-
-        if (result == Result::success && !walk.FoundDirectory())
-            result = Result::notADirectory;
-        else if (result == Result::success && !walk.FoundRoot() && !volume.Geometry().IsCluster(walk.FoundCluster()))
-            result = Result::corrupted;
-        else if (result == Result::success)
-            result = ValidateFatName(name);
-
-        if (result != Result::success)
-            Found(result);
-        else
-        {
-            parent = walk.FoundCluster();
-            scan.Scan(parent, name, Then(Step::scanned));
-        }
-    }
-
-    void FatLite::Scanned(Result result)
-    {
-        if (result != Result::success)
-            Found(result);
-        else if (scan.Found())
-            OpenExisting(*scan.Found());
-        else if (mode == OpenMode::read)
-            Found(Result::notFound);
-        else
+        if (result == Result::notFound && search.LastMissing() && mode != OpenMode::read)
             Create();
+        else if (result != Result::success)
+            Found(result);
+        else if (search.FoundDirectory())
+            Found(Result::isADirectory);
+        else
+            OpenExisting(search.Found());
     }
 
     void FatLite::OpenExisting(const FatScannedEntry& found)
     {
-        auto result = IsDirectory(found) ? Result::isADirectory : Verify(found);
+        auto result = Verify(found);
 
         if (result == Result::success)
             opening = AllocateFile();
@@ -252,7 +213,7 @@ namespace fs
             return;
         }
 
-        opening->Open(found, mode);
+        opening->Open(found.shortEntry, found.entry, mode);
         pathClaimer.Release();
 
         if (mode == OpenMode::write && (found.entry.size != 0 || found.entry.firstCluster != 0))
@@ -278,29 +239,23 @@ namespace fs
 
     void FatLite::Create()
     {
-        auto shortName = ExactShortName(name);
+        auto shortName = ExactShortName(search.Component());
         opening = AllocateFile();
 
         if (opening == nullptr)
             Found(Result::tooManyOpenFiles);
         else if (!shortName)
             Found(Result::unsupported);
-        else if (!scan.Free())
+        else if (!search.Free())
             Found(Result::noSpace);
         else
         {
-            created = FatScannedEntry{};
-            created.entry.name = *shortName;
-            created.entry.attributes = FatAttributes::archive;
-            created.entry.createDate = fatEpoch.date;
-            created.entry.accessDate = fatEpoch.date;
-            created.entry.writeDate = fatEpoch.date;
-            created.slots = 1;
+            createdName = *shortName;
 
-            if (scan.Extensible())
-                GrowDirectory(scan.Free()->cluster);
+            if (search.Extensible())
+                GrowDirectory(search.Free()->cluster);
             else
-                WriteEntry(*scan.Free());
+                WriteEntry(*search.Free());
         }
     }
 
@@ -343,14 +298,19 @@ namespace fs
 
     void FatLite::WriteEntry(FatEntryPosition position)
     {
-        created.first = position;
-        created.shortEntry = position;
+        createdAt = position;
         volume.Window().Modify(volume.Reader().SectorOf(position), entryRank, [this](Result result, infra::ByteRange contents)
             {
                 if (result == Result::success)
                 {
-                    EncodeShortEntry(created.entry, infra::Head(infra::DiscardHead(contents, created.shortEntry.index % (contents.size() / directoryEntryBytes) * directoryEntryBytes), directoryEntryBytes));
-                    opening->Open(created, mode);
+                    ShortEntry entry;
+                    entry.name = createdName;
+                    entry.attributes = FatAttributes::archive;
+                    entry.createDate = fatEpoch.date;
+                    entry.accessDate = fatEpoch.date;
+                    entry.writeDate = fatEpoch.date;
+                    EncodeShortEntry(entry, infra::Head(infra::DiscardHead(contents, createdAt.index % (contents.size() / directoryEntryBytes) * directoryEntryBytes), directoryEntryBytes));
+                    opening->Open(createdAt, entry, mode);
                     pathClaimer.Release();
                     OpenDone(Result::success);
                 }
@@ -386,11 +346,8 @@ namespace fs
             case Step::found:
                 Found(result);
                 break;
-            case Step::parentFound:
-                ParentFound(result);
-                break;
-            case Step::scanned:
-                Scanned(result);
+            case Step::searched:
+                Searched(result);
                 break;
             case Step::linked:
                 Linked(result);

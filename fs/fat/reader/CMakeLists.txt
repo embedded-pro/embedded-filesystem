@@ -19,6 +19,8 @@ target_sources(fs.fat_reader PRIVATE
     FatReaderFile.hpp
     FatReaderMount.cpp
     FatReaderMount.hpp
+    FatReaderSearch.cpp
+    FatReaderSearch.hpp
     FatReaderVolume.cpp
     FatReaderVolume.hpp
     FatReaderWindow.cpp

@@ -31,7 +31,7 @@ namespace fs
         FatLiteFile& operator=(const FatLiteFile& other) = delete;
         ~FatLiteFile();
 
-        void Open(const FatScannedEntry& entry, OpenMode mode);
+        void Open(FatEntryPosition entryPosition, const ShortEntry& shortEntry, OpenMode mode);
         void Detach();
         bool Conflicts(FatEntryPosition position, OpenMode otherMode) const;
         bool Uncommitted() const;

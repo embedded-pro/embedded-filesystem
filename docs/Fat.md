@@ -283,7 +283,8 @@ Formatting writes the MBR, the boot sector, FSINFO and their backups, the FAT wi
 ## Read-only volume
 
 `fs::FatReader`, in `fs/fat/reader`, is a FAT volume that only reads, for a product that never writes to its card, such as a bootloader that loads an image or a device that plays files.
-It mounts, looks up, lists and reads with the parts of `fs::FatFileSystem` that read, so it validates a volume as described under [Mount](#mount), compares and reports names as described under [Names](#names) and [Directory entries](#directory-entries), and bounds every walk and reports what it finds as described under [Corruption](#corruption); both accept the same volumes and report the same names.
+It mounts, lists and reads with the parts of `fs::FatFileSystem` that read, and looks up paths with a search of its own that compares names in the same way.
+It validates a volume as described under [Mount](#mount), compares and reports names as described under [Names](#names) and [Directory entries](#directory-entries), and bounds every walk and reports what it finds as described under [Corruption](#corruption), so both accept the same volumes and report the same names.
 A removed medium faults it in the same way.
 It leaves out:
 
@@ -303,7 +304,7 @@ The template arguments of `fs::FatReader::WithStorage<Files, Directories, Limits
 The longest name also sizes the buffer that holds a name while it is reported, as `FatLimits::maxNameBytes` does for `fs::FatFileSystem`.
 The constructor takes the device and the alignment of the buffers that the driver transfers, 1 by default, as described under [Direct transfers](#direct-transfers).
 With `fs::FatReaderFeatures::longNames` left out, the volume reads only short names, as FatFs does without `FF_USE_LFN`: it skips the long name entries, finds and lists every entry by its 8.3 name, and its name buffer holds one short name, 34 bytes.
-On a Cortex-M4, F-1 measures 17.7 KB of flash and 2.0 KB of RAM for `fs::FatReader::WithStorage<1>`, against 61.2 KB and 7.9 KB for `fs::FatFileSystem` with the same calls and 5.8 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+On a Cortex-M4, F-1 measures 17.6 KB of flash and 1.9 KB of RAM for `fs::FatReader::WithStorage<1>`, against 61.2 KB and 7.9 KB for `fs::FatFileSystem` with the same calls and 5.8 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 
 ## Lite volume
 
@@ -341,8 +342,8 @@ fs::FatLite::WithStorage<2> lite{ sdCard };
 ```
 
 The template arguments of `fs::FatLite::WithStorage<Files, Directories, Limits, Features>` and its constructor are those of `fs::FatReader::WithStorage`, and its whole sectors go through the sector buffer when the buffer of the caller is not aligned for the driver.
-On a Cortex-M4, F-1 measures 27.5 KB of flash and 2.3 KB of RAM for `fs::FatLite::WithStorage<1>` that reads only short names, against 45.9 KB and 7.4 KB for `fs::FatFileSystem` with every `fs::FatFeatures` left out and 7.4 KB and 1.1 KB for `fatfs/minimal`, which also removes, renames and makes directories, as [Metrics.md](Metrics.md#on-target-metrics) reports.
-Reading long names adds 0.9 KB of flash and 0.2 KB of RAM.
+On a Cortex-M4, F-1 measures 26.1 KB of flash and 2.0 KB of RAM for `fs::FatLite::WithStorage<1>` that reads only short names, against 45.9 KB and 7.4 KB for `fs::FatFileSystem` with every `fs::FatFeatures` left out and 7.4 KB and 1.1 KB for `fatfs/minimal`, which also removes, renames and makes directories, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+Reading long names adds 0.8 KB of flash and 0.2 KB of RAM.
 
 ## Configuration
 

@@ -17,5 +17,6 @@ target_sources(fs.fat_reader_test PRIVATE
     TestFatReader.cpp
     TestFatReaderDirectory.cpp
     TestFatReaderFile.cpp
+    TestFatReaderSearch.cpp
     TestFatReaderWindow.cpp
 )

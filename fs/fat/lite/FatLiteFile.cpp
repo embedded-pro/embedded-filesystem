@@ -36,13 +36,13 @@ namespace fs
         Detach();
     }
 
-    void FatLiteFile::Open(const FatScannedEntry& scanned, OpenMode openMode)
+    void FatLiteFile::Open(FatEntryPosition entryPosition, const ShortEntry& shortEntry, OpenMode openMode)
     {
         generation = volume.Generation();
         mode = openMode;
-        entry = scanned.shortEntry;
-        firstCluster = scanned.entry.firstCluster;
-        size = scanned.entry.size;
+        entry = entryPosition;
+        firstCluster = shortEntry.firstCluster;
+        size = shortEntry.size;
         position = mode == OpenMode::append ? size : 0;
         committedFirstCluster = firstCluster;
         committedSize = size;
