@@ -13,4 +13,5 @@ target_link_libraries(validation.layout_test PUBLIC
 
 target_sources(validation.layout_test PRIVATE
     TestFatLayout.cpp
+    TestLayoutCommands.cpp
 )

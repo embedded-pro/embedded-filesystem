@@ -15,6 +15,8 @@ target_link_libraries(validation.layout PUBLIC
 target_sources(validation.layout PRIVATE
     FatLayout.cpp
     FatLayout.hpp
+    LayoutCommands.cpp
+    LayoutCommands.hpp
 )
 
 if (EMFS_BUILD_TESTS)
