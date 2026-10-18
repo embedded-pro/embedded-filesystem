@@ -17,5 +17,6 @@ target_sources(fs.fat_lite_test PRIVATE
     TestFatLite.cpp
     TestFatLiteFaults.cpp
     TestFatLiteFile.cpp
+    TestFatLiteScan.cpp
     TestFatLiteWindow.cpp
 )

@@ -17,7 +17,7 @@ namespace fs
                       volume.EnterUnmounted(Result::mediaRemoved);
               })
         , mount(device, window, volume.Geometry())
-        , scan(volume.Reader(), nullptr)
+        , scan(volume.Reader())
         , limits(limits)
         , lifecycleClaimer(volume.Queue())
         , pathClaimer(volume.Queue())
@@ -231,7 +231,7 @@ namespace fs
         else
         {
             parent = walk.FoundCluster();
-            scan.Scan(parent, name, 1, std::nullopt, std::nullopt, [this](Result result)
+            scan.Scan(parent, name, [this](Result result)
                 {
                     Scanned(result);
                 });
@@ -299,7 +299,7 @@ namespace fs
             Found(Result::tooManyOpenFiles);
         else if (!shortName)
             Found(Result::unsupported);
-        else if (!scan.Slots())
+        else if (!scan.Free())
             Found(Result::noSpace);
         else
         {
@@ -311,10 +311,10 @@ namespace fs
             created.entry.writeDate = fatEpoch.date;
             created.slots = 1;
 
-            if (scan.Slots()->extensible)
-                GrowDirectory(scan.Slots()->first.cluster);
+            if (scan.Extensible())
+                GrowDirectory(scan.Free()->cluster);
             else
-                WriteEntry(scan.Slots()->first);
+                WriteEntry(*scan.Free());
         }
     }
 

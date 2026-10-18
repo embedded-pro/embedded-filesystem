@@ -9,9 +9,9 @@
 #include "fs/common/TransferAlignment.hpp"
 #include "fs/fat/FatDirectoryEntry.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
-#include "fs/fat/FatNameScan.hpp"
 #include "fs/fat/FatShortName.hpp"
 #include "fs/fat/lite/FatLiteFile.hpp"
+#include "fs/fat/lite/FatLiteScan.hpp"
 #include "fs/fat/lite/FatLiteVolume.hpp"
 #include "fs/fat/lite/FatLiteWindow.hpp"
 #include "fs/fat/reader/FatReaderDirectory.hpp"
@@ -95,7 +95,7 @@ namespace fs
         FatLiteWindow window;
         FatLiteVolume volume;
         FatReaderMount mount;
-        FatNameScan scan;
+        FatLiteScan scan;
         PathLimits limits;
         infra::ClaimableResource::Claimer lifecycleClaimer;
         infra::ClaimableResource::Claimer pathClaimer;
