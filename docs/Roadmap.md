@@ -122,7 +122,7 @@ The drivers of hal-st and the cycle counter of EmIL need changes first, made as 
 
 F-1 measures embedded-filesystem at several times the flash of FatFs and littlefs.
 This plan records where the size comes from and the steps that reduce it, measured with Arm GCC 13.2.1 in `MinSizeRel` on the Cortex-M4.
-Step A is done, step B has started, and two spikes measured step C.
+Step A is done, two of the three parts of step B are done, and two spikes measured step C.
 
 ### Where the size comes from
 
@@ -140,7 +140,7 @@ Six patterns repeat across both filesystems:
 3. A `services::TableStateMachine` per lifecycle costs more than an enumeration: replacing them saved 1.4 KB in `fs::FatReader` and `fs::FatLite`, and 2.7 KB in `fs::NorLite` for its lifecycle and its leveling.
 4. Defensive breadth: the handling of media removal costs 0.9 KB, the checks of the boot sector and the geometry 1.5 KB against 0.8 KB for the whole mount of FatFs, and handles check their generation and calls are deferred with `busy`.
    A volume for fixed media would leave out only 130 B of it, because the generation checks of the handles serve unmount as well.
-5. Features that `fatfs/minimal` leaves out: reading long names costs `fs::FatLite` 844 B of flash and 224 B of RAM, which `fs::FatReaderFeatures::longNames` leaves out; converting short names to UTF-8 and validating paths stay.
+5. Features that `fatfs/minimal` leaves out: reading long names costs `fs::FatLite` 852 B of flash and 224 B of RAM, which `fs::FatReaderFeatures::longNames` leaves out; converting short names to UTF-8 and validating paths stay.
 6. The on-flash machinery of NOR makes up 81 % of the code of `fs::NorLite`: 3.0 KB for the B-tree, 1.8 KB for the radix tree, 6.4 KB for the journal and the replay of records, 3.7 KB for checkpoints, 2.9 KB for garbage collection and 2.4 KB for the wear leveler.
 
 ### Sharing buffers and callbacks
@@ -150,18 +150,18 @@ The large items of NOR are the state of the volume, not scratch space: 4 KB of e
 The page buffer of a NOR file cannot go to a pool, because it holds a partial page that is not programmed yet, and NOR flash does not program a page twice.
 
 A pool of callbacks saves no RAM: every handle and path slot can have a call pending at the same time, so a pool for the worst case is as large as today, and a smaller pool would complete calls with `busy`.
-One completion slot per owner, instead of one per kind of call, saves 100 to 150 B on `fs::FatLite`, because every owner runs one call at a time: a file holds three slots, the volume five and the sector window three.
+One completion slot per owner, instead of one per kind of call, saves little RAM: every owner runs one call at a time, but only slots of the same signature merge, and the storage of the FAT volumes is a multiple of the 32-byte alignment of their sector buffer, so a few bytes saved vanish in its padding.
 Flash is spent per distinct continuation, wherever its callback is stored, so pooling saves no flash; one continuation per operation, with a step field and a `switch` instead of a lambda per wait, saves about 23 B per continuation, as measured on 11 callbacks of a lite file, or 1.5 to 2 KB on `fs::FatLite`.
 Together with a single copy of the directory entry, this saves about 300 B of RAM, 11 %, and 1.5 to 2 KB of flash, 5 to 6 %, on `fs::FatLite`.
 
 ### Steps
 
-| Step                                                                                                                                                          | `fs::FatLite`, from 31.2 KB              | Effort           | Confidence                        |
-|---------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|------------------|-----------------------------------|
-| A. Scope switches: names read in 8.3 only and an enumerated lifecycle in the lite volumes, done; no media removal for fixed media, left out at 130 B          | 29.0 KB                                  | done             | measured                          |
-| B. A scan of short entries in `fs::FatLite`, done; one continuation per operation, one directory iterator instead of the visitor chain, one copy of the entry | 28.4 KB after the scan, about 26 KB      | one to two weeks | medium: two parts measured        |
-| C. A straight-line core: operations written in sequence on a small cooperative stack per volume, which switches stacks at device calls                        | about 24 to 26 KB                        | weeks            | low: estimated from the read path |
-| D. NOR only: a simpler format profile, with one kind of index and compaction of the journal instead of checkpoints                                            | `fs::NorLite`, 58.2 KB today, much lower | months           | low                               |
+| Step                                                                                                                                                         | `fs::FatLite`, from 31.2 KB              | Effort           | Confidence                        |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|------------------|-----------------------------------|
+| A. Scope switches: names read in 8.3 only and an enumerated lifecycle in the lite volumes, done; no media removal for fixed media, left out at 130 B         | 29.0 KB                                  | done             | measured                          |
+| B. A scan of short entries in `fs::FatLite` and one continuation per owner, done; one directory iterator instead of the visitor chain, one copy of the entry | 27.5 KB after two parts, about 26 KB     | one to two weeks | medium: two parts done            |
+| C. A straight-line core: operations written in sequence on a small cooperative stack per volume, which switches stacks at device calls                       | about 24 to 26 KB                        | weeks            | low: estimated from the read path |
+| D. NOR only: a simpler format profile, with one kind of index and compaction of the journal instead of checkpoints                                           | `fs::NorLite`, 58.1 KB today, much lower | months           | low                               |
 
 * No step reaches twice FatFs. B and C remove the plumbing of patterns 1 and 2, but most of what remains is the front end, the handles, the lifecycle and the checks of pattern 4, which both keep.
   C saves up to 2 KB more than B, at the cost of a new execution model, a stack switch in assembly for every target and a stack per volume.
@@ -171,6 +171,8 @@ Together with a single copy of the directory entry, this saves about 300 B of RA
 * Steps A and B were estimated too high, because the estimates counted code that the rest of the volume still needs.
   B is re-estimated from the sizes of its parts and from one experiment: replacing 11 of the 20 callbacks of a lite file by one continuation saved 256 bytes.
 * The scan of short entries saved 744 bytes of flash and 96 of RAM: `fs::FatLite` used the scan of the full volume, whose aliases and numeric tails it never needs, since it creates only short entries.
+* One continuation per owner saved 976 bytes of flash on `fs::FatLite`, 200 on `fs::FatReader` and 112 on `fs::NorLite`: the file and the volume resume their waits through one stored callback and a `switch`, the sector window and the mount through one callback each, and mount and unmount complete through one slot.
+  That slot saves 16 bytes of RAM on `fs::NorLite` and none on the FAT volumes, whose padding takes it.
 * A spike rewrote the read path of `fs::FatReader`, its mount, lookup, read and listing, as C++20 coroutines with their frames in a buffer per owner: 19,536 bytes of flash against 19,140, and 2,684 bytes of RAM against 2,012 once the buffers fit the deepest calls.
   Each coroutine costs about 200 bytes of fixed code and each suspension point 60 to 80 bytes, as much as the callbacks they replace, and a frame keeps every local variable alive across a wait.
 * A second spike ran the same read path as sequential code on one cooperative stack per volume, with a stack switch in a few lines of assembly on the Cortex-M and `ucontext` for the tests on the host.

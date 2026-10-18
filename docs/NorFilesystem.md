@@ -609,7 +609,7 @@ fs::NorLite::WithStorage<norConfig, 2> lite{ norFlash };
 ```
 
 The template arguments of `fs::NorLite::WithStorage<Config, Files>` are the configuration and the number of open files; `directories` and `pathOperations` of `fs::NorConfig` are not used.
-On a Cortex-M4, F-1 measures 58.2 KB of flash and 17.2 KB of RAM for `fs::NorLite::WithStorage` with the configuration of `nor-qspi-16m` and one file, against 62.1 KB and 17.5 KB for `fs::NorFileSystem` with every `fs::NorFeatures` left out and 15.7 KB and 0.4 KB for `littlefs/default`, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+On a Cortex-M4, F-1 measures 58.1 KB of flash and 17.2 KB of RAM for `fs::NorLite::WithStorage` with the configuration of `nor-qspi-16m` and one file, against 62.1 KB and 17.5 KB for `fs::NorFileSystem` with every `fs::NorFeatures` left out and 15.7 KB and 0.4 KB for `littlefs/default`, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 Most of what is left is the code that every write needs, the journal, the checkpoints, the maps and the garbage collection, and most of the RAM is the tables and the node cache of [RAM use](#ram-use).
 
 ## Counters
