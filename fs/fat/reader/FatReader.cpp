@@ -10,6 +10,7 @@ namespace fs
                   if (lifecycle.RemoveMedia())
                       volume.MarkUnmounted(Result::mediaRemoved);
               })
+        , search(volume.Reader(), volume.Geometry())
         , mount(device, window, volume.Geometry())
         , limits(limits)
         , lifecycleClaimer(volume.Queue())
@@ -128,7 +129,7 @@ namespace fs
     void FatReader::Run()
     {
         if (volume.Available())
-            volume.Walk().Find(path, [this](Result result)
+            search.Find(path, [this](Result result)
                 {
                     Found(result);
                 });
@@ -151,30 +152,27 @@ namespace fs
 
     void FatReader::StatFound(Result result)
     {
-        const auto& walk = volume.Walk();
-
         if (result != Result::success)
             onStat(result, EntryInfo{});
-        else if (walk.FoundRoot())
+        else if (search.FoundRoot())
             onStat(result, EntryInfo{ infra::BoundedConstString(), EntryType::directory, 0 });
         else
-            onStat(result, InfoOf(walk.Found()));
+            onStat(result, InfoOf(search.Found()));
     }
 
     void FatReader::OpenFound(Result result)
     {
-        const auto& walk = volume.Walk();
         infra::SharedPtr<FatReaderFile> file;
 
-        if (result == Result::success && walk.FoundDirectory())
+        if (result == Result::success && search.FoundDirectory())
             result = Result::isADirectory;
-        else if (result == Result::success && walk.Found().entry.size != 0 && !volume.Geometry().IsCluster(walk.Found().entry.firstCluster))
+        else if (result == Result::success && search.Found().entry.size != 0 && !volume.Geometry().IsCluster(search.Found().entry.firstCluster))
             result = Result::corrupted;
         else if (result == Result::success)
             file = AllocateFile();
 
         if (file != nullptr)
-            file->Open(walk.Found());
+            file->Open(search.Found());
         else if (result == Result::success)
             result = Result::tooManyOpenFiles;
 
@@ -183,18 +181,17 @@ namespace fs
 
     void FatReader::OpenDirectoryFound(Result result)
     {
-        const auto& walk = volume.Walk();
         infra::SharedPtr<FatReaderDirectory> directory;
 
-        if (result == Result::success && !walk.FoundDirectory())
+        if (result == Result::success && !search.FoundDirectory())
             result = Result::notADirectory;
-        else if (result == Result::success && !walk.FoundRoot() && !volume.Geometry().IsCluster(walk.FoundCluster()))
+        else if (result == Result::success && !search.FoundRoot() && !volume.Geometry().IsCluster(search.FoundCluster()))
             result = Result::corrupted;
         else if (result == Result::success)
             directory = AllocateDirectory();
 
         if (directory != nullptr)
-            directory->Open(walk.FoundCluster());
+            directory->Open(search.FoundCluster());
         else if (result == Result::success)
             result = Result::tooManyOpenFiles;
 

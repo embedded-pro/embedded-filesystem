@@ -17,8 +17,6 @@ target_sources(fs.fat_lite PRIVATE
     FatLiteAllocator.hpp
     FatLiteFile.cpp
     FatLiteFile.hpp
-    FatLiteScan.cpp
-    FatLiteScan.hpp
     FatLiteVolume.cpp
     FatLiteVolume.hpp
     FatLiteWindow.cpp

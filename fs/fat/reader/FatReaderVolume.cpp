@@ -48,11 +48,6 @@ namespace fs
         return reader;
     }
 
-    FatPathWalk& FatReaderVolume::Walk()
-    {
-        return walk;
-    }
-
     uint32_t FatReaderVolume::Generation() const
     {
         return generation;

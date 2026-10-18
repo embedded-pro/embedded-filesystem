@@ -11,12 +11,12 @@
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatShortName.hpp"
 #include "fs/fat/lite/FatLiteFile.hpp"
-#include "fs/fat/lite/FatLiteScan.hpp"
 #include "fs/fat/lite/FatLiteVolume.hpp"
 #include "fs/fat/lite/FatLiteWindow.hpp"
 #include "fs/fat/reader/FatReaderDirectory.hpp"
 #include "fs/fat/reader/FatReaderFeatures.hpp"
 #include "fs/fat/reader/FatReaderMount.hpp"
+#include "fs/fat/reader/FatReaderSearch.hpp"
 #include "fs/interfaces/FileSystem.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/event/ClaimableResource.hpp"
@@ -61,8 +61,7 @@ namespace fs
         enum class Step : uint8_t
         {
             found,
-            parentFound,
-            scanned,
+            searched,
             linked,
             opened,
             mounted,
@@ -84,9 +83,7 @@ namespace fs
         void StatFound(Result result);
         void OpenDirectoryFound(Result result);
 
-        void FindParent();
-        void ParentFound(Result result);
-        void Scanned(Result result);
+        void Searched(Result result);
         void OpenExisting(const FatScannedEntry& found);
         Result Verify(const FatScannedEntry& found);
         void Create();
@@ -110,19 +107,19 @@ namespace fs
         FatLiteWindow window;
         FatLiteVolume volume;
         FatReaderMount mount;
-        FatLiteScan scan;
+        FatReaderSearch search;
         PathLimits limits;
         infra::ClaimableResource::Claimer lifecycleClaimer;
         infra::ClaimableResource::Claimer pathClaimer;
         Step step{ Step::found };
         infra::Function<void(Result result)> resume;
         infra::BoundedConstString path;
-        infra::BoundedConstString name;
         OpenMode mode{ OpenMode::read };
         uint32_t parent{ 0 };
         uint32_t grown{ 0 };
         uint32_t zeroed{ 0 };
-        FatScannedEntry created;
+        ShortName createdName;
+        FatEntryPosition createdAt;
         infra::SharedPtr<FatLiteFile> opening;
         infra::AutoResetFunction<void(Result result, const EntryInfo& info)> onStat;
         infra::AutoResetFunction<void(Result result, infra::SharedPtr<File> file)> onOpen;

@@ -8,7 +8,6 @@
 #include "fs/fat/FatDirectoryReader.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatGeometry.hpp"
-#include "fs/fat/FatPathWalk.hpp"
 #include "fs/fat/FatTableReader.hpp"
 #include "fs/interfaces/Result.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
@@ -34,7 +33,6 @@ namespace fs
         FatGeometry& Geometry();
         FatTableReader& Table();
         FatDirectoryReader& Reader();
-        FatPathWalk& Walk();
 
         uint32_t Generation() const;
         bool Idle() const;
@@ -59,7 +57,6 @@ namespace fs
         FatTableReader table{ sectors, geometry };
         FatEntryAssembler assembler;
         FatDirectoryReader reader{ sectors, geometry, assembler };
-        FatPathWalk walk{ reader, geometry };
         uint32_t generation{ 0 };
         bool mounted{ false };
         Result unavailable{ Result::notMounted };

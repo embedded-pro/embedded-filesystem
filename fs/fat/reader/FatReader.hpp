@@ -11,6 +11,7 @@
 #include "fs/fat/reader/FatReaderFeatures.hpp"
 #include "fs/fat/reader/FatReaderFile.hpp"
 #include "fs/fat/reader/FatReaderMount.hpp"
+#include "fs/fat/reader/FatReaderSearch.hpp"
 #include "fs/fat/reader/FatReaderVolume.hpp"
 #include "fs/fat/reader/FatReaderWindow.hpp"
 #include "fs/interfaces/FileSystem.hpp"
@@ -74,6 +75,7 @@ namespace fs
     private:
         FatReaderWindow window;
         FatReaderVolume volume;
+        FatReaderSearch search;
         FatReaderMount mount;
         PathLimits limits;
         infra::ClaimableResource::Claimer lifecycleClaimer;
