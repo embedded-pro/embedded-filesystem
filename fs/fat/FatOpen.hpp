@@ -8,6 +8,7 @@
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/Function.hpp"
 #include "infra/util/SharedPtr.hpp"
+#include <cstdint>
 
 namespace fs
 {
@@ -27,6 +28,14 @@ namespace fs
         void Start();
 
     private:
+        enum class Step : uint8_t
+        {
+            found,
+            truncated,
+            prepared,
+            created
+        };
+
         void OnFound(Result result);
         void OpenExisting(const FatScannedEntry& found);
         Result VerifyFile(const FatScannedEntry& found) const;
@@ -35,6 +44,8 @@ namespace fs
         void OnPrepared(Result result);
         void OnCreated(Result result);
         void Finish(Result result);
+        const infra::Function<void(Result result)>& Then(Step next);
+        void Resume(Result result);
 
     private:
         FatVolume& volume;
@@ -44,6 +55,8 @@ namespace fs
         FatParentDirectory parent;
         FatTruncation truncation;
         infra::SharedPtr<FatFile> file;
+        Step step{ Step::found };
+        infra::Function<void(Result result)> resume;
     };
 }
 

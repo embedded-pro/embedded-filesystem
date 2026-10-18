@@ -25,7 +25,14 @@ namespace fs
         void Flush(const infra::Function<void(hal::BlockDevice::Result result)>& onDone);
 
     private:
-        void WriteNow();
+        enum class Step : uint8_t
+        {
+            write,
+            flush
+        };
+
+        void Transfer(Step next);
+        void Transferred(hal::BlockDevice::Result result);
         void OnWritten(hal::BlockDevice::Result result);
         void OnFlushed(hal::BlockDevice::Result result);
 
@@ -36,6 +43,7 @@ namespace fs
         uint32_t firstBlock{ 0 };
         uint8_t rank{ 0 };
         bool writeAfterFlush{ false };
+        Step step{ Step::write };
         infra::AutoResetFunction<void(hal::BlockDevice::Result result)> onDone;
     };
 }

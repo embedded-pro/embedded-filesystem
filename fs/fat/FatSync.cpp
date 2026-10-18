@@ -25,14 +25,8 @@ namespace fs
     void FatSync::Flush(Result result) const
     {
         if (result != Result::success)
-        {
             onDone(result);
-            return;
-        }
-
-        volume.Cache().Flush([this](Result result)
-            {
-                onDone(result);
-            });
+        else
+            volume.Cache().Flush(onDone);
     }
 }

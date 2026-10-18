@@ -13,6 +13,10 @@ namespace fs
         , onFinished(onFinished)
         , parent(volume)
         , truncation(volume)
+        , resume([this](Result result)
+              {
+                  Resume(result);
+              })
     {}
 
     FatOpen::~FatOpen() = default;
@@ -25,10 +29,7 @@ namespace fs
             return;
         }
 
-        parent.Find(call.path, call.mode != OpenMode::read, [this](Result result)
-            {
-                OnFound(result);
-            });
+        parent.Find(call.path, call.mode != OpenMode::read, Then(Step::found));
     }
 
     void FatOpen::OnFound(Result result)
@@ -59,10 +60,7 @@ namespace fs
         file->Open(found, call.mode);
 
         if (call.mode == OpenMode::write)
-            truncation.Truncate(file->State(), file->Extents(), [this](Result result)
-                {
-                    OnTruncated(result);
-                });
+            truncation.Truncate(file->State(), file->Extents(), Then(Step::truncated));
         else
             Finish(Result::success);
     }
@@ -97,10 +95,7 @@ namespace fs
         if (file == nullptr)
             Finish(Result::tooManyOpenFiles);
         else
-            parent.PrepareAlias([this](Result result)
-                {
-                    OnPrepared(result);
-                });
+            parent.PrepareAlias(Then(Step::prepared));
     }
 
     void FatOpen::OnPrepared(Result result)
@@ -108,10 +103,7 @@ namespace fs
         if (result != Result::success)
             Finish(result);
         else
-            parent.Write(FatAttributes::archive, 0, [this](Result result)
-                {
-                    OnCreated(result);
-                });
+            parent.Write(FatAttributes::archive, 0, Then(Step::created));
     }
 
     void FatOpen::OnCreated(Result result)
@@ -127,5 +119,30 @@ namespace fs
         auto opened = std::exchange(file, nullptr);
         onFinished(result);
         call.onDone(result, result == Result::success ? opened : nullptr);
+    }
+
+    const infra::Function<void(Result result)>& FatOpen::Then(Step next)
+    {
+        step = next;
+        return resume;
+    }
+
+    void FatOpen::Resume(Result result)
+    {
+        switch (step)
+        {
+            case Step::found:
+                OnFound(result);
+                break;
+            case Step::truncated:
+                OnTruncated(result);
+                break;
+            case Step::prepared:
+                OnPrepared(result);
+                break;
+            default:
+                OnCreated(result);
+                break;
+        }
     }
 }

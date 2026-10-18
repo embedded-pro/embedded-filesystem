@@ -10,6 +10,10 @@ namespace fs
         : volume(volume)
         , scan(volume.Reader(), volume.Operations().longNames)
         , writer(volume.Cache(), volume.Reader(), volume.Allocator(), volume.Geometry(), volume.Operations().longNames)
+        , resume([this](Result result)
+              {
+                  Resume(result);
+              })
     {}
 
     FatParentDirectory::~FatParentDirectory() = default;
@@ -54,10 +58,7 @@ namespace fs
         else
         {
             alias = longNames->hashed(alias, name);
-            scan.ScanForAlias(alias, [this](Result result)
-                {
-                    OnAliasScanned(result);
-                });
+            scan.ScanForAlias(alias, Then(Step::aliasScanned));
         }
     }
 
@@ -91,10 +92,7 @@ namespace fs
         auto split = SplitLast(path);
         name = split.name;
         this->onDone = onDone;
-        volume.Walk().FindOutside(split.parent, outside, [this](Result result)
-            {
-                OnParent(result);
-            });
+        volume.Walk().FindOutside(split.parent, outside, Then(Step::parentFound));
     }
 
     void FatParentDirectory::OnParent(Result result)
@@ -122,10 +120,7 @@ namespace fs
                 basis = alias;
         }
 
-        scan.Scan(cluster, name, slots, basis, except, [this](Result result)
-            {
-                onDone(result);
-            });
+        scan.Scan(cluster, name, slots, basis, except, Then(Step::done));
     }
 
     Result FatParentDirectory::VerifyParent(Result result) const
@@ -157,9 +152,28 @@ namespace fs
     void FatParentDirectory::Prepared(const ShortName& prepared)
     {
         shortName = prepared;
-        volume.MarkDirty([this](Result result)
-            {
+        volume.MarkDirty(Then(Step::done));
+    }
+
+    const infra::Function<void(Result result)>& FatParentDirectory::Then(Step next)
+    {
+        step = next;
+        return resume;
+    }
+
+    void FatParentDirectory::Resume(Result result)
+    {
+        switch (step)
+        {
+            case Step::parentFound:
+                OnParent(result);
+                break;
+            case Step::aliasScanned:
+                OnAliasScanned(result);
+                break;
+            default:
                 onDone(result);
-            });
+                break;
+        }
     }
 }

@@ -20,22 +20,23 @@ namespace fs
         volume = FatVolumeState{};
         cache.Clear();
         cache.SetMirroredRegion(std::nullopt);
+        volumeSectors = device.NumberOfBlocks();
 
         if (device.BlockSize() != cache.SectorSize())
             Done(Result::unsupported);
         else
-            ReadFirstSector();
+            Read();
     }
 
-    void FatMount::ReadFirstSector()
+    void FatMount::Read()
     {
-        cache.Read(0, [this](Result result, infra::ConstByteRange contents)
+        cache.Read(volumeStart, [this](Result result, infra::ConstByteRange contents)
             {
-                OnFirstSector(result, contents);
+                OnSector(result, contents);
             });
     }
 
-    void FatMount::OnFirstSector(Result result, infra::ConstByteRange contents)
+    void FatMount::OnSector(Result result, infra::ConstByteRange contents)
     {
         if (result != Result::success)
         {
@@ -44,38 +45,25 @@ namespace fs
         }
 
         if (auto parameters = ParseBootSector(contents))
-            UseGeometry(*parameters, 0, device.NumberOfBlocks());
+            UseGeometry(*parameters);
+        else if (partitioned)
+            Done(Result::corrupted);
         else if (IsProtectiveMbr(contents))
             Done(Result::unsupported);
         else if (auto partition = FirstFatPartition(contents); partition && partition->firstSector < device.NumberOfBlocks() && partition->sectors <= device.NumberOfBlocks() - partition->firstSector)
-            ReadBootSector(partition->firstSector, partition->sectors);
+        {
+            partitioned = true;
+            volumeStart = partition->firstSector;
+            volumeSectors = partition->sectors;
+            Read();
+        }
         else
             Done(Result::corrupted);
     }
 
-    void FatMount::ReadBootSector(uint32_t sector, uint32_t sectors)
+    void FatMount::UseGeometry(const BiosParameterBlock& parameters)
     {
-        volumeStart = sector;
-        volumeSectors = sectors;
-        cache.Read(sector, [this](Result result, infra::ConstByteRange contents)
-            {
-                OnBootSector(result, contents);
-            });
-    }
-
-    void FatMount::OnBootSector(Result result, infra::ConstByteRange contents)
-    {
-        if (result != Result::success)
-            Done(result);
-        else if (auto parameters = ParseBootSector(contents))
-            UseGeometry(*parameters, volumeStart, volumeSectors);
-        else
-            Done(Result::corrupted);
-    }
-
-    void FatMount::UseGeometry(const BiosParameterBlock& parameters, uint32_t start, uint32_t sectors)
-    {
-        auto geometry = GeometryOf(parameters, start, sectors, device.BlockSize());
+        auto geometry = GeometryOf(parameters, volumeStart, volumeSectors, device.BlockSize());
 
         if (geometry.result != Result::success)
         {
@@ -96,38 +84,30 @@ namespace fs
 
     void FatMount::ReadCleanState()
     {
-        if (volume.geometry.fsInfoSector.has_value())
-            ReadFsInfo();
-        else
-            ReadFatHeader();
+        fsInfoRead = !volume.geometry.fsInfoSector.has_value();
+        ReadCleanSector();
     }
 
-    void FatMount::ReadFsInfo()
+    void FatMount::ReadCleanSector()
     {
-        cache.Read(*volume.geometry.fsInfoSector, [this](Result result, infra::ConstByteRange contents)
+        cache.Read(fsInfoRead ? volume.geometry.ActiveFatSector() : *volume.geometry.fsInfoSector, [this](Result result, infra::ConstByteRange contents)
             {
-                OnFsInfo(result, contents);
+                OnCleanSector(result, contents);
             });
     }
 
-    void FatMount::OnFsInfo(Result result, infra::ConstByteRange contents)
+    void FatMount::OnCleanSector(Result result, infra::ConstByteRange contents)
     {
-        if (result != Result::success)
-        {
+        if (fsInfoRead)
+            OnFatHeader(result, contents);
+        else if (result != Result::success)
             Done(result);
-            return;
+        else
+        {
+            volume.fsInfo = ParseFsInfo(contents, volume.geometry.clusterCount);
+            fsInfoRead = true;
+            ReadCleanSector();
         }
-
-        volume.fsInfo = ParseFsInfo(contents, volume.geometry.clusterCount);
-        ReadFatHeader();
-    }
-
-    void FatMount::ReadFatHeader()
-    {
-        cache.Read(volume.geometry.ActiveFatSector(), [this](Result result, infra::ConstByteRange contents)
-            {
-                OnFatHeader(result, contents);
-            });
     }
 
     void FatMount::OnFatHeader(Result result, infra::ConstByteRange contents)

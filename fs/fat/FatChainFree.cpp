@@ -38,10 +38,7 @@ namespace fs
         }
 
         this->next = next;
-        writer.Write(current, 0, [this](Result result)
-            {
-                OnFreed(result);
-            });
+        Update(Step::freed);
     }
 
     void FatChainFree::OnFreed(Result result)
@@ -73,11 +70,33 @@ namespace fs
             return;
         }
 
-        auto begin = volume.geometry.SectorOfCluster(run.first);
-        transfers.Erase(begin, begin + run.count * volume.geometry.sectorsPerCluster, [this](Result result)
-            {
-                OnDiscarded(result);
-            });
+        Update(Step::discarded);
+    }
+
+    void FatChainFree::Update(Step next)
+    {
+        auto onUpdated = [this](Result result)
+        {
+            Updated(result);
+        };
+
+        step = next;
+
+        if (next == Step::freed)
+            writer.Write(current, 0, onUpdated);
+        else
+        {
+            auto begin = volume.geometry.SectorOfCluster(run.first);
+            transfers.Erase(begin, begin + run.count * volume.geometry.sectorsPerCluster, onUpdated);
+        }
+    }
+
+    void FatChainFree::Updated(Result result)
+    {
+        if (step == Step::freed)
+            OnFreed(result);
+        else
+            OnDiscarded(result);
     }
 
     void FatChainFree::OnDiscarded(Result result)

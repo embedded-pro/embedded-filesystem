@@ -168,11 +168,7 @@ namespace fs
     {
         if (open && state.Writable() && state.Uncommitted() && volume.Available(generation))
         {
-            call = Call::implicitClose;
-            claimer.Claim([this]
-                {
-                    Granted();
-                });
+            Enqueue(Call::implicitClose);
             return;
         }
 
@@ -185,10 +181,15 @@ namespace fs
         return call != Call::none;
     }
 
-    void FatFile::Claim(Call call)
+    void FatFile::Claim(Call claimed)
     {
-        this->call = call;
         self = Share(*this);
+        Enqueue(claimed);
+    }
+
+    void FatFile::Enqueue(Call claimed)
+    {
+        call = claimed;
         claimer.Claim([this]
             {
                 Granted();
@@ -197,6 +198,12 @@ namespace fs
 
     void FatFile::Granted()
     {
+        auto onCallDone = [this](Result result)
+        {
+            volume.Report(result);
+            Done(result);
+        };
+
         if (!volume.Available(generation))
         {
             if (call == Call::read)
@@ -205,63 +212,20 @@ namespace fs
                 Done(volume.Unavailable());
         }
         else if (call == Call::read)
-            StartRead();
+            volume.Operation().emplace<FatRead>(volume, state, extents, readBuffer, [this](Result result, std::size_t bytesRead)
+                                  {
+                                      volume.Report(result);
+                                      ReadDone(result, bytesRead);
+                                  })
+                .Start();
         else if (call == Call::write)
-            StartWrite();
+            volume.Operation().emplace<FatWrite>(volume, state, extents, writeData, onCallDone).Start();
         else if (call == Call::truncate)
-            StartTruncate();
+            volume.Operation().emplace<FatTruncation>(volume).Truncate(state, extents, onCallDone);
         else if (call == Call::expectSize)
-            StartExpectSize();
+            volume.Operations().expectSize(volume, state, extents, expectedSize, onCallDone);
         else
-            StartSync();
-    }
-
-    void FatFile::StartRead()
-    {
-        volume.Operation().emplace<FatRead>(volume, state, extents, readBuffer, [this](Result result, std::size_t bytesRead)
-                              {
-                                  volume.Report(result);
-                                  ReadDone(result, bytesRead);
-                              })
-            .Start();
-    }
-
-    void FatFile::StartWrite()
-    {
-        volume.Operation().emplace<FatWrite>(volume, state, extents, writeData, [this](Result result)
-                              {
-                                  volume.Report(result);
-                                  Done(result);
-                              })
-            .Start();
-    }
-
-    void FatFile::StartTruncate()
-    {
-        volume.Operation().emplace<FatTruncation>(volume).Truncate(state, extents, [this](Result result)
-            {
-                volume.Report(result);
-                Done(result);
-            });
-    }
-
-    void FatFile::StartExpectSize()
-    {
-        volume.Operations().expectSize(volume, state, extents, expectedSize, [this](Result result)
-            {
-                volume.Report(result);
-                Done(result);
-            });
-    }
-
-    void FatFile::StartSync()
-    {
-        volume.Operation().emplace<FatSync>(volume, state, [this](Result result)
-                              {
-                                  volume.Report(result);
-                                  Done(result);
-                              })
-            .Start();
+            volume.Operation().emplace<FatSync>(volume, state, onCallDone).Start();
     }
 
     void FatFile::ReadDone(Result result, std::size_t bytesRead)

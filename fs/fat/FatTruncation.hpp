@@ -25,7 +25,16 @@ namespace fs
         void Truncate(FatOpenFile& file, FatExtentCache& extents, const infra::Function<void(Result result)>& onDone);
 
     private:
-        using Step = void (FatTruncation::*)();
+        enum class Step : uint8_t
+        {
+            dirtied,
+            entryCommitted,
+            endWritten,
+            chainFreed,
+            cutChain,
+            freeCut,
+            succeed
+        };
 
         void LocateLastKept();
         void ReadFirstCut(uint32_t cluster);
@@ -33,8 +42,9 @@ namespace fs
         void CommitEntry();
         void CutChain();
         void FreeCut();
-        void Succeed();
-        void FlushThen(Result result, Step next);
+        void Flush(Step next);
+        const infra::Function<void(Result result)>& Then(Step next);
+        void Resume(Result result);
 
     private:
         FatVolume& volume;
@@ -44,7 +54,8 @@ namespace fs
         uint32_t kept{ 0 };
         uint32_t lastKept{ 0 };
         std::optional<uint32_t> firstCut;
-        Step afterFlush{ nullptr };
+        Step step{ Step::dirtied };
+        infra::Function<void(Result result)> resume;
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }

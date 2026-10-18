@@ -26,14 +26,11 @@ namespace fs
         void ReadCleanState();
 
     private:
-        void ReadFirstSector();
-        void OnFirstSector(Result result, infra::ConstByteRange contents);
-        void ReadBootSector(uint32_t sector, uint32_t sectors);
-        void OnBootSector(Result result, infra::ConstByteRange contents);
-        void UseGeometry(const BiosParameterBlock& parameters, uint32_t start, uint32_t sectors);
-        void ReadFsInfo();
-        void OnFsInfo(Result result, infra::ConstByteRange contents);
-        void ReadFatHeader();
+        void Read();
+        void OnSector(Result result, infra::ConstByteRange contents);
+        void UseGeometry(const BiosParameterBlock& parameters);
+        void ReadCleanSector();
+        void OnCleanSector(Result result, infra::ConstByteRange contents);
         void OnFatHeader(Result result, infra::ConstByteRange contents);
         void Done(Result result);
 
@@ -42,6 +39,8 @@ namespace fs
         SectorCache& cache;
         FatVolumeState& volume;
         FatCleanState readCleanState;
+        bool partitioned{ false };
+        bool fsInfoRead{ false };
         uint32_t volumeStart{ 0 };
         uint32_t volumeSectors{ 0 };
         infra::AutoResetFunction<void(Result result)> onDone;

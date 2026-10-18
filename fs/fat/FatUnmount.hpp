@@ -3,6 +3,7 @@
 
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/Function.hpp"
+#include <cstdint>
 
 namespace fs
 {
@@ -16,18 +17,31 @@ namespace fs
         FatUnmount& operator=(const FatUnmount& other) = delete;
         ~FatUnmount();
 
-        void Start() const;
+        void Start();
 
     private:
-        void CommitNextFile() const;
-        void WriteFsInfo() const;
-        void MarkClean(Result previous) const;
-        void Flush(Result previous) const;
+        enum class Step : uint8_t
+        {
+            fileCommitted,
+            markedClean,
+            flushed
+        };
+
+        void CommitNextFile();
+        void FileCommitted(Result result);
+        void WriteFsInfo();
+        void MarkClean(Result previous);
+        void Flush(Result previous);
         void Done(Result result) const;
+        const infra::Function<void(Result result)>& Then(Step next);
+        void Resume(Result result);
 
     private:
         FatVolume& volume;
+        Step step{ Step::fileCommitted };
+        Result beforeFlush{ Result::success };
         infra::Function<void(Result result)> onDone;
+        infra::Function<void(Result result)> resume;
     };
 }
 

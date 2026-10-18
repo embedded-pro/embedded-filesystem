@@ -30,14 +30,7 @@ namespace fs
         this->rank = rank;
         this->onDone = onDone;
         writeAfterFlush = lowestUnflushedRank.has_value() && *lowestUnflushedRank < rank;
-
-        if (writeAfterFlush)
-            device.Flush([this](hal::BlockDevice::Result result)
-                {
-                    OnFlushed(result);
-                });
-        else
-            WriteNow();
+        Transfer(writeAfterFlush ? Step::flush : Step::write);
     }
 
     void FlushBarrier::Flush(const infra::Function<void(hal::BlockDevice::Result result)>& onDone)
@@ -48,10 +41,7 @@ namespace fs
         writeAfterFlush = false;
 
         if (HasUnflushedWrites())
-            device.Flush([this](hal::BlockDevice::Result result)
-                {
-                    OnFlushed(result);
-                });
+            Transfer(Step::flush);
         else
             infra::EventDispatcher::Instance().Schedule([this]
                 {
@@ -59,12 +49,27 @@ namespace fs
                 });
     }
 
-    void FlushBarrier::WriteNow()
+    void FlushBarrier::Transfer(Step next)
     {
-        device.WriteBlocks(data, firstBlock, [this](hal::BlockDevice::Result result)
-            {
-                OnWritten(result);
-            });
+        auto onTransferred = [this](hal::BlockDevice::Result result)
+        {
+            Transferred(result);
+        };
+
+        step = next;
+
+        if (next == Step::flush)
+            device.Flush(onTransferred);
+        else
+            device.WriteBlocks(data, firstBlock, onTransferred);
+    }
+
+    void FlushBarrier::Transferred(hal::BlockDevice::Result result)
+    {
+        if (step == Step::flush)
+            OnFlushed(result);
+        else
+            OnWritten(result);
     }
 
     void FlushBarrier::OnWritten(hal::BlockDevice::Result result)
@@ -79,7 +84,7 @@ namespace fs
             lowestUnflushedRank = std::nullopt;
 
         if (writeAfterFlush && result == hal::BlockDevice::Result::success)
-            WriteNow();
+            Transfer(Step::write);
         else
             onDone(result);
     }
