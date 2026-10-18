@@ -1,6 +1,7 @@
 #include "fs/interfaces/test_doubles/FileSystemMock.hpp"
 #include "hal/interfaces/test_doubles/FlashMock.hpp"
 #include "services/hil/test/HilFixture.hpp"
+#include "validation/firmware/devices/CountingFlash.hpp"
 #include "validation/firmware/timing/test_doubles/FakeCycleCounter.hpp"
 #include "validation/firmware/workload/WorkloadCommands.hpp"
 #include "validation/firmware/workload/test_doubles/WorkloadMock.hpp"

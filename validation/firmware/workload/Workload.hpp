@@ -1,6 +1,7 @@
 #ifndef VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_HPP
 #define VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_HPP
 
+#include "infra/timer/Timer.hpp"
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/Function.hpp"
 #include "validation/firmware/workload/PhaseTotals.hpp"

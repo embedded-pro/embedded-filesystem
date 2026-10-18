@@ -8,7 +8,7 @@
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/SharedPtr.hpp"
-#include "validation/firmware/devices/CountingFlash.hpp"
+#include "validation/firmware/devices/CountedDevice.hpp"
 #include "validation/firmware/results/ResultLines.hpp"
 #include "validation/firmware/timing/CycleCounter.hpp"
 #include "validation/firmware/timing/Stopwatch.hpp"
@@ -38,9 +38,9 @@ namespace validation
         WorkloadRunner& operator=(const WorkloadRunner& other) = delete;
 
         void Release(const infra::Function<void()>& onReleased);
-        void Begin(WorkloadVolume& volume, CountingFlash& flash, const WorkloadContext& context, const infra::Function<void()>& onInterrupted);
+        void Begin(WorkloadVolume& volume, CountedDevice& device, const WorkloadContext& context, const infra::Function<void()>& onInterrupted);
         void End();
-        void SetPhase(infra::BoundedConstString phase, PhaseWindow window = PhaseWindow::none);
+        void SetPhase(infra::BoundedConstString phase, PhaseWindow window = PhaseWindow::none, uint32_t windowFrom = 0);
 
         void Format(const Done& onDone);
         void Mount(const Done& onDone);
@@ -86,7 +86,7 @@ namespace validation
         State state{ State::idle };
 
         WorkloadVolume* volume{ nullptr };
-        CountingFlash* flash{ nullptr };
+        CountedDevice* device{ nullptr };
         infra::Function<void()> onInterrupted;
         WorkloadVolume* mountedVolume{ nullptr };
         VolumeCounts earlierMounts;

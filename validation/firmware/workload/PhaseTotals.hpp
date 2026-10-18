@@ -3,7 +3,8 @@
 
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/BoundedVector.hpp"
-#include "validation/firmware/devices/CountingFlash.hpp"
+#include "validation/firmware/devices/DeviceCounts.hpp"
+#include "validation/firmware/results/DeviceRecord.hpp"
 #include "validation/firmware/results/ResultLines.hpp"
 #include "validation/firmware/timing/LatencyHistogram.hpp"
 #include "validation/firmware/workload/WorkloadOperation.hpp"
@@ -23,6 +24,7 @@ namespace validation
         uint32_t fill;
         uint32_t scale;
         std::size_t ramBytes;
+        DeviceKind kind{ DeviceKind::nor };
     };
 
     struct OperationTotals
@@ -37,7 +39,7 @@ namespace validation
     struct PhaseEnd
     {
         uint64_t elapsedNs;
-        FlashCounts device;
+        DeviceCounts device;
         std::optional<VolumeCounts> volume;
     };
 
@@ -46,7 +48,7 @@ namespace validation
     public:
         static constexpr std::size_t maximumName = 32;
 
-        void Start(infra::BoundedConstString name, const FlashCounts& device, const std::optional<VolumeCounts>& volume);
+        void Start(infra::BoundedConstString name, const DeviceCounts& device, const std::optional<VolumeCounts>& volume);
         void Add(WorkloadOperation operation, uint64_t userBytes, uint64_t latencyNs);
         infra::BoundedConstString Name() const;
         const OperationTotals& Of(WorkloadOperation operation) const;
@@ -58,7 +60,7 @@ namespace validation
 
     private:
         infra::BoundedString::WithStorage<maximumName> name;
-        FlashCounts deviceAtStart;
+        DeviceCounts deviceAtStart;
         std::optional<VolumeCounts> volumeAtStart;
         std::array<OperationTotals, workloadOperations> operations;
         infra::BoundedVector<uint32_t>::WithMaxSize<2 * LatencyHistogram::buckets> pairs;

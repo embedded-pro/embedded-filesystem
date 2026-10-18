@@ -8,6 +8,7 @@
 #include "infra/util/test_helper/MockCallback.hpp"
 #include "services/hil/HilResponse.hpp"
 #include "services/tracer/Tracer.hpp"
+#include "validation/firmware/devices/CountingFlash.hpp"
 #include "validation/firmware/timing/test_doubles/FakeCycleCounter.hpp"
 #include "validation/firmware/workload/DataLogger.hpp"
 #include "validation/firmware/workload/RandomOverwrite.hpp"

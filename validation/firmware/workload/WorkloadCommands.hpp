@@ -6,7 +6,7 @@
 #include "services/hil/HilStatus.hpp"
 #include "services/hil/commands/HilPendingOperation.hpp"
 #include "services/util/Terminal.hpp"
-#include "validation/firmware/devices/CountingFlash.hpp"
+#include "validation/firmware/devices/CountedDevice.hpp"
 #include "validation/firmware/hil/DeviceCommands.hpp"
 #include "validation/firmware/workload/Workload.hpp"
 #include "validation/firmware/workload/WorkloadRunner.hpp"
@@ -20,7 +20,7 @@ namespace validation
     struct WorkloadTarget
     {
         const DeviceEntry& device;
-        CountingFlash& flash;
+        CountedDevice& counted;
         WorkloadVolume& volume;
     };
 

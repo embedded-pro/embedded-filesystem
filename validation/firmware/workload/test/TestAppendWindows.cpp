@@ -9,8 +9,8 @@ namespace
 
     validation::AppendCall Call(WorkloadOperation operation, uint64_t programNs, uint64_t checkpoints = 0, uint32_t fileSizeBefore = 0)
     {
-        validation::FlashCounts device;
-        device.programNs = programNs;
+        validation::DeviceCounts device;
+        device.flash.programNs = programNs;
         validation::VolumeCounts volume;
         volume.checkpoints = checkpoints;
         return { operation, fileSizeBefore, device, volume };
@@ -35,7 +35,7 @@ TEST(WindowTotalsTest, counts_the_writes_as_appends_and_adds_the_counts_of_every
     totals.Add(Call(WorkloadOperation::idle, 4));
 
     EXPECT_EQ(1, totals.appends);
-    EXPECT_EQ(9, totals.device.programNs);
+    EXPECT_EQ(9, totals.device.flash.programNs);
     EXPECT_EQ(1, totals.volume.checkpoints);
 }
 
@@ -60,7 +60,7 @@ TEST(LastPeriodsTest, the_window_holds_the_calls_after_a_checkpoint_until_the_fo
     auto window = periods.Window();
     ASSERT_TRUE(window.has_value());
     EXPECT_EQ(4, window->appends);
-    EXPECT_EQ(1 + 2 + 3 + 4 + 10 + 20 + 30 + 40, window->device.programNs);
+    EXPECT_EQ(1 + 2 + 3 + 4 + 10 + 20 + 30 + 40, window->device.flash.programNs);
     EXPECT_EQ(4, window->volume.checkpoints);
 }
 
@@ -71,7 +71,7 @@ TEST(LastPeriodsTest, the_window_holds_the_last_four_periods)
 
     AddPeriods(periods, 1, 6);
 
-    EXPECT_EQ(3 + 4 + 5 + 6 + 30 + 40 + 50 + 60, periods.Window()->device.programNs);
+    EXPECT_EQ(3 + 4 + 5 + 6 + 30 + 40 + 50 + 60, periods.Window()->device.flash.programNs);
 }
 
 TEST(LastPeriodsTest, a_call_with_two_checkpoints_ends_two_periods)
@@ -82,7 +82,7 @@ TEST(LastPeriodsTest, a_call_with_two_checkpoints_ends_two_periods)
 
     periods.Add(Call(WorkloadOperation::sync, 7, 2));
 
-    EXPECT_EQ(1 + 2 + 10 + 20 + 7, periods.Window()->device.programNs);
+    EXPECT_EQ(1 + 2 + 10 + 20 + 7, periods.Window()->device.flash.programNs);
     EXPECT_EQ(4, periods.Window()->volume.checkpoints);
 }
 
@@ -99,7 +99,7 @@ TEST(LastPeriodsTest, the_window_starts_after_the_call_that_has_four_checkpoints
     periods.Add(Call(WorkloadOperation::write, 64));
     periods.Add(Call(WorkloadOperation::sync, 128, 1));
 
-    EXPECT_EQ(1 + 2 + 4 + 8 + 16 + 32, periods.Window()->device.programNs);
+    EXPECT_EQ(1 + 2 + 4 + 8 + 16 + 32, periods.Window()->device.flash.programNs);
 }
 
 TEST(LastPeriodsTest, has_no_window_without_a_call_with_a_checkpoint_before_the_last_four)
@@ -143,7 +143,7 @@ TEST(PeriodsFromTest, the_window_starts_after_the_first_checkpoint_once_a_write_
     auto window = periods.Window();
     ASSERT_TRUE(window.has_value());
     EXPECT_EQ(4, window->appends);
-    EXPECT_EQ(1 + 2 + 3 + 4 + 10 + 20 + 30 + 40, window->device.programNs);
+    EXPECT_EQ(1 + 2 + 3 + 4 + 10 + 20 + 30 + 40, window->device.flash.programNs);
 }
 
 TEST(PeriodsFromTest, the_write_at_the_size_may_carry_the_first_checkpoint)
@@ -153,7 +153,7 @@ TEST(PeriodsFromTest, the_write_at_the_size_may_carry_the_first_checkpoint)
 
     periods.Add(Call(WorkloadOperation::write, 5, 4));
 
-    EXPECT_EQ(5, periods.Window()->device.programNs);
+    EXPECT_EQ(5, periods.Window()->device.flash.programNs);
 }
 
 TEST(PeriodsFromTest, has_no_window_before_four_checkpoints)
@@ -176,4 +176,60 @@ TEST(PeriodsFromTest, has_no_window_when_cleared)
     periods.Add(Call(WorkloadOperation::write, 5, 4));
 
     EXPECT_EQ(std::nullopt, periods.Window());
+}
+
+TEST(AppendsFromTest, the_window_starts_with_the_first_write_at_the_size_and_holds_its_syncs_and_idle_periods)
+{
+    validation::AppendsFrom appends;
+    appends.Start(4096);
+    appends.Add(Call(WorkloadOperation::write, 1000, 0, 4032));
+    appends.Add(Call(WorkloadOperation::sync, 1000, 0, 4096));
+    appends.Add(Call(WorkloadOperation::write, 1, 0, 4096));
+    appends.Add(Call(WorkloadOperation::sync, 2));
+    appends.Add(Call(WorkloadOperation::idle, 4));
+    appends.Add(Call(WorkloadOperation::write, 8, 0, 4160));
+
+    auto window = appends.Window();
+    ASSERT_TRUE(window.has_value());
+    EXPECT_EQ(2, window->appends);
+    EXPECT_EQ(1 + 2 + 4 + 8, window->device.flash.programNs);
+}
+
+TEST(AppendsFromTest, the_window_ends_before_the_write_after_its_last_append)
+{
+    validation::AppendsFrom appends;
+    appends.Start(0);
+    for (uint32_t append = 0; append != validation::AppendsFrom::appends; ++append)
+    {
+        appends.Add(Call(WorkloadOperation::write, 1));
+        appends.Add(Call(WorkloadOperation::sync, 2));
+    }
+
+    appends.Add(Call(WorkloadOperation::write, 1000));
+    appends.Add(Call(WorkloadOperation::sync, 1000));
+
+    EXPECT_EQ(64, appends.Window()->appends);
+    EXPECT_EQ(64 * 3, appends.Window()->device.flash.programNs);
+}
+
+TEST(AppendsFromTest, has_no_window_without_a_write_at_the_size)
+{
+    validation::AppendsFrom appends;
+    appends.Start(4096);
+
+    appends.Add(Call(WorkloadOperation::write, 1, 0, 4032));
+    appends.Add(Call(WorkloadOperation::sync, 2, 0, 4096));
+
+    EXPECT_EQ(std::nullopt, appends.Window());
+}
+
+TEST(AppendsFromTest, a_start_clears_the_window)
+{
+    validation::AppendsFrom appends;
+    appends.Start(0);
+    appends.Add(Call(WorkloadOperation::write, 1));
+
+    appends.Start(4096);
+
+    EXPECT_EQ(std::nullopt, appends.Window());
 }

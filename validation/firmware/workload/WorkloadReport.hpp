@@ -3,7 +3,7 @@
 
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/BoundedString.hpp"
-#include "validation/firmware/devices/CountingFlash.hpp"
+#include "validation/firmware/devices/DeviceCounts.hpp"
 #include "validation/firmware/results/ResultLines.hpp"
 #include "validation/firmware/timing/CycleCounter.hpp"
 #include "validation/firmware/timing/Stopwatch.hpp"
@@ -28,7 +28,7 @@ namespace validation
         WorkloadOperation operation;
         uint64_t userBytes;
         uint32_t fileSizeBefore;
-        FlashCounts device;
+        DeviceCounts device;
         std::optional<VolumeCounts> volume;
     };
 
@@ -37,7 +37,7 @@ namespace validation
         fs::Result result;
         uint64_t userBytes;
         uint64_t latencyNs;
-        FlashCounts device;
+        DeviceCounts device;
         std::optional<VolumeCounts> volume;
     };
 
@@ -49,11 +49,11 @@ namespace validation
 
         WorkloadReport(ResultLines& results, const CycleCounter& cycles, uint32_t clockHz);
 
-        void Start(const WorkloadContext& context, const FlashCounts& device, const std::optional<VolumeCounts>& volume);
-        void StartPhase(infra::BoundedConstString name, PhaseWindow window, const FlashCounts& device, const std::optional<VolumeCounts>& volume);
+        void Start(const WorkloadContext& context, const DeviceCounts& device, const std::optional<VolumeCounts>& volume);
+        void StartPhase(infra::BoundedConstString name, PhaseWindow window, uint32_t windowFrom, const DeviceCounts& device, const std::optional<VolumeCounts>& volume);
         void Add(const CallStart& start, const CallEnd& end);
         void TimedOut(WorkloadOperation operation);
-        void End(const FlashCounts& device, const std::optional<VolumeCounts>& volume);
+        void End(const DeviceCounts& device, const std::optional<VolumeCounts>& volume);
         bool Failed() const;
 
     private:
@@ -67,7 +67,7 @@ namespace validation
         void AddToWindow(const CallStart& start, const CallEnd& end);
         void Check(WorkloadOperation operation, fs::Result result);
         Failure& Fail(WorkloadOperation operation);
-        void PrintPhase(const FlashCounts& device, const std::optional<VolumeCounts>& volume);
+        void PrintPhase(const DeviceCounts& device, const std::optional<VolumeCounts>& volume);
         void PrintWindow(const char* log, const std::optional<WindowTotals>& totals) const;
         void PrintFailure() const;
         void AddRun(ResultRecord& record) const;
@@ -78,8 +78,11 @@ namespace validation
         WorkloadContext context{};
         PhaseTotals phase;
         PhaseWindow window{ PhaseWindow::none };
+        bool checkpointed{ false };
         LastPeriods firstLog;
         PeriodsFrom secondLog{ smallLogSize };
+        AppendsFrom firstAppends;
+        AppendsFrom secondAppends;
         std::optional<Failure> failure;
     };
 }

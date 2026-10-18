@@ -39,4 +39,5 @@ target_sources(validation.devices PRIVATE
 
 if (EMFS_BUILD_TESTS)
     add_subdirectory(test)
+    add_subdirectory(test_doubles)
 endif()

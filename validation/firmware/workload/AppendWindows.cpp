@@ -102,4 +102,31 @@ namespace validation
 
         return totals;
     }
+
+    void AppendsFrom::Start(uint32_t fileSize)
+    {
+        this->fileSize = fileSize;
+        state = State::waitingForSize;
+        totals = WindowTotals{};
+    }
+
+    void AppendsFrom::Add(const AppendCall& call)
+    {
+        auto write = call.operation == WorkloadOperation::write;
+        if (state == State::waitingForSize && write && call.fileSizeBefore >= fileSize)
+            state = State::counting;
+        else if (state == State::counting && write && totals.appends == appends)
+            state = State::done;
+
+        if (state == State::counting)
+            totals.Add(call);
+    }
+
+    std::optional<WindowTotals> AppendsFrom::Window() const
+    {
+        if (totals.appends == 0)
+            return std::nullopt;
+
+        return totals;
+    }
 }

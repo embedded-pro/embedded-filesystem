@@ -8,6 +8,7 @@ target_link_libraries(validation.workload_test PUBLIC
     hal.interfaces_test_doubles
     infra.timer_test_helper
     infra.util_test_helper
+    validation.devices_test_doubles
     validation.timing_test_doubles
     validation.workload
     validation.workload_test_doubles

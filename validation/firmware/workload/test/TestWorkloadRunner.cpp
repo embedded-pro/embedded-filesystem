@@ -5,6 +5,8 @@
 #include "infra/util/SharedPtr.hpp"
 #include "infra/util/test_helper/MockCallback.hpp"
 #include "services/hil/test/HilFixture.hpp"
+#include "validation/firmware/devices/CountingFlash.hpp"
+#include "validation/firmware/devices/test_doubles/CountedDeviceMock.hpp"
 #include "validation/firmware/timing/test_doubles/FakeCycleCounter.hpp"
 #include "validation/firmware/workload/WorkloadRunner.hpp"
 #include "validation/firmware/workload/test_doubles/WorkloadVolumeMock.hpp"
@@ -35,13 +37,13 @@ namespace
                 }));
         }
 
-        void Begin(validation::PhaseWindow window = validation::PhaseWindow::none)
+        void Begin(validation::PhaseWindow window = validation::PhaseWindow::none, uint32_t windowFrom = 0)
         {
             runner.Begin(volume, flash, { "qspi", "embedded-filesystem/nor", "L2", 50, 16, 1000 }, [this]
                 {
                     interrupted.callback();
                 });
-            runner.SetPhase("P", window);
+            runner.SetPhase("P", window, windowFrom);
             Output();
         }
 
@@ -181,7 +183,36 @@ TEST_F(WorkloadRunnerTest, a_volume_without_counts_prints_none)
 
     auto output = End();
     EXPECT_THAT(output, testing::Not(testing::HasSubstr("allocatedSectors")));
-    EXPECT_THAT(output, testing::Not(testing::HasSubstr("EVT window")));
+}
+
+TEST_F(WorkloadRunnerTest, a_volume_without_counts_takes_its_windows_by_the_appends_from_a_size)
+{
+    counters.reset();
+    Begin(validation::PhaseWindow::firstLog, 128);
+    OpenFile();
+    EXPECT_CALL(file, Size()).WillOnce(testing::Return(64)).WillOnce(testing::Return(128)).WillRepeatedly(testing::Return(192));
+
+    Write();
+    Write();
+    Write();
+
+    auto output = End();
+    EXPECT_THAT(output, testing::HasSubstr("log=first appends=2 readRequests=0 "));
+    EXPECT_THAT(output, testing::Not(testing::HasSubstr("checkpoints")));
+}
+
+TEST_F(WorkloadRunnerTest, each_phase_starts_a_phase_of_the_device)
+{
+    testing::StrictMock<validation::CountedDeviceMock> counted;
+    EXPECT_CALL(counted, Snapshot()).WillRepeatedly(testing::Return(validation::DeviceCounts{}));
+    EXPECT_CALL(counted, OnTimeout(_)).Times(2);
+    runner.Begin(volume, counted, { "sd", "embedded-filesystem/fat", "L1", 0, 16, 1000, validation::DeviceKind::block }, [] {});
+
+    EXPECT_CALL(counted, StartPhase()).Times(2);
+    runner.SetPhase("A");
+    runner.SetPhase("B");
+
+    EXPECT_THAT(End(), testing::HasSubstr("phase=A fill=0 ramBytes=1000 elapsedNs=0 readRequests=0 blocksRead=0 "));
 }
 
 TEST_F(WorkloadRunnerTest, a_call_that_does_not_succeed_is_reported_once_at_the_end)
