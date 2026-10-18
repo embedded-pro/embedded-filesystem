@@ -193,6 +193,35 @@ EVT workload.done id=<number> device=<device> subject=<subject> workload=<worklo
 | `alignedBlocks`, `distinctUnits`                   | The written blocks that start an allocation unit or follow the block written before them, and the allocation units written in the phase                                                                                                                 |
 | `op`, `result`                                     | The operation of the first call that failed and what it returned, or `timeout`                                                                                                                                                                          |
 
+## Layout of a card
+
+| Command                  | Answer                                                                         |
+|--------------------------|--------------------------------------------------------------------------------|
+| `layout.read <device>`   | `EVT layout` for the card and for the formatter, then `OK differences=<count>` |
+| `layout.format <device>` | `OK`, or `ERR failed`                                                          |
+
+The commands take `sd`, the whole microSD card of the STM32H757I-EVAL, not its region of 256 MiB:
+
+* `layout.read` reads the first sector of the card and the boot sector of its volume, the first partition of its MBR or the card itself when it starts with a boot sector, and parses them with `validation::FatLayout`, without the code of `fs/fat`;
+  it prints that layout, then the one `fs::ComputeFormatLayout` gives for the blocks of the card with the defaults of `fs::FatFormatter`, with the fields in which they differ;
+* `layout.format` formats the whole card with `fs::FatFormatter` and its defaults, as a quick format that does not discard the data area, so that the card can be checked on a PC.
+
+A card whose first sector holds neither an MBR with a partition nor a boot sector, or whose volume is not FAT or exFAT, answers `ERR failed`, as does a request that fails; a device other than `sd` answers `ERR unsupported`.
+While a command runs, the region of the card takes no benchmark, workload or format, which answer `ERR busy`, and a command answers `ERR busy` while the region is in use.
+A read that does not end within 10 seconds, and a format within 30 minutes, answers `ERR timeout`, and the card stays busy until its request completes.
+
+```text
+EVT layout id=<number> device=sd source=<card|formatter> blocks=<n> unitBlocks=<n> partitionStart=<sector> partitionSectors=<n> type=<fat12|fat16|fat32|exfat> sectorsPerCluster=<n> reservedSectors=<n> fats=<n> fatSectors=<n> rootEntries=<n> dataStart=<sector> [differs=<field>,...]
+```
+
+| Key                                  | Value                                                                                                                  |
+|--------------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `blocks`, `unitBlocks`               | The blocks of the whole card, and the allocation unit it reports in its SD status, 0 without one                       |
+| `partitionStart`, `partitionSectors` | The first sector and the sectors of the volume: of the first partition, or from sector 0 when there is no MBR          |
+| `type`                               | `exfat` for an SDXC card, whose layout gives only `partitionStart` and `partitionSectors`, and compares only the first |
+| `dataStart`                          | The first sector of the data area, counted from the start of the card                                                  |
+| `differs`                            | On the record of the formatter, the fields in which the layout of the card differs, empty when none does               |
+
 ## Processor cycles
 
 | Command                            | Answer                                                                                                                            |

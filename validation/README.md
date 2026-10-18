@@ -71,11 +71,14 @@ The session stops with exit code 3 when the board does not answer `ping`, and re
 | `boot.feature`   | Resets the board and checks the boot event, `ping`, `info` and `firmware.info`                                                                                                                                                                | Seconds                     |
 | `nor.feature`    | Lists, describes and checks the NOR devices, runs their benchmarks and runs the workloads on them: formats the first 16 MiB of the QSPI flash and the parallel NOR of the STM32H757I-EVAL, which keep nothing they held                       | One to two hours per device |
 | `block.feature`  | Lists and describes the block devices, runs their benchmarks and runs the workloads on them: formats the first 256 MiB of the microSD card of the STM32H757I-EVAL or of the eMMC of the STM32H745I-DISCO as FAT, which keep nothing they held | About an hour per device    |
+| `layout.feature` | Reads the layout of the microSD card of the STM32H757I-EVAL against that of `fs::FatFormatter`, then formats the whole card with it                                                                                                           | Seconds                     |
 | `cycles.feature` | Runs F-2 for the four subjects on the RAM devices in the SDRAM, which it overwrites; nothing else of the board is written                                                                                                                     | Up to a few minutes         |
 
-`-k cycles` runs F-2 alone, `-k test_nor` the NOR devices alone, `-k test_block` the block devices alone, `-k workloads` the workloads on every device of the board alone, `-k "test_block and workloads"` those on the block device alone, and `-k boot` the boot scenarios alone.
+`-k cycles` runs F-2 alone, `-k test_nor` the NOR devices alone, `-k test_block` the block devices alone, `-k workloads` the workloads on every device of the board alone, `-k "test_block and workloads"` those on the block device alone, `-k test_layout` the layout of the card alone, and `-k boot` the boot scenarios alone.
 On a board fresh from ST, the first 16 MiB of the QSPI flash hold the images of its demonstration, which `nor.feature` breaks.
 `block.feature` on the STM32H757I-EVAL needs a microSD card of at least 256 MiB in its slot when the board resets, and breaks the file system of the card; the SD Memory Card Formatter restores it.
+`layout.feature` runs first, on a card formatted by the SD Memory Card Formatter on a PC: it reads the layout of the card before anything writes it, then formats the whole card with `fs::FatFormatter`.
+To check that format on a PC, with `fsck.fat -n` or `chkdsk`, and by writing and reading files there, run `-k test_layout` alone, before `block.feature` writes the card again.
 F-2 counts cycles with the cycle counter of the Cortex-M7, which the firmware unlocks, so the run needs no debugger; a debugger that keeps the clocks of the core running in sleep changes nothing, as [docs/Validation.md](../docs/Validation.md#processor-cycles) explains.
 
 ## Sending the results back
