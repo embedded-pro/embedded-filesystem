@@ -140,6 +140,28 @@ TEST_F(FatFormatterOnMockTest, writes_the_metadata_in_order_then_discards_and_fl
     ExpectDone();
 }
 
+TEST_F(FatFormatterOnMockTest, without_discard_the_metadata_is_followed_by_the_flush)
+{
+    testing::InSequence sequence;
+
+    for (uint32_t sector : { 0, 13, 14, 15 })
+        ExpectWrite(sector, 1);
+
+    for (uint32_t sector : { 16, 24, 32, 40 })
+        ExpectWrite(sector, 8);
+
+    EXPECT_CALL(device, Flush(testing::_)).WillOnce(testing::SaveArg<0>(&deviceDone));
+    fs::FatFormatConfig config;
+    config.discard = false;
+
+    Format(formatter, config);
+
+    for (int request = 0; request != 9; ++request)
+        CompleteDevice();
+
+    ExpectDone();
+}
+
 TEST_F(FatFormatterOnMockTest, device_error_stops_the_format_and_is_reported)
 {
     testing::InSequence sequence;

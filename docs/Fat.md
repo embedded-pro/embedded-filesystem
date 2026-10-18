@@ -279,6 +279,7 @@ The formatter writes 2 copies of the FAT by default, as the specification requir
 The fixed root directory of FAT12 and FAT16 holds 512 entries; on FAT32, FSINFO is in sector 1 and a backup of the boot sector in sector 6.
 The boot sector has the volume label `NO NAME` and the volume ID given in `FatFormatConfig`.
 Formatting writes the MBR, the boot sector, FSINFO and their backups, the FAT with zeros except its first two entries, and the root directory with zeros, then discards the rest of the device and flushes it.
+With `FatFormatConfig::discard` false, a quick format, it flushes without discarding, for a large card whose discard of the whole data area would outlast what its driver waits for a request.
 
 ## Read-only volume
 

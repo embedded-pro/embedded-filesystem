@@ -31,6 +31,7 @@ namespace fs
 
         this->onDone = onDone;
         copy = 0;
+        discard = config.discard;
         layout = ComputeFormatLayout(device.NumberOfBlocks(), device.BlockSize(), config);
 
         if (!layout)
@@ -128,7 +129,10 @@ namespace fs
 
         ZeroSectors(rootStart, rootEnd, [this]
             {
-                DiscardData();
+                if (discard)
+                    DiscardData();
+                else
+                    FlushDevice();
             });
     }
 

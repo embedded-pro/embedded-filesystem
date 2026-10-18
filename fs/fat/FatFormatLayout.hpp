@@ -16,6 +16,7 @@ namespace fs
         uint16_t rootEntries{ 512 };
         bool partitioned{ true };
         uint32_t volumeId{ 0 };
+        bool discard{ true };
     };
 
     struct SdFormatParameters

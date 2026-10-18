@@ -56,6 +56,7 @@ namespace fs
         infra::ByteRange buffer;
         std::optional<FatFormatLayout> layout;
         uint8_t copy{ 0 };
+        bool discard{ true };
         uint32_t zeroNext{ 0 };
         uint32_t zeroEnd{ 0 };
         Result result{ Result::success };
