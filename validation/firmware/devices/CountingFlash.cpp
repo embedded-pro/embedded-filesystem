@@ -55,6 +55,16 @@ namespace validation
         flash.EraseSectors(beginIndex, endIndex, Start(counts.eraseNs, guard.sector * (endIndex - beginIndex), onDone));
     }
 
+    DeviceCounts CountingFlash::Snapshot() const
+    {
+        return { counts, {} };
+    }
+
+    void CountingFlash::StartPhase()
+    {
+        // A flash counts nothing that a phase counts on its own
+    }
+
     void CountingFlash::OnTimeout(const infra::Function<void()>& onTimeout)
     {
         meter.OnTimeout(onTimeout);

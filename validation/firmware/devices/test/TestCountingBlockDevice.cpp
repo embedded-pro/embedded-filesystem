@@ -202,3 +202,36 @@ TEST(BlockCountsTest, counts_add_up_and_take_the_difference)
     EXPECT_EQ(4, later.distinctUnits);
     EXPECT_EQ(earlier, later - earlier);
 }
+
+TEST_F(CountingBlockDeviceTest, units_written_before_a_phase_count_as_distinct_again_within_it)
+{
+    Write(0, 1);
+    Write(8, 1);
+    counting.StartPhase();
+    Write(0, 1);
+    Write(16, 1);
+    Write(1, 1);
+
+    EXPECT_EQ(4, counting.Counts().distinctUnits);
+}
+
+TEST_F(CountingBlockDeviceTest, its_snapshot_holds_its_block_counts)
+{
+    Write(0, 2);
+    const validation::CountedDevice& counted = counting;
+
+    EXPECT_EQ(counting.Counts(), counted.Snapshot().blocks);
+    EXPECT_EQ(validation::FlashCounts{}, counted.Snapshot().flash);
+}
+
+TEST(DeviceCountsTest, counts_of_both_kinds_add_up_and_take_the_difference)
+{
+    validation::DeviceCounts earlier;
+    earlier.flash.bytesRead = 5;
+    earlier.blocks.blocksWritten = 3;
+
+    validation::DeviceCounts later = earlier + earlier;
+    EXPECT_EQ(10, later.flash.bytesRead);
+    EXPECT_EQ(6, later.blocks.blocksWritten);
+    EXPECT_EQ(earlier, later - earlier);
+}

@@ -15,10 +15,13 @@ target_link_libraries(validation.devices PUBLIC
 target_sources(validation.devices PRIVATE
     BlockDeviceRegion.cpp
     BlockDeviceRegion.hpp
+    CountedDevice.hpp
     CountingBlockDevice.cpp
     CountingBlockDevice.hpp
     CountingFlash.cpp
     CountingFlash.hpp
+    DeviceCounts.cpp
+    DeviceCounts.hpp
     NullBlockDevice.cpp
     NullBlockDevice.hpp
     NullFlash.cpp
