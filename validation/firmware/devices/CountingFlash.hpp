@@ -66,6 +66,7 @@ namespace validation
         void EraseSectors(uint32_t beginIndex, uint32_t endIndex, infra::Function<void()> onDone) override;
 
         void OnTimeout(const infra::Function<void()>& onTimeout);
+        RequestMeter& Meter();
 
         uint32_t PageSize() const;
         const FlashCounts& Counts() const;

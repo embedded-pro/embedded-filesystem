@@ -19,6 +19,7 @@
 #include "services/tracer/StreamWriterOnSerialCommunication.hpp"
 #include "services/tracer/Tracer.hpp"
 #include "validation/firmware/bench/BenchCommands.hpp"
+#include "validation/firmware/bench/BlockBench.hpp"
 #include "validation/firmware/bench/NorBench.hpp"
 #include "validation/firmware/boards/BoardInfoStm.hpp"
 #include "validation/firmware/boards/Clocks.hpp"
@@ -204,7 +205,8 @@ int main()
     static validation::CountingFlash parallelNorCounting{ ParallelNor(fmc), parallelNorPageSize, eventInfrastructure.cycles, SystemCoreClock, parallelNorGuard };
     static const std::array<validation::NorBenchTarget, 2> benchTargets{ { { devices[quadSpiDevice], quadSpiCounting }, { devices[parallelNorDevice], parallelNorCounting } } };
     static validation::NorBench bench{ results, SystemCoreClock };
-    static validation::BenchCommands benchCommands{ context, bench, infra::MakeRange(benchTargets) };
+    static validation::BlockBench blockBench{ results, SystemCoreClock };
+    static validation::BenchCommands benchCommands{ context, bench, blockBench, infra::MakeRange(benchTargets), infra::MemoryRange<const validation::BlockBenchTarget>() };
 
     static validation::WorkloadRunner workloadRunner{ results, eventInfrastructure.cycles, SystemCoreClock };
     static validation::WorkloadTools workloadTools{ workloadRunner };

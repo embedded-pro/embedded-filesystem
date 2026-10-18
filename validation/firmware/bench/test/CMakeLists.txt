@@ -14,5 +14,6 @@ target_link_libraries(validation.bench_test PUBLIC
 
 target_sources(validation.bench_test PRIVATE
     TestBenchCommands.cpp
+    TestBlockBench.cpp
     TestNorBench.cpp
 )

@@ -7,5 +7,6 @@ target_link_libraries(validation.bench_test_doubles INTERFACE
 )
 
 target_sources(validation.bench_test_doubles PRIVATE
+    TimedBlockDevice.hpp
     TimedFlash.hpp
 )

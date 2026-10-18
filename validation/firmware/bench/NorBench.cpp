@@ -1,6 +1,5 @@
 #include "validation/firmware/bench/NorBench.hpp"
 #include "infra/util/ReallyAssert.hpp"
-#include "validation/firmware/timing/Nanoseconds.hpp"
 #include <algorithm>
 
 namespace validation
@@ -17,10 +16,6 @@ namespace validation
             return flash.NumberOfSectors() * flash.SizeOfSector(0);
         }
 
-        bool Repeatable(uint32_t repetitions)
-        {
-            return repetitions >= 1 && repetitions <= NorBench::maximumRepetitions;
-        }
     }
 
     bool NorBench::ProgramFits(const CountingFlash& flash, uint32_t size, uint32_t repetitions)
@@ -43,8 +38,7 @@ namespace validation
     }
 
     NorBench::NorBench(ResultLines& results, uint32_t clockHz)
-        : results(results)
-        , clockHz(clockHz)
+        : Benchmark(results, clockHz)
     {
         for (std::size_t position = 0; position != data.size(); ++position)
             data[position] = static_cast<uint8_t>(position * 7 + 1);
@@ -90,31 +84,17 @@ namespace validation
         EraseForCheck();
     }
 
-    bool NorBench::Running() const
-    {
-        return running;
-    }
-
     void NorBench::Start(CountingFlash& flash, infra::BoundedConstString device, const char* operation, uint32_t size, uint32_t repetitions, const infra::Function<void(BenchOutcome outcome)>& onDone)
     {
-        really_assert(!running && repetitions >= 1 && repetitions <= maximumRepetitions);
+        really_assert(Repeatable(repetitions));
 
+        Begin(flash.Meter(), { device, operation, size }, onDone);
         this->flash = &flash;
-        this->device = device;
-        this->operation = operation;
         this->size = size;
         this->repetitions = repetitions;
-        this->onDone = onDone;
-        running = true;
-        timedOut = false;
         count = 0;
         sector = 0;
         slot = 0;
-        samples.Clear();
-        flash.OnTimeout([this]
-            {
-                TimedOut();
-            });
     }
 
     infra::Function<void()> NorBench::Then(Step next)
@@ -122,10 +102,7 @@ namespace validation
         resumeWith = next;
         return [this]
         {
-            if (timedOut)
-                Stop();
-            else
-                (this->*resumeWith)();
+            Resume(false);
         };
     }
 
@@ -134,48 +111,25 @@ namespace validation
         resumeWith = next;
         return [this]
         {
-            if (timedOut)
-                Stop();
-            else
-            {
-                samples.Add(flash->LastCycles());
-                (this->*resumeWith)();
-            }
+            Resume(true);
         };
     }
 
-    void NorBench::TimedOut()
+    void NorBench::Resume(bool measured)
     {
-        timedOut = true;
-        onDone(BenchOutcome::timeout);
+        if (Expired())
+            Stop();
+        else
+        {
+            if (measured)
+                Measure();
+            (this->*resumeWith)();
+        }
     }
 
-    void NorBench::Stop()
+    void NorBench::Completed()
     {
-        flash->OnTimeout(nullptr);
-        running = false;
-    }
-
-    void NorBench::Finish(BenchOutcome outcome)
-    {
-        Stop();
-        onDone(outcome);
-    }
-
-    void NorBench::Report()
-    {
-        results.Record("bench")
-            .Add("device", device)
-            .Add("op", operation)
-            .Add("size", size)
-            .Add("n", repetitions)
-            .Add("minNs", Nanoseconds(samples.Minimum(), clockHz))
-            .Add("medianNs", Nanoseconds(samples.Median(), clockHz))
-            .Add("p99Ns", Nanoseconds(samples.Percentile(99), clockHz))
-            .Add("maxNs", Nanoseconds(samples.Maximum(), clockHz))
-            .Add("meanNs", Nanoseconds(samples.Mean(), clockHz));
-
-        Finish(BenchOutcome::done);
+        Report();
     }
 
     void NorBench::EraseForProgram()
@@ -204,7 +158,7 @@ namespace validation
 
     void NorBench::EraseProgrammed()
     {
-        flash->EraseSectors(0, sector + 1, Then(&NorBench::Report));
+        flash->EraseSectors(0, sector + 1, Then(&NorBench::Completed));
     }
 
     void NorBench::EraseBeforeFill()

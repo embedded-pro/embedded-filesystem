@@ -60,6 +60,11 @@ namespace validation
         meter.OnTimeout(onTimeout);
     }
 
+    RequestMeter& CountingFlash::Meter()
+    {
+        return meter;
+    }
+
     uint32_t CountingFlash::PageSize() const
     {
         return pageSize;

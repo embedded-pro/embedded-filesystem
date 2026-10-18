@@ -71,6 +71,11 @@ namespace validation
         meter.OnTimeout(onTimeout);
     }
 
+    RequestMeter& CountingBlockDevice::Meter()
+    {
+        return meter;
+    }
+
     uint32_t CountingBlockDevice::UnitBlocks() const
     {
         return unitBlocks;

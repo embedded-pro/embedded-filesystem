@@ -72,6 +72,7 @@ namespace validation
         void Flush(const infra::Function<void(Result)>& onDone) override;
 
         void OnTimeout(const infra::Function<void()>& onTimeout);
+        RequestMeter& Meter();
 
         uint32_t UnitBlocks() const;
         const BlockCounts& Counts() const;
