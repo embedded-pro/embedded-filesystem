@@ -2,6 +2,7 @@
 #include "validation/firmware/bench/BenchCommands.hpp"
 #include "validation/firmware/bench/test_doubles/TimedBlockDevice.hpp"
 #include "validation/firmware/bench/test_doubles/TimedFlash.hpp"
+#include "validation/firmware/devices/BlockDeviceRegion.hpp"
 #include "validation/firmware/timing/test_doubles/FakeCycleCounter.hpp"
 #include "gmock/gmock.h"
 #include <array>
@@ -242,6 +243,18 @@ TEST_F(BenchCommandsTest, block_counts_out_of_range_are_rejected)
         Execute(command);
         EXPECT_EQ("ERR range\r\n", Output()) << command;
     }
+}
+
+TEST_F(BenchCommandsTest, a_flush_of_a_block_device_without_blocks_is_out_of_range)
+{
+    validation::BlockDeviceRegion beyond{ timedBlocks, 64, 8 };
+    validation::CountingBlockDevice empty{ beyond, 8, cycles, validation::FakeCycleCounter::clockHz, 1s };
+    const std::array<validation::BlockBenchTarget, 1> emptyTargets{ { { devices[2], empty } } };
+    commands.reset();
+    commands.emplace(context, bench, blockBench, infra::MakeRange(targets), infra::MakeRange(emptyTargets));
+
+    Execute("bench.flush card n=1");
+    EXPECT_EQ("ERR range\r\n", Output());
 }
 
 TEST_F(BenchCommandsTest, a_block_device_that_is_absent_or_of_the_other_kind_is_unsupported)

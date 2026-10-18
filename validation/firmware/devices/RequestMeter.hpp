@@ -15,7 +15,6 @@ namespace validation
         RequestMeter(const CycleCounter& cycles, uint32_t clockHz);
         RequestMeter(const RequestMeter& other) = delete;
         RequestMeter& operator=(const RequestMeter& other) = delete;
-        ~RequestMeter() = default;
 
         void OnTimeout(const infra::Function<void()>& onTimeout);
         bool TimeoutWatched() const;
