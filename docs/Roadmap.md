@@ -161,7 +161,7 @@ Together with a single copy of the directory entry, this saves about 300 B of RA
 | A. Scope switches: names read in 8.3 only and an enumerated lifecycle in the lite volumes, done; no media removal for fixed media, left out at 130 B | 29.0 KB                                  | done   | measured                          |
 | B. In the lite volumes, a scan of short entries, one continuation per owner, one search for paths and new entries, and one copy of each entry        | 26.1 KB                                  | done   | measured                          |
 | C. A straight-line core: operations written in sequence on a small cooperative stack per volume, which switches stacks at device calls               | about 24 to 26 KB                        | weeks  | low: estimated from the read path |
-| D. NOR only: a simpler format profile, with one kind of index and compaction of the journal instead of checkpoints                                   | `fs::NorLite`, 58.1 KB today, much lower | months | low                               |
+| D. NOR only: a simpler format profile, with one kind of index and compaction of the journal instead of checkpoints                                   | `fs::NorLite`, 56.1 KB today, much lower | months | low                               |
 
 * No step reaches twice FatFs. B and C remove the plumbing of patterns 1 and 2, but most of what remains is the front end, the handles, the lifecycle and the checks of pattern 4, which both keep.
   C saves up to 2 KB more than B, at the cost of a new execution model, a stack switch in assembly for every target and a stack per volume.
@@ -175,6 +175,8 @@ Together with a single copy of the directory entry, this saves about 300 B of RA
   That slot saves 16 bytes of RAM on `fs::NorLite` and none on the FAT volumes, whose padding takes it.
 * One search for paths and new entries saved 1,320 bytes of flash and 256 of RAM on `fs::FatLite`, and 144 and 64 on `fs::FatReader`: one class, shared by both volumes, walks the path and finds the free entry in the directory of its last name, instead of the path walk of the full volume and the scan of short entries.
   It keeps a pointer to the entry the directory reader assembled instead of a copy, and `fs::FatLite` keeps a new entry as its short name until it writes it.
+* The same continuation per owner in the operations that every NOR image shares saved 1,952 bytes of flash and 32 of RAM on `fs::NorLite`, and 1,968 bytes of flash on `fs::NorFileSystem`.
+  The record apply, the creation of an entry, the commit of a file, the scans of the mount, the checkpoint writer, the file handle, the node collector and the replay resume their waits through one callback each.
 * A spike rewrote the read path of `fs::FatReader`, its mount, lookup, read and listing, as C++20 coroutines with their frames in a buffer per owner: 19,536 bytes of flash against 19,140, and 2,684 bytes of RAM against 2,012 once the buffers fit the deepest calls.
   Each coroutine costs about 200 bytes of fixed code and each suspension point 60 to 80 bytes, as much as the callbacks they replace, and a frame keeps every local variable alive across a wait.
 * A second spike ran the same read path as sequential code on one cooperative stack per volume, with a stack switch in a few lines of assembly on the Cortex-M and `ucontext` for the tests on the host.
