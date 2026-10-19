@@ -18,12 +18,12 @@ namespace
 
         void AddFiles(uint32_t directory, char count)
         {
-            std::array<char, 12> name{ 'F', 'I', 'L', 'E', ' ', ' ', ' ', ' ', 'T', 'X', 'T', 0 };
+            char name[12] = "FILE    TXT";
 
             for (char index = 0; index != count; ++index)
             {
                 name[4] = static_cast<char>('A' + index);
-                builder->AddFile(directory, "", reinterpret_cast<const char(&)[12]>(*name.data()), infra::ConstByteRange());
+                builder->AddFile(directory, "", name, infra::ConstByteRange());
             }
         }
 
