@@ -6,7 +6,7 @@ Essentials (full detail in AGENTS.md):
 
 - No heap — bounded containers / `std::array` / `std::optional`; pools, caches and queues sized at compile time; no recursion. `metrics/` (host-only) is the only exception.
 - Asynchronous — every device operation completes through `infra::EventDispatcher`, never synchronously; never block; one device request in flight per volume.
-- Explicit state machines — named-step operation classes; lifecycles with EMIL's `services::TableStateMachine`, except the lite volumes and `fs::NorForegroundLeveling`, which use enumerations; no `infra::Sequencer`.
+- Explicit state machines — named-step operation classes, except that the lite volumes may run their operations as sequential code on a cooperative stack of their own; lifecycles with EMIL's `services::TableStateMachine`, except the lite volumes and `fs::NorForegroundLeveling`, which use enumerations; no `infra::Sequencer`.
 - Storage rules — NOR: never program a unit twice, commit through CRC-protected records; FAT: data, then FAT, then directory entry; no wear leveling on block devices.
 - Style — EMIL coding standard, Allman braces, 4-space, PascalCase types/methods, camelCase members. No comments except non-obvious why.
 - Interfaces — EMIL pattern: protected non-virtual destructor, deleted copies. Errors via `fs::Result`, no exceptions.
