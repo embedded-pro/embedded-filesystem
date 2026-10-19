@@ -17,6 +17,7 @@ target_sources(fs.common_test PRIVATE
     TestCrcRecord.cpp
     TestDeferredCompletions.cpp
     TestDirectTransfers.cpp
+    TestFiber.cpp
     TestFlushBarrier.cpp
     TestHandlePool.cpp
     TestIdleTimer.cpp
