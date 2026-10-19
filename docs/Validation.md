@@ -207,7 +207,7 @@ EVT <kind> id=<number> <key>=<value> ...
 | `workload.failed` | `device`, `subject`, `workload`, `fill`, `phase`, `op`, `result`                                                                                                                                                                                                          | A run of a workload with a failed call, or one that timed out |
 | `cycles`          | `subject`, `device`, `op`, `n`, `ramBytes`, `minCycles`, `medianCycles`, `maxCycles`, `settledCycles`                                                                                                                                                                     | The cycles of one operation, for F-2                          |
 | `cycles.failed`   | `subject`, `op`, `run`, `status`                                                                                                                                                                                                                                          | A run of F-2 that a failed call ended                         |
-| `layout`          | `source` (`card` or `formatter`), `partitionStart`, `partitionSectors`, `type`, `sectorsPerCluster`, `reservedSectors`, `fats`, `fatSectors`, `rootEntries`, `dataStart`, `differs`                                                                                       | One layout of a card                                          |
+| `layout`          | `device`, `source` (`card` or `formatter`), `blocks`, `unitBlocks`, `partitionStart`, `partitionSectors`, `type`, `sectorsPerCluster`, `reservedSectors`, `fats`, `fatSectors`, `rootEntries`, `dataStart`, `differs`                                                     | One layout of a card                                          |
 
 ### Counting devices
 
@@ -304,10 +304,11 @@ F-2 records the medians of both, as `<operation>` and `<operation> settled`.
 1. A card is formatted on a PC with the SD Memory Card Formatter.
 2. `layout.read sd` reads the number of blocks of the whole card, the allocation unit from the SD status, the MBR and the boot sector, and prints the layout of the card: the start and the size of the partition, the FAT type, the sectors per cluster, the reserved sectors, the number and the size of the FATs, the entries of the root directory and the start of the data area.
 3. It prints the layout that `fs::ComputeFormatLayout` gives for the same number of blocks with the defaults of `fs::FatFormatter`, and `differs` names the fields that are not the same.
-4. `layout.format sd` formats the whole card with `fs::FatFormatter`, and the card is checked on a PC with `fsck.fat -n` or `chkdsk`, and written and read there.
+4. `layout.format sd` formats the whole card with `fs::FatFormatter` as a quick format, with `FatFormatConfig::discard` false, since the discard of the data area of a large card would outlast the 5 s the driver waits for a request; the card is checked on a PC with `fsck.fat -n` or `chkdsk`, and written and read there.
 
 `validation::FatLayout` parses the MBR and the boot sector without the code of `fs/fat`, as the checker of the power-cut sweep does, so that the formatter is not compared with its own parser.
 The cards cover the rows of the table of [Fat.md](Fat.md#formatting) that SD cards have: up to 2 GB, where the SD Association formats FAT16, and from 4 GB to 32 GB, where it formats FAT32; an SDXC card is formatted with exFAT, so only the start of its partition is compared.
+`layout.feature` runs before the other scenarios, so that it reads the card before `block.feature` writes its region, and only alone when the card formatted by `fs::FatFormatter` is checked on a PC.
 The layouts of every card and the result of the check on the PC are recorded in [Fat.md](Fat.md#formatting), and a difference changes the table of the formatter in the step that records it.
 
 ## Host package
@@ -344,6 +345,7 @@ The layouts of every card and the result of the check on the PC are recorded in 
     * on a block device, a command per request, the blocks read and written, the write busy time per write, and an opening for each allocation unit written that is not among the `recentAllocationUnits` most recently written, which the counts of the units by recency give for a model that keeps up to four open;
     * on a block device only when the allocation unit of the model is that of the device, since the counts follow the unit of the device;
   * C-2 at 50 %: the longest call of L2 against the W-6 bound of the model and the configuration of the device;
+* `layout` records become parameters of the device, `layout.card.<key>` and `layout.formatter.<key>` for the keys of the record, and `layout.differs`, so that the layouts of a card are in the report with its run;
 * `cycles` records become F-2, with the operation as the workload, and the cycles until the volume is idle again as `<operation> settled`; the last run of a subject in a transcript replaces its earlier runs, and a run that ends with `cycles.failed` leaves no F-2 for its subject;
 * every result carries `ramBytes`, as the merge needs: the size of the state of the subject on the board.
 

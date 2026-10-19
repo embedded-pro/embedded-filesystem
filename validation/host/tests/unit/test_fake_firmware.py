@@ -558,3 +558,40 @@ def test_the_records_of_wl_run_on_a_block_device_convert_into_the_metrics_of_the
     expected = {"W-1", "W-2", "W-3", "W-4", "W-5", "W-6", "R-1", "R-2", "R-3", "R-4", "R-5", "M-1", "M-2", "M-3", "C-1", "C-2"}
     assert metrics == expected
     assert all(entry["subject"] == "embedded-filesystem/fat" for entry in fragment["results"])
+
+
+def test_layout_read_prints_the_layout_of_the_card_and_of_the_formatter(terminal):
+    response = terminal.command("layout.read sd")
+
+    assert response.values == {"differences": "0"}
+    records = [event.values for event in terminal.drain_events("layout")]
+    assert [record["source"] for record in records] == ["card", "formatter"]
+    assert records[0]["type"] == records[1]["type"]
+    assert records[1]["differs"] == ""
+
+
+@pytest.mark.parametrize(
+    ("line", "reason"),
+    [
+        ("layout.format sd", None),
+        ("layout.read", "usage"),
+        ("layout.format sd qspi", "usage"),
+        ("layout.read qspi", "unsupported"),
+        ("layout.read emmc", "unsupported"),
+    ],
+)
+def test_layout_commands_take_the_microsd_card_of_the_board(terminal, line, reason):
+    if reason is None:
+        assert terminal.command(line).ok
+        return
+    with pytest.raises(FirmwareError) as error:
+        terminal.command(line)
+
+    assert error.value.reason == reason
+
+
+def test_the_emmc_has_no_layout(disco):
+    with pytest.raises(FirmwareError) as error:
+        disco.command("layout.read emmc")
+
+    assert error.value.reason == "unsupported"

@@ -31,6 +31,7 @@ namespace fs
 
         this->onDone = onDone;
         copy = 0;
+        discard = config.discard;
         layout = ComputeFormatLayout(device.NumberOfBlocks(), device.BlockSize(), config);
 
         if (!layout)
@@ -102,7 +103,7 @@ namespace fs
         auto rootStart = layout->volumeStart + layout->parameters.reservedSectors + layout->parameters.fatCopies * layout->parameters.sectorsPerFat;
         auto rootEnd = IsFat32() ? layout->dataStart + layout->parameters.sectorsPerCluster : layout->dataStart;
 
-        ZeroSectors(rootStart, rootEnd, Step::discardData);
+        ZeroSectors(rootStart, rootEnd, discard ? Step::discardData : Step::flushDevice);
     }
 
     void FatFormatter::DiscardData()

@@ -635,3 +635,33 @@ def test_a_discard_of_other_than_one_allocation_unit_gives_no_discard(tmp_path):
     parameters = convert_run(write_run(tmp_path / "2026_10_20", lines), {})["devices"][f"{BOARD}/sd"]
 
     assert "measured.discardNs" not in parameters
+
+
+CARD_LAYOUT = (
+    "EVT layout id=2 device=sd source=card blocks=62521344 unitBlocks=8192 partitionStart=8192 partitionSectors=62513152 type=fat32 "
+    "sectorsPerCluster=64 reservedSectors=1838 fats=2 fatSectors=7630 rootEntries=0 dataStart=25290"
+)
+FORMATTER_LAYOUT = (
+    "EVT layout id=3 device=sd source=formatter blocks=62521344 unitBlocks=8192 partitionStart=8192 partitionSectors=62513152 type=fat32 "
+    "sectorsPerCluster=64 reservedSectors=1814 fats=2 fatSectors=7630 rootEntries=0 dataStart=24576 differs=reservedSectors,dataStart"
+)
+
+
+def test_layout_records_become_parameters_of_the_device(tmp_path):
+    parameters = convert_run(write_run(tmp_path / "2026_10_20", [SD, CARD_LAYOUT, FORMATTER_LAYOUT]), {})["devices"][f"{BOARD}/sd"]
+
+    assert parameters["layout.card.type"] == "fat32"
+    assert parameters["layout.card.reservedSectors"] == "1838"
+    assert parameters["layout.formatter.dataStart"] == "24576"
+    assert parameters["layout.differs"] == "reservedSectors,dataStart"
+    assert {"layout.card.device", "layout.card.source", "layout.formatter.differs"}.isdisjoint(parameters)
+
+
+def test_a_layout_record_on_a_device_that_the_run_did_not_report_is_an_error(tmp_path):
+    with pytest.raises(ConversionError, match="layout is on an unknown device 'sd'"):
+        convert_run(write_run(tmp_path / "2026_10_20", [CARD_LAYOUT]), {})
+
+
+def test_a_device_record_with_a_key_of_the_layouts_is_an_error(tmp_path):
+    with pytest.raises(ConversionError, match="has 'layout.card.type'"):
+        convert_run(write_run(tmp_path / "2026_10_20", [f"{SD} layout.card.type=fat32"]), {})

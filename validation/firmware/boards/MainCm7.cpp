@@ -43,6 +43,7 @@
 #include "validation/firmware/hil/DeviceCommands.hpp"
 #include "validation/firmware/hil/FirmwareCommands.hpp"
 #include "validation/firmware/hil/NoPins.hpp"
+#include "validation/firmware/layout/LayoutCommands.hpp"
 #include "validation/firmware/results/ResultLines.hpp"
 #include "validation/firmware/workload/DataLogger.hpp"
 #include "validation/firmware/workload/FatWorkloadVolume.hpp"
@@ -86,6 +87,9 @@ namespace
     constexpr uint32_t sdmmcRegionBlocks = 256 * 1024 * 1024 / 512;
     constexpr uint32_t sdCard256mUnitBlocks = 8192;
     constexpr infra::Duration sdmmcGuard = 8s;
+
+    // The whole microSD card, for the comparison of its layout with fs::FatFormatter; the eMMC is never formatted on a PC
+    infra::MemoryRange<const validation::LayoutTarget> layoutTargets;
 
     std::array<validation::DeviceEntry, 6> devices{ {
         { { "qspi", validation::DeviceKind::nor, 0, 0, 0, "", 0, "" }, false },
@@ -200,8 +204,11 @@ namespace
             static hal::GpioPinStm commandDirection{ pins[8].first, pins[8].second };
             static hal::SdCardStm card{ 1, clock, command, data0, data1, data2, data3, hal::SdCardStm::Config{}, hal::SdCardStm::DirectionPins{ data0Direction, data123Direction, commandDirection } };
             const auto& identification = card.CardIdentification();
-            return CountedSdmmc(devices[microSdDevice], card, card.AllocationUnitBlocks(),
+            auto& counting = CountedSdmmc(devices[microSdDevice], card, card.AllocationUnitBlocks(),
                 CardIdentifier(chip, identification.manufacturer, identification.oem, 4, identification.product, identification.revision), "", cycles);
+            static const std::array<validation::LayoutTarget, 1> wholeCard{ { { devices[microSdDevice], card, card.AllocationUnitBlocks(), counting } } };
+            layoutTargets = infra::MakeRange(wholeCard);
+            return counting;
         }
         else
         {
@@ -311,6 +318,7 @@ int main()
     static validation::ReadPatterns readPatterns{ workloadTools };
     static validation::MountScaling mountScaling{ workloadTools };
     static const std::array<validation::Workload*, 6> workloads{ { &sequentialWrite, &dataLogger, &randomOverwrite, &smallFiles, &readPatterns, &mountScaling } };
+    static validation::LayoutCommands layoutCommands{ context, results, layoutTargets };
     static validation::WorkloadCommands workloadCommands{ context, workloadRunner, infra::MakeRange(workloads), WorkloadTargets(quadSpiCounting, parallelNorCounting, sdmmcCounting) };
 
     // The baselines block, so they use views of the RAM devices that complete within the call

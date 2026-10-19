@@ -33,6 +33,7 @@ if (TARGET_CORTEX STREQUAL m7)
         validation.cycles_subjects
         validation.devices
         validation.hil
+        validation.layout
         validation.results
         validation.workload
     )

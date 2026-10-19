@@ -25,6 +25,11 @@ BLOCK_DEVICES = {
     "sd": {"blocks": 524288, "blockSize": 512, "unitBlocks": 8192, "chip": "035344534431364780", "clockHz": 25000000},
     "emmc": {"blocks": 524288, "blockSize": 512, "unitBlocks": 1024, "chip": "150138475446345210", "clockHz": 25000000, "cache": "on"},
 }
+CARD_BLOCKS = 62521344
+CARD_LAYOUT = (
+    "partitionStart=8192 partitionSectors=62513152 type=fat32 sectorsPerCluster=64 reservedSectors=1814 fats=2 fatSectors=7630 "
+    "rootEntries=0 dataStart=24576"
+)
 MAXIMUM_BENCH_REPETITIONS = 1024
 MAXIMUM_BENCH_BLOCKS = 128
 MAXIMUM_BENCH_UNITS = 8
@@ -143,6 +148,8 @@ class FakeFirmware:
             return self._format(arguments)
         if name == "wl.run":
             return self._workload(arguments)
+        if name in ("layout.read", "layout.format"):
+            return self._layout(name, arguments)
         return "ERR usage"
 
     @staticmethod
@@ -278,6 +285,17 @@ class FakeFirmware:
         if operation == "units":
             return 1 <= count <= MAXIMUM_BENCH_UNITS and count * repetitions <= MAXIMUM_BENCH_REPETITIONS and count * unit_blocks <= blocks
         return operation == "flush" or 1 <= count <= blocks
+
+    def _layout(self, name: str, arguments: list[str]) -> str:
+        if len(arguments) != 1 or "=" in arguments[0]:
+            return "ERR usage"
+        if arguments[0] != "sd" or "sd" not in self.board.devices:
+            return "ERR unsupported"
+        if name == "layout.format":
+            return "OK"
+        for source, differs in (("card", ""), ("formatter", " differs=")):
+            self._record("layout", f"device=sd source={source} blocks={CARD_BLOCKS} unitBlocks=8192 {CARD_LAYOUT}{differs}")
+        return "OK differences=0"
 
     def _check(self, arguments: list[str]) -> str:
         if len(arguments) != 1 or "=" in arguments[0]:

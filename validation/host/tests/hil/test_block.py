@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from pytest_bdd import given, parsers, scenarios, then, when
+from pytest_bdd import parsers, scenarios, then, when
 
 # Above the timeout of 30 minutes of the firmware, which then answers ERR timeout itself
 BENCH_TIMEOUT = 1860.0
@@ -21,12 +21,6 @@ scenarios("block.feature")
 @pytest.fixture
 def context():
     return {}
-
-
-@given(parsers.parse("the board has the block device {device}"))
-def has_device(board, device):
-    if device not in board.devices:
-        pytest.skip(f"{board.name} has no {device}")
 
 
 @then(parsers.parse("it describes {device} with its geometry, its allocation unit, its identification and its clock"))
