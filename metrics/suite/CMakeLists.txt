@@ -92,6 +92,7 @@ function(emfs_add_metrics_merge)
             --json "${CMAKE_BINARY_DIR}/metrics/metrics.json"
             --markdown "${CMAKE_BINARY_DIR}/metrics/metrics.md"
             ${baseline_argument}
+            --accepted "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../report/accepted_regressions.json"
             --check
     )
     set_tests_properties(metrics.merge PROPERTIES

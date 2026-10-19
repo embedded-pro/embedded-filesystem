@@ -28,6 +28,12 @@ def result(metric="W-1", subject="embedded-filesystem/nor", value=1.0, **fields)
     return entry
 
 
+def acceptance(device="nor-qspi-16m", main=100.0, value=50.0, **fields):
+    entry = {"metric": "W-1", "workload": "L1", "subject": "embedded-filesystem/nor", "device": device, "main": main, "value": value, "reason": "reviewed"}
+    entry.update(fields)
+    return entry
+
+
 class FragmentDirectory:
     def __init__(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -226,6 +232,33 @@ class RegressionTest(unittest.TestCase):
 
         self.assertNotIn("baselineValue", compared)
 
+    def accepted(self, current, earlier, *acceptances):
+        baseline = {"devices": {"nor-qspi-16m": NOR}, "results": [earlier]}
+        return merge_report.merge([self.fragments.add([current])], baseline, list(acceptances))["results"][0]
+
+    def test_an_accepted_regression_is_reported_with_its_reason(self):
+        compared = self.accepted(result(value=50.0), result(value=100.0), acceptance())
+
+        self.assertNotIn("regression", compared)
+        self.assertNotIn("pass", compared)
+        self.assertEqual("reviewed", compared["acceptedRegression"])
+
+    def test_an_accepted_regression_fails_when_it_is_worse_than_the_accepted_value_by_more_than_5_percent(self):
+        compared = self.accepted(result(value=47.0), result(value=100.0), acceptance())
+
+        self.assertTrue(compared["regression"])
+        self.assertNotIn("acceptedRegression", compared)
+
+    def test_an_acceptance_of_another_value_on_main_does_not_apply(self):
+        compared = self.accepted(result(value=50.0), result(value=80.0), acceptance())
+
+        self.assertTrue(compared["regression"])
+
+    def test_an_acceptance_of_another_result_does_not_apply(self):
+        compared = self.accepted(result(value=50.0), result(value=100.0), acceptance(device="sd-card-256m"))
+
+        self.assertTrue(compared["regression"])
+
 
 class MarkdownTest(unittest.TestCase):
     def report(self, *results, devices=None):
@@ -307,6 +340,17 @@ class MarkdownTest(unittest.TestCase):
         self.assertIn("- W-1 L1, embedded-filesystem/nor on nor-qspi-16m: 94 B/s, expected main: 100", text)
         self.assertIn("94 ❌ (main: 100)", text)
 
+    def test_markdown_lists_accepted_regressions_with_their_reason(self):
+        text = merge_report.markdown(self.report(result(value=50.0, baselineValue=100.0, acceptedRegression="the stack of step C")))
+
+        self.assertIn("### Accepted regressions", text)
+        self.assertIn("- W-1 L1, embedded-filesystem/nor on nor-qspi-16m: 50 B/s, main: 100, accepted: the stack of step C", text)
+        self.assertIn("50 (main: 100, accepted)", text)
+        self.assertIn("1 results: 0 passed, 0 failed, 1 reported.", text)
+
+    def test_markdown_without_accepted_regressions_has_no_list_of_them(self):
+        self.assertNotIn("Accepted regressions", merge_report.markdown(self.report(result())))
+
     def test_markdown_without_failures_has_no_failure_list(self):
         self.assertNotIn("Missed targets", merge_report.markdown(self.report(result())))
 
@@ -350,6 +394,20 @@ class MainTest(unittest.TestCase):
         baseline.write_text(json.dumps({"devices": {"nor-qspi-16m": NOR}, "results": [result(value=100.0)]}), encoding="utf-8")
 
         self.assertEqual(1, self.run_main("--check", "--baseline", str(baseline)))
+
+    def test_main_reads_the_accepted_regressions(self):
+        self.fragments.add([result(value=50.0)])
+        baseline = self.fragments.path / "out" / "main.json"
+        baseline.write_text(json.dumps({"devices": {"nor-qspi-16m": NOR}, "results": [result(value=100.0)]}), encoding="utf-8")
+        accepted = self.fragments.path / "out" / "accepted.json"
+        accepted.write_text(json.dumps({"accepted": [acceptance()]}), encoding="utf-8")
+
+        self.assertEqual(0, self.run_main("--check", "--baseline", str(baseline), "--accepted", str(accepted)))
+
+    def test_main_ignores_missing_accepted_regressions(self):
+        self.fragments.add([result()])
+
+        self.assertEqual(0, self.run_main("--check", "--accepted", str(self.fragments.path / "missing.json")))
 
     def test_main_ignores_a_missing_baseline(self):
         self.fragments.add([result()])

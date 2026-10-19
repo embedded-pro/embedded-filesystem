@@ -117,9 +117,14 @@ def worsening(result, earlier):
     return -change if result["better"] == "higher" else change
 
 
-def compare_with_baseline(results, devices, baseline):
+def regressed(result, earlier):
+    return "target" not in result and not result.get("diagnostic") and not earlier.get("diagnostic") and is_own(result["subject"]) and worsening(result, earlier["value"]) > REGRESSION_TOLERANCE
+
+
+def compare_with_baseline(results, devices, baseline, accepted=()):
     earlier_results = {identity_key(earlier): earlier for earlier in baseline.get("results", [])}
     earlier_devices = baseline.get("devices", {})
+    acceptances = {(identity_key(entry), entry["main"]): entry for entry in accepted}
     for result in results:
         earlier = earlier_results.get(identity_key(result))
         if earlier is None or earlier.get("value") is None or result.get("value") is None:
@@ -128,7 +133,12 @@ def compare_with_baseline(results, devices, baseline):
         if devices.get(result["device"]) != earlier_devices.get(result["device"]):
             result["note"] = "device model changed since the baseline"
             continue
-        if "target" not in result and not result.get("diagnostic") and not earlier.get("diagnostic") and is_own(result["subject"]) and worsening(result, earlier["value"]) > REGRESSION_TOLERANCE:
+        if not regressed(result, earlier):
+            continue
+        acceptance = acceptances.get((identity_key(result), earlier["value"]))
+        if acceptance is not None and worsening(result, acceptance["value"]) <= REGRESSION_TOLERANCE:
+            result["acceptedRegression"] = acceptance["reason"]
+        else:
             result["regression"] = True
             result["pass"] = False
 
@@ -153,11 +163,11 @@ def result_order(result):
     return row_order(result) + (result["device"], result["subject"])
 
 
-def merge(fragment_paths, baseline=None):
+def merge(fragment_paths, baseline=None, accepted=()):
     devices, results = load_fragments(fragment_paths)
     decide_relative_targets(results)
     if baseline is not None:
-        compare_with_baseline(results, devices, baseline)
+        compare_with_baseline(results, devices, baseline, accepted)
     results.sort(key=result_order)
     return {"devices": devices, "results": results}
 
@@ -170,6 +180,8 @@ def format_cell(result):
     value = format_value(result.get("value"))
     if result.get("regression"):
         return f"{value} ❌ (main: {format_value(result['baselineValue'])})"
+    if result.get("acceptedRegression"):
+        return f"{value} (main: {format_value(result['baselineValue'])}, accepted)"
     if result.get("pass") is True:
         return f"{value} ✅"
     if result.get("pass") is False:
@@ -212,6 +224,12 @@ def summary(results):
     return f"{len(results)} results: {passed} passed, {failed} failed, {reported} reported."
 
 
+def result_line(result):
+    fill = result.get("fill")
+    at_fill = "" if fill is None else f" at {fill} %"
+    return f"- {result['metric']} {result['workload']}{at_fill}, {result['subject']} on {result['device']}: {format_value(result.get('value'))} {result['unit']}"
+
+
 def failure_lines(results):
     failures = [result for result in results if result.get("pass") is False]
     if not failures:
@@ -219,9 +237,17 @@ def failure_lines(results):
     lines = ["### Missed targets and regressions", ""]
     for result in failures:
         expected = result.get("target") or f"main: {format_value(result.get('baselineValue'))}"
-        fill = result.get("fill")
-        at_fill = "" if fill is None else f" at {fill} %"
-        lines.append(f"- {result['metric']} {result['workload']}{at_fill}, {result['subject']} on {result['device']}: {format_value(result.get('value'))} {result['unit']}, expected {expected}")
+        lines.append(f"{result_line(result)}, expected {expected}")
+    return lines + [""]
+
+
+def accepted_lines(results):
+    accepted = [result for result in results if result.get("acceptedRegression")]
+    if not accepted:
+        return []
+    lines = ["### Accepted regressions", ""]
+    for result in accepted:
+        lines.append(f"{result_line(result)}, main: {format_value(result['baselineValue'])}, accepted: {result['acceptedRegression']}")
     return lines + [""]
 
 
@@ -249,6 +275,7 @@ def markdown(report):
     lines = ["## Metrics", "", summary(results), ""]
     lines.extend(lifetime_lines(results))
     lines.extend(failure_lines(results))
+    lines.extend(accepted_lines(results))
     for device in sorted({result["device"] for result in results}):
         lines.extend([f"### {device}", ""])
         lines.extend(device_table([result for result in results if result["device"] == device]))
@@ -268,6 +295,7 @@ def parse_arguments(argv):
     parser.add_argument("--json", type=Path, required=True, help="merged report to write")
     parser.add_argument("--markdown", type=Path, required=True, help="Markdown summary to write")
     parser.add_argument("--baseline", type=Path, help="merged report of main, to detect regressions")
+    parser.add_argument("--accepted", type=Path, help="regressions accepted in review, each against the value it had on main")
     parser.add_argument("--check", action="store_true", help="exit with 1 when a target is missed or a metric regressed")
     return parser.parse_args(argv)
 
@@ -286,8 +314,11 @@ def main(argv=None):
     baseline = None
     if arguments.baseline is not None and arguments.baseline.exists():
         baseline = json.loads(arguments.baseline.read_text(encoding="utf-8"))
+    accepted = []
+    if arguments.accepted is not None and arguments.accepted.exists():
+        accepted = json.loads(arguments.accepted.read_text(encoding="utf-8"))["accepted"]
     try:
-        report = merge(fragment_paths(arguments), baseline)
+        report = merge(fragment_paths(arguments), baseline, accepted)
     except ReportError as error:
         print(f"merge_report: {error}", file=sys.stderr)
         return 2

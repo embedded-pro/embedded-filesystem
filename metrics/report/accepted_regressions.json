@@ -1,0 +1,40 @@
+{
+  "accepted": [
+    {
+      "metric": "F-1",
+      "workload": "ram",
+      "subject": "embedded-filesystem/fat-read-only",
+      "device": "cortex-m4",
+      "main": 1908,
+      "value": 2772,
+      "reason": "the cooperative stack of fs::FatReader, 1,024 B, for 1,620 B less flash"
+    },
+    {
+      "metric": "F-1",
+      "workload": "ram",
+      "subject": "embedded-filesystem/fat-read-only",
+      "device": "cortex-m7",
+      "main": 1908,
+      "value": 2772,
+      "reason": "the cooperative stack of fs::FatReader, 1,024 B, for 1,620 B less flash"
+    },
+    {
+      "metric": "F-1",
+      "workload": "ram",
+      "subject": "embedded-filesystem/fat-read-only",
+      "device": "cortex-m33",
+      "main": 1908,
+      "value": 2772,
+      "reason": "the cooperative stack of fs::FatReader, 1,024 B, for 1,620 B less flash"
+    },
+    {
+      "metric": "F-1",
+      "workload": "ram",
+      "subject": "embedded-filesystem/fat-read-only",
+      "device": "cortex-m4-lto",
+      "main": 1896,
+      "value": 2760,
+      "reason": "the cooperative stack of fs::FatReader, 1,024 B, for 1,620 B less flash"
+    }
+  ]
+}
