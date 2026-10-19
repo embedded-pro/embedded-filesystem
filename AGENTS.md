@@ -31,6 +31,10 @@ Exception: `metrics/` is host-only benchmark code and may use the standard libra
 - One operation at a time per volume, at most one device request in flight; further operations wait in a bounded queue and complete with `Result::busy` when it is full
 - Lifecycles (volume, background work, media presence) are `services::TableStateMachine` instances from EMIL; device completions go through `Completion<Ev>()`. To save flash, the lite volumes `fs::FatReader`, `fs::FatLite` and `fs::NorLite` track their lifecycle with `fs::LiteLifecycle`, and `fs::NorForegroundLeveling` its phase with an enumeration
 - Multi-step operations are explicit state machines: small classes whose steps are named member functions chained through device callbacks. Do **not** use `infra::Sequencer`
+- Exception: the lite volumes `fs::FatReader`, `fs::FatLite` and `fs::NorLite` may write their operations as sequential code on a cooperative stack of their own (step C of `docs/Roadmap.md`)
+  - A device call suspends the stack and returns to the event dispatcher, and its completion resumes the stack, so nothing blocks
+  - Each volume has one stack, sized at compile time for its deepest call and for the interrupts that run on it
+  - One stack switch serves all of them, in assembly for each Cortex-M core and on `ucontext` or Windows fibers on the hosts
 - Buffers passed to `Read`/`Write` stay valid until the completion is called
 
 Exception: `validation/firmware/baselines` adapts the synchronous FatFs and littlefs to EmIL's devices, so it waits for each completion with `infra::EventDispatcher::ExecuteUntil`, the blocking adapter an EmIL application would need for them; it is never linked into `fs.*` targets.
