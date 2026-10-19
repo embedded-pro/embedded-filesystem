@@ -29,6 +29,7 @@ struct FatReaderVolumeCase
     uint32_t blocks;
     uint8_t sectorsPerCluster;
     bool partitioned;
+    uint16_t rootEntries{ 512 };
 };
 
 inline void PrintTo(const FatReaderVolumeCase& volumeCase, std::ostream* stream)
@@ -40,6 +41,7 @@ inline const FatReaderVolumeCase fat12Volume{ "fat12", 16384, 16, true };
 inline const FatReaderVolumeCase fat16Volume{ "fat16", 16384, 1, true };
 inline const FatReaderVolumeCase fat16WithoutPartitionTable{ "fat16_without_partition_table", 16384, 1, false };
 inline const FatReaderVolumeCase fat32Volume{ "fat32", 81920, 1, true };
+inline const FatReaderVolumeCase fat16WithSmallRoot{ "fat16_with_small_root", 16384, 1, true, 16 };
 
 template<std::size_t Size>
 std::array<uint8_t, Size> Pattern()
@@ -65,6 +67,7 @@ public:
         fs::FatFormatConfig config;
         config.sectorsPerCluster = volumeCase.sectorsPerCluster;
         config.partitioned = volumeCase.partitioned;
+        config.rootEntries = volumeCase.rootEntries;
         std::optional<fs::Result> formatted;
         formatter.Format(config, [&formatted](fs::Result result)
             {

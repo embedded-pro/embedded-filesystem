@@ -1,17 +1,15 @@
 #include "fs/fat/reader/FatReader.hpp"
+#include "infra/event/EventDispatcher.hpp"
 #include <utility>
 
 namespace fs
 {
-    FatReader::FatReader(hal::BlockDevice& device, infra::ByteRange sector, std::size_t transferAlignment, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const PathLimits& limits)
-        : window(device, sector)
-        , volume(device, window, transferAlignment, nameBuffer, reading, deferred, [this]
+    FatReader::FatReader(hal::BlockDevice& device, infra::ByteRange stack, infra::ByteRange sector, std::size_t transferAlignment, infra::ByteRange nameBuffer, FatEntryAssembler::Reading reading, DeferredCompletions& deferred, const PathLimits& limits)
+        : volume(device, stack, sector, transferAlignment, nameBuffer, reading, deferred, [this]
               {
                   if (lifecycle.RemoveMedia())
                       volume.MarkUnmounted(Result::mediaRemoved);
               })
-        , search(volume.Reader(), volume.Geometry())
-        , mount(device, window, volume.Geometry())
         , limits(limits)
         , lifecycleClaimer(volume.Queue())
         , pathClaimer(volume.Queue())
@@ -91,7 +89,12 @@ namespace fs
         return volume.Idle();
     }
 
-    FatReaderVolume& FatReader::Volume()
+    std::size_t FatReader::StackPeak() const
+    {
+        return volume.StackPeak();
+    }
+
+    FatFiberVolume& FatReader::Volume()
     {
         return volume;
     }
@@ -122,57 +125,56 @@ namespace fs
         this->path = path;
         pathClaimer.Claim([this]
             {
-                Run();
+                volume.Run(pathClaimer, [this]
+                    {
+                        RunPath();
+                    });
             });
     }
 
-    void FatReader::Run()
+    void FatReader::RunPath()
     {
-        if (volume.Available())
-            search.Find(path, [this](Result result)
-                {
-                    Found(result);
-                });
-        else
-            Found(lifecycle.Unavailable());
+        pathResult = volume.Available() ? volume.Find(path) : lifecycle.Unavailable();
+        volume.Report(pathResult);
+        infra::EventDispatcher::Instance().Schedule([this]
+            {
+                PathCompleted();
+            });
     }
 
-    void FatReader::Found(Result result)
+    void FatReader::PathCompleted()
     {
-        pathClaimer.Release();
-        volume.Report(result);
-
         if (onStat)
-            StatFound(result);
+            StatFound(pathResult);
         else if (onOpen)
-            OpenFound(result);
+            OpenFound(pathResult);
         else
-            OpenDirectoryFound(result);
+            OpenDirectoryFound(pathResult);
     }
 
     void FatReader::StatFound(Result result)
     {
         if (result != Result::success)
             onStat(result, EntryInfo{});
-        else if (search.FoundRoot())
+        else if (volume.FoundRoot())
             onStat(result, EntryInfo{ infra::BoundedConstString(), EntryType::directory, 0 });
         else
-            onStat(result, InfoOf(search.Found()));
+            onStat(result, InfoOf(volume.Found()));
     }
 
     void FatReader::OpenFound(Result result)
     {
-        infra::SharedPtr<FatReaderFile> file;
+        infra::SharedPtr<FatFiberFile> file;
 
-        if (result == Result::success && search.FoundDirectory())
+        if (result == Result::success && volume.FoundDirectory())
             result = Result::isADirectory;
-        else if (result == Result::success && search.Found().entry.size != 0 && !volume.Geometry().IsCluster(search.Found().entry.firstCluster))
+        else if (result == Result::success && volume.Found().entry.size != 0 && !volume.Geometry().IsCluster(volume.Found().entry.firstCluster))
             result = Result::corrupted;
         else if (result == Result::success)
             file = AllocateFile();
 
         if (file != nullptr)
-            file->Open(search.Found());
+            file->Open(volume.Found());
         else if (result == Result::success)
             result = Result::tooManyOpenFiles;
 
@@ -181,17 +183,17 @@ namespace fs
 
     void FatReader::OpenDirectoryFound(Result result)
     {
-        infra::SharedPtr<FatReaderDirectory> directory;
+        infra::SharedPtr<FatFiberDirectory> directory;
 
-        if (result == Result::success && !search.FoundDirectory())
+        if (result == Result::success && !volume.FoundDirectory())
             result = Result::notADirectory;
-        else if (result == Result::success && !search.FoundRoot() && !volume.Geometry().IsCluster(search.FoundCluster()))
+        else if (result == Result::success && !volume.FoundRoot() && !volume.Geometry().IsCluster(volume.FoundCluster()))
             result = Result::corrupted;
         else if (result == Result::success)
             directory = AllocateDirectory();
 
         if (directory != nullptr)
-            directory->Open(search.FoundCluster());
+            directory->Open(volume.FoundCluster());
         else if (result == Result::success)
             result = Result::tooManyOpenFiles;
 
@@ -204,13 +206,10 @@ namespace fs
         lifecycleClaimer.Claim([this]
             {
                 if (lifecycle.Mounting())
-                {
-                    window.Forget();
-                    mount.Start([this](Result result)
+                    volume.Run(lifecycleClaimer, [this]
                         {
-                            Mounted(result);
+                            RunMount();
                         });
-                }
                 else
                 {
                     lifecycleClaimer.Release();
@@ -221,9 +220,9 @@ namespace fs
             });
     }
 
-    void FatReader::Mounted(Result result)
+    void FatReader::RunMount()
     {
-        lifecycleClaimer.Release();
+        auto result = volume.Mount();
         lifecycle.Mounted(result);
 
         if (result == Result::success)

@@ -23,11 +23,6 @@ namespace fs
         return device;
     }
 
-    SectorSource& FatReaderVolume::Sectors() const
-    {
-        return sectors;
-    }
-
     const TransferAlignment& FatReaderVolume::Alignment() const
     {
         return alignment;

@@ -93,6 +93,15 @@ TEST_F(FatReaderTest, is_idle_unless_a_call_waits_or_runs)
     EXPECT_TRUE(volume.Idle());
 }
 
+TEST_F(FatReaderTest, its_stack_is_untouched_until_a_call_runs_and_its_peak_stays_within_the_stack)
+{
+    EXPECT_EQ(0u, volume.StackPeak());
+
+    ExpectMount();
+
+    EXPECT_LT(volume.StackPeak(), fs::Fiber::defaultStackBytes);
+}
+
 TEST_F(FatReaderTest, mount_completes_from_the_event_dispatcher)
 {
     StartMount();
