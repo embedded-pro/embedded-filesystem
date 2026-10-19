@@ -20,6 +20,8 @@ target_sources(fs.common PRIVATE
     Deliver.hpp
     DirectTransfers.cpp
     DirectTransfers.hpp
+    Fiber.cpp
+    Fiber.hpp
     FlushBarrier.cpp
     FlushBarrier.hpp
     HandlePool.cpp

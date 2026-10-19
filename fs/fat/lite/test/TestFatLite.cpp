@@ -1,3 +1,4 @@
+#include "fs/common/LittleEndian.hpp"
 #include "fs/fat/FatTable.hpp"
 #include "fs/fat/lite/test/FatLiteFixture.hpp"
 
@@ -514,6 +515,68 @@ TEST_F(FatLiteTest, mounting_twice_is_busy_while_mounting)
     EXPECT_CALL(done, callback(fs::Result::busy));
     EXPECT_CALL(done, callback(fs::Result::success));
     ExecuteAllActions();
+}
+
+TEST_F(FatLiteTest, block_size_other_than_512_is_unsupported)
+{
+    fs::SparseBlockDevice::WithStorage<1, 4096> largeBlocks{ 1024 };
+    fs::FatLite::WithStorage<1> largeVolume{ largeBlocks };
+
+    largeVolume.Mount(Done());
+    ExpectDone(fs::Result::unsupported);
+
+    EXPECT_EQ(0u, largeBlocks.ReadRequests());
+}
+
+TEST_F(FatLiteTest, protective_gpt_is_unsupported)
+{
+    std::array<uint8_t, 512> mbr{};
+    mbr[446 + 4] = 0xee;
+    mbr[446 + 12] = 0xff;
+    mbr[510] = 0x55;
+    mbr[511] = 0xaa;
+    device.WriteBlock(0, infra::MakeRange(mbr));
+
+    ExpectMount(fs::Result::unsupported);
+}
+
+TEST_F(FatLiteTest, invalid_boot_sector_in_a_partition_is_corrupted)
+{
+    std::array<uint8_t, 512> mbr{};
+    std::array<uint8_t, 512> zeros{};
+    device.ReadBlock(0, infra::MakeRange(mbr));
+    device.WriteBlock(fs::LoadLittle32(infra::MakeRange(mbr), 446 + 8), infra::MakeRange(zeros));
+
+    ExpectMount(fs::Result::corrupted);
+}
+
+TEST_F(FatLiteTest, a_second_next_on_a_directory_is_busy_and_unmount_makes_it_not_mounted)
+{
+    ExpectMount();
+    ExpectOpen("/a.txt", fs::OpenMode::write);
+
+    infra::SharedPtr<fs::Directory> directory;
+    volume.OpenDirectory("/", [this, &directory](fs::Result result, infra::SharedPtr<fs::Directory> opened)
+        {
+            directory = opened;
+            done.callback(result);
+        });
+    ExpectDone(fs::Result::success);
+
+    for (int call = 0; call != 2; ++call)
+        directory->Next([this](fs::Result result, std::optional<fs::EntryInfo>)
+            {
+                done.callback(result);
+            });
+    EXPECT_CALL(done, callback(fs::Result::busy));
+    ExpectDone(fs::Result::success);
+
+    ExpectUnmount();
+    directory->Next([this](fs::Result result, std::optional<fs::EntryInfo>)
+        {
+            done.callback(result);
+        });
+    ExpectDone(fs::Result::notMounted);
 }
 
 TEST_F(FatLiteTest, a_failed_mount_faults_until_the_next_mount)

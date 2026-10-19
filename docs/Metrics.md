@@ -15,7 +15,7 @@ Counts are converted into simulated device time with timing models based on data
 Baselines run under the same conditions: the same device model, the same workload, and caches configured to use the same amount of RAM as embedded-filesystem where a baseline has a cache to size, with the RAM used by every subject reported next to its results.
 FatFs has no such cache: it works with one sector buffer per volume and one per file, so it uses less RAM than `embedded-filesystem/fat`, and both numbers are reported.
 FatFs and littlefs are each measured twice: with their default configuration, and with the options that help the workload enabled, such as fast seek and `f_expand` for FatFs, so that the comparison is not made against an untuned baseline.
-A metric with a numeric target fails the build when the target is missed; a metric marked as reported is tracked, and fails the build when it becomes worse than on `main` by more than 5 %.
+A metric with a numeric target fails the build when the target is missed; a metric marked as reported is tracked, and fails the build when it becomes worse than on `main` by more than 5 %, unless the change was accepted in review.
 Diagnostics are only shown: P-1 with torn sector writes measures a fault that FAT does not protect against, and its share moves with the number of cut points rather than with the safety of the volume.
 
 ## Measurement setup
@@ -346,7 +346,7 @@ That costs M-1 on L4, 1.918 against 1.920 for FatFs, and M-2 on the first phase 
 F-1 needs no board: its reference images are built for Cortex-M in CI, and the metrics workflow measures them in a job of its own and adds their fragments to the merge.
 On the first measurement, in `MinSizeRel` with Arm GCC 15.2.1 on the Cortex-M4, `embedded-filesystem/fat` adds 70968 B of flash and 7748 B of RAM, and `embedded-filesystem/nor` 85752 B and 17764 B, against 11940 B and 1652 B for `fatfs/default` and 15244 B and 384 B for `littlefs/default`; the Cortex-M7 and the Cortex-M33 are within 0.3 % of these.
 Measured with Arm GCC 13.2.1, the images that only read still link 94 % and 99 % of the code of the full images, because the virtual functions of `fs::FileSystem`, the operation variants of the volumes and the transition tables of their lifecycles refer to every operation; `fatfs/read-only` and `littlefs/read-only` add about 5.8 KB each.
-`embedded-filesystem/fat-read-only`, the read-only volume `fs::FatReader`, adds 17512 B of flash and 1908 B of RAM there, 3.0 and 1.2 times `fatfs/read-only` and less than a third of `embedded-filesystem/fat-reads`.
+`embedded-filesystem/fat-read-only`, the read-only volume `fs::FatReader`, adds 15892 B of flash and 2772 B of RAM there, 1024 B of it its cooperative stack, 2.7 and 1.7 times `fatfs/read-only`, and a quarter of the flash and a third of the RAM of `embedded-filesystem/fat-reads`.
 With every `fs::FatFeatures` and `fs::NorFeatures` left out, `embedded-filesystem/fat-minimal` adds 44900 B and `embedded-filesystem/nor-minimal` 60100 B there, against 63820 B for `embedded-filesystem/fat`, whose image also holds the formatter, and 76072 B for `embedded-filesystem/nor`.
 Without the background work and the directory handles, `embedded-filesystem/fat-minimal` needs 416 B less RAM and `embedded-filesystem/nor-minimal` 312 B less.
 `embedded-filesystem/fat-lite`, the lite volume `fs::FatLite` reading only short names as `fatfs/minimal` does, adds 26008 B of flash and 2036 B of RAM there, 3.5 and 1.8 times `fatfs/minimal`, 58 % of the flash and 27 % of the RAM of `embedded-filesystem/fat-minimal`; reading long names adds 844 B of flash and 224 B of RAM.
@@ -392,6 +392,10 @@ The targets of a subject come from its `metrics::Targets`, which the metric exec
 A target is either a bound, such as `<= 1.1`, which the metric executable decides, or a comparison with other subjects, such as `>= baselines` (the best of FatFs and littlefs), `<= fatfs` (the best FatFs configuration) or `>= 0.97 baselines` (0.97 times the best baseline), which is decided when the fragments are merged.
 `metrics/report/merge_report.py` merges the fragments into `metrics.json`, with the same shape, and writes a Markdown summary of it, `metrics.md`.
 Given the `metrics.json` of `main` with `--baseline`, it marks a reported metric of embedded-filesystem as failed when it is worse than on `main` by more than 5 %, in the direction given by `better`; results on a device model whose parameters changed, and results that the metric executables mark as `diagnostic` or that were diagnostic on `main`, are not compared.
+A regression accepted in review is listed in `metrics/report/accepted_regressions.json`, which the merge takes with `--accepted`.
+Each entry names the result, its value on `main` and the value accepted, with the reason, such as the RAM that a cooperative stack adds for less flash.
+The regression passes while the result stays within 5 % of the accepted value, and the summary lists it with its reason.
+An entry applies only while `main` has the value it names, so it lapses once the change is merged and cannot hide a later regression.
 The merge also takes fragments made outside the metric executables: the F-1 fragments of the footprint job, and the fragments that the metrics build converts from the runs committed in `validation/results`, as [Validation.md](Validation.md#results) describes.
 The metrics workflow posts the summary as a comment on the pull request, updating the same comment on every push.
 The `metrics.json` of `main` is kept as a workflow artifact and used to detect regressions.

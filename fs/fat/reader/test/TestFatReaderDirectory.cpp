@@ -10,7 +10,41 @@ namespace
     class FatReaderDirectoryFat16Test
         : public testing::Test
         , public FatReaderFixture
-    {};
+    {
+    public:
+        explicit FatReaderDirectoryFat16Test(const FatReaderVolumeCase& volumeCase = fat16Volume)
+            : FatReaderFixture(volumeCase)
+        {}
+
+        void AddFiles(uint32_t directory, char count)
+        {
+            char name[12] = "FILE    TXT";
+
+            for (char index = 0; index != count; ++index)
+            {
+                name[4] = static_cast<char>('A' + index);
+                builder->AddFile(directory, "", name, infra::ConstByteRange());
+            }
+        }
+
+        void ExpectFiles(fs::Directory& directory, char first, char count)
+        {
+            for (char index = first; index != first + count; ++index)
+            {
+                std::array<char, 9> expected{ 'F', 'I', 'L', 'E', static_cast<char>('A' + index), '.', 'T', 'X', 'T' };
+                ExpectNext(directory, fs::Result::success, fs::EntryInfo{ infra::BoundedConstString(expected.data(), expected.size()), fs::EntryType::file, 0 });
+            }
+        }
+    };
+
+    class FatReaderDirectorySmallRootTest
+        : public FatReaderDirectoryFat16Test
+    {
+    public:
+        FatReaderDirectorySmallRootTest()
+            : FatReaderDirectoryFat16Test(fat16WithSmallRoot)
+        {}
+    };
 
     fs::ShortEntry EntryOf(const char (&name)[12], uint8_t attributes)
     {
@@ -54,21 +88,48 @@ TEST_P(FatReaderDirectoryTest, a_subdirectory_lists_its_entries_without_dot_entr
 TEST_F(FatReaderDirectoryFat16Test, a_directory_is_listed_across_its_clusters)
 {
     auto sub = builder->AddDirectory(0, "", "SUB        ");
-    std::array<char, 12> name{ 'F', 'I', 'L', 'E', ' ', ' ', ' ', ' ', 'T', 'X', 'T', 0 };
-    for (char index = 0; index != 20; ++index)
-    {
-        name[4] = static_cast<char>('A' + index);
-        builder->AddFile(sub, "", reinterpret_cast<const char (&)[12]>(*name.data()), infra::ConstByteRange());
-    }
+    AddFiles(sub, 20);
     ExpectMount();
     auto directory = ExpectOpenDirectory("/sub");
 
-    for (char index = 0; index != 20; ++index)
-    {
-        std::array<char, 9> expected{ 'F', 'I', 'L', 'E', static_cast<char>('A' + index), '.', 'T', 'X', 'T' };
-        ExpectNext(*directory, fs::Result::success, fs::EntryInfo{ infra::BoundedConstString(expected.data(), expected.size()), fs::EntryType::file, 0 });
-    }
+    ExpectFiles(*directory, 0, 20);
+    ExpectNext(*directory, fs::Result::success);
+}
 
+TEST_F(FatReaderDirectoryFat16Test, a_full_directory_ends_after_its_last_cluster)
+{
+    auto sub = builder->AddDirectory(0, "", "SUB        ");
+    AddFiles(sub, 14);
+    ExpectMount();
+    auto directory = ExpectOpenDirectory("/sub");
+
+    ExpectFiles(*directory, 0, 14);
+    ExpectNext(*directory, fs::Result::success);
+    ExpectStat("/sub/missing.txt", fs::Result::notFound);
+}
+
+TEST_F(FatReaderDirectorySmallRootTest, a_full_fixed_root_ends_after_its_last_entry)
+{
+    AddFiles(0, 16);
+    ExpectMount();
+    auto directory = ExpectOpenDirectory("/");
+
+    ExpectFiles(*directory, 0, 16);
+    ExpectNext(*directory, fs::Result::success);
+    ExpectStat("/missing.txt", fs::Result::notFound);
+}
+
+TEST_F(FatReaderDirectoryFat16Test, device_error_while_following_a_directory_into_its_next_cluster_is_reported)
+{
+    auto sub = builder->AddDirectory(0, "", "SUB        ");
+    AddFiles(sub, 20);
+    ExpectMount();
+    auto directory = ExpectOpenDirectory("/sub");
+    ExpectFiles(*directory, 0, 14);
+    device.FailNextOperationWith(hal::BlockDevice::Result::crcError);
+
+    ExpectNext(*directory, fs::Result::deviceError);
+    ExpectFiles(*directory, 14, 6);
     ExpectNext(*directory, fs::Result::success);
 }
 

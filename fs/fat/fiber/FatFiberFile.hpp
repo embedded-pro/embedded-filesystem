@@ -1,31 +1,25 @@
-#ifndef FS_FAT_READER_FAT_READER_FILE_HPP
-#define FS_FAT_READER_FAT_READER_FILE_HPP
+#ifndef FS_FAT_FIBER_FAT_FIBER_FILE_HPP
+#define FS_FAT_FIBER_FAT_FIBER_FILE_HPP
 
 #include "fs/common/HandlePool.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
-#include "fs/fat/reader/FatReaderVolume.hpp"
+#include "fs/fat/fiber/FatFiberVolume.hpp"
 #include "fs/interfaces/File.hpp"
-#include "fs/interfaces/Result.hpp"
 #include "infra/event/ClaimableResource.hpp"
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/ByteRange.hpp"
-#include "infra/util/Function.hpp"
 #include "infra/util/SharedPtr.hpp"
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 
 namespace fs
 {
-    class FatReaderFile
+    class FatFiberFile
         : public File
         , public PooledHandle
     {
     public:
-        explicit FatReaderFile(FatReaderVolume& volume);
-        FatReaderFile(const FatReaderFile& other) = delete;
-        FatReaderFile& operator=(const FatReaderFile& other) = delete;
-        ~FatReaderFile() = default;
+        explicit FatFiberFile(FatFiberVolume& volume);
 
         void Open(const FatScannedEntry& entry);
 
@@ -41,22 +35,16 @@ namespace fs
 
     private:
         void UnReferenced() override;
-        void Granted();
-        void Step();
-        void Located(Result result, std::optional<uint32_t> next);
-        void Transfer();
-        void TransferPart(uint32_t sector);
-        void TransferSectors(uint32_t sector, uint32_t sectors);
-        void Transferred(Result result, std::size_t bytes);
-        void Done(Result result);
-        void Finish(Result result);
+        void RunRead();
+        Result ReadAll();
+        void ReadCompleted();
         std::size_t Remaining() const;
         uint32_t ClusterBytes() const;
         Result Writable() const;
         Result Settled() const;
 
     private:
-        FatReaderVolume& volume;
+        FatFiberVolume& volume;
         infra::ClaimableResource::Claimer claimer;
         uint32_t generation{ 0 };
         uint32_t firstCluster{ 0 };
@@ -66,8 +54,8 @@ namespace fs
         uint32_t clusterIndex{ 0 };
         infra::ByteRange buffer;
         std::size_t bytesRead{ 0 };
-        std::size_t transferBytes{ 0 };
-        infra::SharedPtr<FatReaderFile> self;
+        Result readResult{ Result::success };
+        infra::SharedPtr<FatFiberFile> self;
         infra::AutoResetFunction<void(Result result, std::size_t bytesRead)> onRead;
     };
 }

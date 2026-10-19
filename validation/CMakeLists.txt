@@ -14,6 +14,7 @@ add_subdirectory(firmware)
 
 if (NOT EMIL_HOST_BUILD AND NOT TARGET_MCU_VENDOR)
     add_subdirectory(footprint)
+    add_subdirectory(emulator)
 endif()
 
 if (EMFS_BUILD_METRICS)

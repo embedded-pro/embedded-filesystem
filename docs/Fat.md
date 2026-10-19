@@ -283,7 +283,7 @@ Formatting writes the MBR, the boot sector, FSINFO and their backups, the FAT wi
 ## Read-only volume
 
 `fs::FatReader`, in `fs/fat/reader`, is a FAT volume that only reads, for a product that never writes to its card, such as a bootloader that loads an image or a device that plays files.
-It mounts, lists and reads with the parts of `fs::FatFileSystem` that read, and looks up paths with a search of its own that compares names in the same way.
+It mounts, looks up, lists and reads as sequential code on a cooperative stack of its own, as described in [Architecture.md](Architecture.md#operations-on-a-cooperative-stack), with the parsing of the boot sector, the decoding of the FAT and the names of `fs::FatFileSystem`.
 It validates a volume as described under [Mount](#mount), compares and reports names as described under [Names](#names) and [Directory entries](#directory-entries), and bounds every walk and reports what it finds as described under [Corruption](#corruption), so both accept the same volumes and report the same names.
 A removed medium faults it in the same way.
 It leaves out:
@@ -300,16 +300,18 @@ hal::BlockDevice& sdCard = ...;
 fs::FatReader::WithStorage<2> reader{ sdCard };
 ```
 
-The template arguments of `fs::FatReader::WithStorage<Files, Directories, Limits, Features>` are the number of open files, the number of open directory handles, 1 by default, an optional `fs::PathLimits`, the longest name and the longest path in UTF-8 bytes, 255 each by default, and an optional `fs::FatReaderFeatures`.
+The template arguments of `fs::FatReader::WithStorage<Files, Directories, Limits, Features, StackBytes>` are the number of open files, the number of open directory handles, 1 by default, an optional `fs::PathLimits`, the longest name and the longest path in UTF-8 bytes, 255 each by default, an optional `fs::FatReaderFeatures` and the size of its stack in bytes.
 The longest name also sizes the buffer that holds a name while it is reported, as `FatLimits::maxNameBytes` does for `fs::FatFileSystem`.
 The constructor takes the device and the alignment of the buffers that the driver transfers, 1 by default, as described under [Direct transfers](#direct-transfers).
 With `fs::FatReaderFeatures::longNames` left out, the volume reads only short names, as FatFs does without `FF_USE_LFN`: it skips the long name entries, finds and lists every entry by its 8.3 name, and its name buffer holds one short name, 34 bytes.
-On a Cortex-M4, F-1 measures 17.5 KB of flash and 1.9 KB of RAM for `fs::FatReader::WithStorage<1>`, against 60.0 KB and 7.9 KB for `fs::FatFileSystem` with the same calls and 5.8 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
+The stack is `fs::Fiber::defaultStackBytes` by default, 1 KB on the Cortex-M and 64 KB on the hosts, and the deepest call of the volume takes 480 bytes of it on a Cortex-M4 in `MinSizeRel`, and 512 in `RelWithDebInfo`, as `validation/emulator` measures.
+The rest of the stack holds the start of a request in the driver and the interrupts, and `StackPeak()` returns the deepest use of the stack since the volume was constructed, to size it on a product.
+On a Cortex-M4, F-1 measures 15.9 KB of flash and 2.8 KB of RAM for `fs::FatReader::WithStorage<1>`, 1 KB of it the stack, against 60.0 KB and 7.9 KB for `fs::FatFileSystem` with the same calls and 5.8 KB and 1.6 KB for FatFs built read-only, as [Metrics.md](Metrics.md#on-target-metrics) reports.
 
 ## Lite volume
 
 `fs::FatLite`, in `fs/fat/lite`, is a FAT volume that writes files with one sector buffer, for a product that creates, appends to and rewrites files, such as a data logger, and needs the smallest image that writes.
-It mounts, looks up, lists and reads with the parts of `fs::FatReader`, and it writes:
+It mounts, looks up, lists and reads with the asynchronous parts of `fs.fat_reader`, and it writes:
 
 * `Open` in every mode of [Architecture.md](Architecture.md#open-modes); it creates a name that fits the 8.3 format with each part all lower or all upper case as a short entry with the lower-case flags, and completes with `unsupported` for any other name, as `fs::FatFeatures::longNames` does;
 * `Write`, `Seek`, `Truncate`, `Sync` and `Close`, and the commit of a file whose last reference is released.

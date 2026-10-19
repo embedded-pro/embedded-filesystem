@@ -124,6 +124,11 @@ jobs:
           configurePreset: ${{ matrix.target }}
           buildPreset: ${{ matrix.target }}-${{ matrix.configuration }}
           configurePresetAdditionalArgs: "['-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache']"
+      - name: Run the emulator images on QEMU
+        if: startsWith(matrix.target, 'cortex-')
+        run: |
+          sudo apt-get install -y --no-install-recommends qemu-system-arm
+          cmake --build --preset "${{ matrix.target }}-${{ matrix.configuration }}" --target validation.emulator
   validation_host_tests:
     name: Validation Host Tests
     runs-on: ubuntu-latest

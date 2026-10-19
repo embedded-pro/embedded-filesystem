@@ -122,7 +122,7 @@ The drivers of hal-st and the cycle counter of EmIL need changes first, made as 
 
 F-1 measures embedded-filesystem at several times the flash of FatFs and littlefs.
 This plan records where the size comes from and the steps that reduce it, measured with Arm GCC 13.2.1 in `MinSizeRel` on the Cortex-M4.
-Steps A and B are done, and step C is next: measured after them, it saves 8 % of the flash of `fs::FatReader`, and the products this plan serves are bound by flash rather than RAM.
+Steps A and B are done, and step C is under way: `fs::FatReader` runs on a cooperative stack with 9 % less flash, and the products this plan serves are bound by flash rather than RAM.
 
 ### Where the size comes from
 
@@ -156,18 +156,20 @@ Together with a single copy of the directory entry, this saves about 300 B of RA
 
 ### Steps
 
-| Step                                                                                                                                                 | `fs::FatLite`, from 31.2 KB              | Effort | Confidence                        |
-|------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|--------|-----------------------------------|
-| A. Scope switches: names read in 8.3 only and an enumerated lifecycle in the lite volumes, done; no media removal for fixed media, left out at 130 B | 29.0 KB                                  | done   | measured                          |
-| B. In the lite volumes, a scan of short entries, one continuation per owner, one search for paths and new entries, and one copy of each entry        | 26.1 KB                                  | done   | measured                          |
-| C. A straight-line core: operations written in sequence on a small cooperative stack per volume, which switches stacks at device calls               | about 23 to 24 KB                        | weeks  | medium: measured on the read path |
-| D. NOR only: a simpler format profile, with one kind of index and compaction of the journal instead of checkpoints                                   | `fs::NorLite`, 56.1 KB today, much lower | months | low                               |
+| Step                                                                                                                                                 | `fs::FatLite`, from 31.2 KB              | Effort    | Confidence                          |
+|------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|-----------|-------------------------------------|
+| A. Scope switches: names read in 8.3 only and an enumerated lifecycle in the lite volumes, done; no media removal for fixed media, left out at 130 B | 29.0 KB                                  | done      | measured                            |
+| B. In the lite volumes, a scan of short entries, one continuation per owner, one search for paths and new entries, and one copy of each entry        | 26.1 KB                                  | done      | measured                            |
+| C. A straight-line core: operations written in sequence on a small cooperative stack per volume, which switches stacks at device calls               | about 23 to 24 KB                        | under way | medium: measured on `fs::FatReader` |
+| D. NOR only: a simpler format profile, with one kind of index and compaction of the journal instead of checkpoints                                   | `fs::NorLite`, 56.1 KB today, much lower | months    | low                                 |
 
 * No step reaches twice FatFs. B and C remove the plumbing of patterns 1 and 2, but most of what remains is the front end, the handles, the lifecycle and the checks of pattern 4, which both keep.
-  Measured after B, C saves 1.4 KB of flash on the read path of `fs::FatReader` for 0.5 KB of RAM, at the cost of a new execution model, a stack switch in assembly for every target and a stack per volume.
+  Measured after B, C saves 1.6 KB of flash on `fs::FatReader` for 0.9 KB of RAM, at the cost of a new execution model, a stack switch in assembly for every target and a stack per volume.
   The estimate for `fs::FatLite` adds a similar share of its write path.
 * [AGENTS.md](../AGENTS.md) lets the lite volumes run their operations as sequential code on a cooperative stack each, as C needs; the operations of the full volumes stay classes with named steps, and the rule on lifecycles allows the enumerations of A in the lite volumes.
 * C moves `fs::FatReader`, `fs::FatLite` and `fs::NorLite` onto the stack one at a time, each measured.
+* `fs::FatReader` runs on its stack: 15,892 bytes of flash and 2,772 of RAM, against 17,512 and 1,908, so 1,620 bytes or 9.3 % less flash for 864 bytes more RAM, the stack of 1,024 bytes less 160 bytes that the operations no longer keep.
+  Its deepest call takes 480 bytes of the stack on the Cortex-M4, as QEMU measures in `validation/emulator`, which CI runs on the three cores with the stack switch; the default of 1 KB leaves the rest to the driver and the interrupts.
 * The coverage, the power-cut sweep and the interoperability tests check behaviour, not structure, so they carry over to a rewrite.
 * For NOR, C would remove only the 11 % of plumbing and the split steps; D is the step that reduces its format machinery.
 * Steps A and B were estimated too high, because the estimates counted code that the rest of the volume still needs.

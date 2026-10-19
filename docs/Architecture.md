@@ -28,17 +28,18 @@ The on-disk designs are described in [Fat.md](Fat.md) and [NorFilesystem.md](Nor
       outside this repository)       flash (services/flash in EmIL)
 ```
 
-| Folder          | Target          | Contents                                                                                                                       |
-|-----------------|-----------------|--------------------------------------------------------------------------------------------------------------------------------|
-| `fs/interfaces` | `fs.interfaces` | `fs::Result`, `fs::OpenMode`, `fs::File`, `fs::Directory`, `fs::EntryInfo`, `fs::VolumeUsage`, `fs::FileSystem`                |
-| `fs/common`     | `fs.common`     | Path parsing, sector cache, per-volume operation queue, handle pools, CRC-protected records                                    |
-| `fs/fat`        | `fs.fat`        | FAT12, FAT16 and FAT32 with long file names, and the formatter                                                                 |
-| `fs/fat/reader` | `fs.fat_reader` | `fs::FatReader`, a FAT volume that only reads, built from the parts of `fs.fat` that read                                      |
-| `fs/fat/lite`   | `fs.fat_lite`   | `fs::FatLite`, a FAT volume that writes files with one sector buffer, built from the parts of `fs.fat_reader` and `fs.fat`     |
-| `fs/nor`        | `fs.nor`        | The log-structured NOR filesystem, its garbage collection and its wear leveling                                                |
-| `fs/nor/lite`   | `fs.nor_lite`   | `fs::NorLite`, a NOR volume that creates, appends to and reads files, built from the parts of `fs.nor`                         |
-| `metrics`       | `metrics.*`     | Host-only device models, metered devices, workloads and baselines, see [Metrics.md](Metrics.md)                                |
-| `validation`    | `validation.*`  | Firmware for boards, the reference images of F-1 and the host package that runs the boards, see [Validation.md](Validation.md) |
+| Folder          | Target          | Contents                                                                                                                                                    |
+|-----------------|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `fs/interfaces` | `fs.interfaces` | `fs::Result`, `fs::OpenMode`, `fs::File`, `fs::Directory`, `fs::EntryInfo`, `fs::VolumeUsage`, `fs::FileSystem`                                             |
+| `fs/common`     | `fs.common`     | Path parsing, sector cache, per-volume operation queue, handle pools, CRC-protected records, the cooperative stack `fs::Fiber`                              |
+| `fs/fat`        | `fs.fat`        | FAT12, FAT16 and FAT32 with long file names, and the formatter                                                                                              |
+| `fs/fat/fiber`  | `fs.fat_fiber`  | The read path of FAT as sequential code on a cooperative stack: mount, lookup, reading files and listing directories                                        |
+| `fs/fat/reader` | `fs.fat_reader` | `fs::FatReader`, a FAT volume that only reads, which runs the read path of `fs.fat_fiber` on its cooperative stack                                          |
+| `fs/fat/lite`   | `fs.fat_lite`   | `fs::FatLite`, a FAT volume that writes files with one sector buffer, built from the parts of `fs.fat_reader` and `fs.fat`                                  |
+| `fs/nor`        | `fs.nor`        | The log-structured NOR filesystem, its garbage collection and its wear leveling                                                                             |
+| `fs/nor/lite`   | `fs.nor_lite`   | `fs::NorLite`, a NOR volume that creates, appends to and reads files, built from the parts of `fs.nor`                                                      |
+| `metrics`       | `metrics.*`     | Host-only device models, metered devices, workloads and baselines, see [Metrics.md](Metrics.md)                                                             |
+| `validation`    | `validation.*`  | Firmware for boards, the reference images of F-1, the images that run on QEMU and the host package that runs the boards, see [Validation.md](Validation.md) |
 
 Storage drivers are not part of this repository.
 NOR flash drivers are in EmIL (`services/flash`), and SD card and eMMC drivers implement `hal::BlockDevice` in EmIL or in the vendor HAL repositories such as hal-st and hal-ti.
@@ -147,6 +148,22 @@ void FatReadOperation::OnSectorsRead(fs::Result result)
 
 Because a volume runs one operation at a time, the state of the running operation lives in one `std::variant` of operation classes inside the volume, emplaced when the operation is granted the queue.
 The parameters of a call that waits for the queue stay in the slot of its handle or of its path operation, so the number of operations in flight is bounded at compile time.
+
+### Operations on a cooperative stack
+
+`fs::FatReader` writes its operations as sequential code instead, on a stack of its own, as [AGENTS.md](../AGENTS.md) allows the lite volumes; `fs::FatLite` and `fs::NorLite` follow, as described in [Roadmap.md](Roadmap.md#footprint-reduction).
+The stack is an `fs::Fiber`: when an operation is granted the queue, the fiber runs it from the event dispatcher, a device call starts its request and suspends the fiber, which returns to the event dispatcher, and the completion of the request resumes the fiber where it stopped.
+When the operation ends, the fiber releases the queue and the volume schedules the completion of the call, so a callback of the caller never runs on the fiber, and the rules above hold unchanged: nothing blocks, and one request is in flight per volume.
+The state of an operation is in the local variables of its code, so it needs no class, no stored continuation per wait and no variant, which saves the flash that they take.
+
+The fiber switches stacks in a few instructions of assembly on the Cortex-M4, the Cortex-M7 and the Cortex-M33: it saves the registers that a call preserves, those of the integer unit and of the floating-point unit, on the stack it leaves, and restores them from the stack it enters.
+On the Armv8-M of the Cortex-M33, each stack keeps its own limit, which the switch loads into the limit register of the stack pointer in use, `MSPLIM` or `PSPLIM`, so an overflow of the fiber faults instead of overwriting the memory below it.
+On the hosts the fiber runs on `ucontext`, and on Windows on the fibers of the system, for the tests.
+
+The stack is sized at compile time, 1 KB on the Cortex-M and 64 KB on the hosts by default.
+It holds the deepest call of the volume, the start of each request in the driver, and the interrupts that arrive while an operation runs: their exception frames, and their handlers too when the event dispatcher runs on the main stack.
+`validation/emulator` runs `fs::FatReader` on QEMU's models of the three cores and measures its deepest call, 480 bytes on the Cortex-M4 in `MinSizeRel`, which leaves 544 bytes of the default stack to the driver and the interrupts; `StackPeak()` measures the deepest use on a product.
+An RTOS that checks the stack pointer of a task against the stack of the task takes the stack of the fiber for an overflow, so the task that runs the event dispatcher needs that check off.
 
 ## Public API
 
@@ -325,8 +342,7 @@ Each one is sized at compile time:
 | `fs::DirectTransfers`                               | One per volume, next to its sector cache                                  | One transfer in flight                       |
 | `fs::CrcRecord`                                     | The buffer of the caller                                                  | None: it frames and checks records in place  |
 
-The parts of `fs/fat` that only read sectors, the reader of the FAT and the reader of directories, read them through `fs::SectorSource`, which `fs::SectorCache` implements, so that `fs::FatReader` runs them on its one sector buffer.
-The writer of the FAT changes sectors through `fs::SectorStore`, which adds `Modify` to it, so that `fs::FatLite` runs it on its one sector buffer too.
+The parts of `fs/fat` that only read sectors, the reader of the FAT and the reader of directories, read them through `fs::SectorSource`, which `fs::SectorCache` implements, and the writer of the FAT changes sectors through `fs::SectorStore`, which adds `Modify` to it, so that `fs::FatLite` runs them on its one sector buffer.
 
 ### Paths
 
@@ -388,9 +404,9 @@ fs::NorFileSystem::WithStorage<norConfig, 4> norVolume{ norFlash };
 
 For FAT, the template arguments are the number of open files and the number of sectors in the cache, followed by an optional `fs::FatLimits` with the other sizes and an optional `fs::FatFeatures` with the calls and the work the volume leaves out.
 `fs::FatConfig` holds the settings that need no storage, such as the allocation unit of the card and the timer service that gives the time of timestamps, as described in [Fat.md](Fat.md#configuration).
-`fs::FatReader::WithStorage<Files, Directories, Limits, Features>` takes the number of open files and of open directory handles, an optional `fs::PathLimits` and an optional `fs::FatReaderFeatures`, which can leave out reading long names, as described in [Fat.md](Fat.md#read-only-volume).
+`fs::FatReader::WithStorage<Files, Directories, Limits, Features, StackBytes>` takes the number of open files and of open directory handles, an optional `fs::PathLimits`, an optional `fs::FatReaderFeatures`, which can leave out reading long names, and the size of its stack, as described in [Fat.md](Fat.md#read-only-volume).
 Its constructor takes the device and an optional alignment of the buffers the driver transfers, as described in [Fat.md](Fat.md#direct-transfers).
-`fs::FatLite::WithStorage<Files, Directories, Limits, Features>` takes the same, as described in [Fat.md](Fat.md#lite-volume).
+`fs::FatLite::WithStorage<Files, Directories, Limits, Features>` takes the same but the size of the stack, as described in [Fat.md](Fat.md#lite-volume).
 For NOR, they are the configuration, the number of open files and an optional `fs::NorFeatures`; the constructor takes the device and an optional idle delay, as described in [NorFilesystem.md](NorFilesystem.md#configuration), and `fs::NorLite::WithStorage<Config, Files>` takes the configuration and the number of open files, as described in [NorFilesystem.md](NorFilesystem.md#lite-volume).
 The block states and the erase-count table are sized by `maxBlocks`, the largest number of blocks the volume may span; mounting a device with more blocks fails with `Result::unsupported`.
 
