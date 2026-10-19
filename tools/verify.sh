@@ -47,6 +47,15 @@ for core in cortex-m4 cortex-m7 cortex-m33; do
     echo "$core: $(cmake --build --preset "$core-RelWithDebInfo" -j "$jobs" 2>&1 | grep -cE 'error:|FAILED:') errors"
 done
 
+heading "emulator images"
+if command -v qemu-system-arm > /dev/null; then
+    for core in cortex-m4 cortex-m7 cortex-m33; do
+        echo "$core: $(cmake --build --preset "$core-RelWithDebInfo" --target validation.emulator 2>&1 | grep -cE '^PASSED$') of 2 images passed"
+    done
+else
+    echo "qemu-system-arm is not installed"
+fi
+
 heading "board builds"
 for preset in stm32h757-cm7 stm32h757-cm4 stm32h745-cm7 stm32h745-cm4; do
     configure "$preset"
