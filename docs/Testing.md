@@ -150,6 +150,7 @@ The boards of [Validation.md](Validation.md) check the filesystems against real 
 The libraries of `validation/firmware` are developed test first on the host like `fs/`, with the StrictMock doubles of EmIL and `infra::ClockFixture`, and the cycle counter behind an interface that the tests fake; they are covered 100 %.
 The host package in `validation/host` has unit tests of its own, against a fake firmware, which CI runs with ruff.
 What only a board can show, the drivers, the timings and the cycles, runs in the scenarios of `validation/host` on the bench, and the runs are committed in `validation/results`.
+The stack switch of `fs::Fiber` is assembly that no host test reaches, so `validation/emulator` runs it in CI on QEMU's models of the Cortex-M4, the Cortex-M7 and the Cortex-M33, as described in [Validation.md](Validation.md#emulator-images), together with `fs::FatReader` on a RAM disk.
 
 ## Running
 

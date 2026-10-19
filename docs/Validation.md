@@ -15,6 +15,7 @@ validation/
     CMakeLists.txt          fetches hal-st and adds the rest
     README.md               the bench guide: build, flash, run, and send the results
     PROTOCOL.md             the commands of the firmware and its result lines
+    emulator/               the images that run the cooperative stack on QEMU
     firmware/               C++ for the boards
         baselines/          the glue of FatFs and littlefs
         bench/              the benchmarks of NOR flash and their commands
@@ -433,6 +434,19 @@ The images of `cortex-m4-lto` are the device `cortex-m4-lto`, whose parameters a
 Link-time optimization is a choice of the product that links the library, so F-1 reports it next to the plain build instead of in its place; the preset does not treat warnings as errors, since the other presets build the same code with them.
 The `Footprint` job of the metrics workflow builds the images, measures them and uploads the directory as the artifact `footprint`; the `Metrics` job downloads it and passes `-DEMFS_METRICS_EXTRA_FRAGMENTS=<directory>/fragments`, so F-1 is reported next to the baselines and held to the 5 % rule like any reported metric.
 When the `Footprint` job fails, the `Metrics` job still runs, and the report lacks F-1.
+
+## Emulator images
+
+`validation/emulator` builds two images for the presets `cortex-m4`, `cortex-m7` and `cortex-m33`, which run on the boards `mps2-an386`, `mps2-an500` and `mps2-an505` of QEMU, the target `validation.emulator`:
+
+| Image                            | Checks                                                                                                                                                                                                                                                                     |
+|----------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `validation.emulator.fiber`      | `fs::Fiber`: both stacks keep the registers that a call preserves, interrupts run on the fiber while it computes, and on the Cortex-M33 each stack keeps its limit in `MSPLIM` or `PSPLIM` and an overflow of the fiber faults                                             |
+| `validation.emulator.fat_reader` | `fs::FatReader` on a RAM disk that `fs::FatFormatter` and `fs::FatFileSystem` prepare: mount, a lookup by a long name in a directory, reads of whole and partial sectors and a listing, with its deepest use of the stack, which must leave 384 bytes of the default stack |
+
+Each image prints its checks and the deepest use of the stack over semihosting, and QEMU exits with 0 only when every check passed.
+The `Embedded Build` job of CI installs `qemu-system-arm` and runs both images on the three cores with `cmake --build --preset <preset>-RelWithDebInfo --target validation.emulator`.
+The images are linked with `Emulator.ld`, generated for the memory of the board of each core, and `Startup.cpp`, which enables the floating-point unit, sets the limit of the main stack on the Cortex-M33, and moves a fault onto the top of the main stack before it reports it.
 
 ## Running on a board
 
