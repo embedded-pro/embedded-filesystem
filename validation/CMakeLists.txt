@@ -4,7 +4,7 @@ if (TARGET_MCU_VENDOR STREQUAL st)
     FetchContent_Declare(
         halst
         GIT_REPOSITORY https://github.com/embedded-pro/hal-st.git
-        GIT_TAG        4a22346ad03cc50f020e4f7adbb0e053667f7a57 # Unreleased
+        GIT_TAG        db7871b62a4985f863eaeb3e6acf3db126013e28 # Unreleased
     )
 
     FetchContent_MakeAvailable(halst)
