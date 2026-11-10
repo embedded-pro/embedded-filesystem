@@ -54,13 +54,13 @@ jobs:
           sed -i 's/${{ steps.pull_head.outputs.current_hash }}/${{ steps.pull_head.outputs.latest_hash }}/g' CMakeLists.txt
           rm -rf ninja-build
 
-      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: token
         with:
           app-id: ${{ vars.FOREST_RELEASER_APP_ID }}
           private-key: ${{ secrets.FOREST_RELEASER_APP_PRIVATE_KEY }}
 
-      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+      - uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
         if: ${{ steps.pull_head.outputs.current_hash != steps.pull_head.outputs.latest_hash }}
         with:
           token: ${{ steps.token.outputs.token }}
