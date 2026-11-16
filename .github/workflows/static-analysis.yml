@@ -24,7 +24,7 @@ jobs:
         with:
           fetch-depth: 0 # Disable shallow clone to enable blame information
           persist-credentials: false
-      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+      - uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607 # v1.2.25
         with:
           key: ${{ github.job }}
           max-size: 2G
@@ -49,6 +49,6 @@ jobs:
       - name: Convert results
         run: |
           cp build/coverage/compile_commands.json compile_commands.json
-      - uses: sonarsource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
+      - uses: sonarsource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
