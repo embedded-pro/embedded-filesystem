@@ -1,5 +1,4 @@
-#ifndef FS_FAT_TEST_FAT_VOLUME_FIXTURE_HPP
-#define FS_FAT_TEST_FAT_VOLUME_FIXTURE_HPP
+#pragma once
 
 #include "fs/common/FlushBarrier.hpp"
 #include "fs/common/SectorCache.hpp"
@@ -43,5 +42,3 @@ public:
     fs::FlushBarrier barrier{ device };
     fs::SectorCache::WithStorage<4> cache{ barrier };
 };
-
-#endif

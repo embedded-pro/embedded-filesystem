@@ -1,5 +1,4 @@
-#ifndef FS_FAT_READER_FAT_READER_FEATURES_HPP
-#define FS_FAT_READER_FAT_READER_FEATURES_HPP
+#pragma once
 
 #include "fs/fat/FatEntryAssembler.hpp"
 
@@ -19,5 +18,3 @@ namespace fs
             return &FatEntryAssembler::ReadShortNames;
     }
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef METRICS_FAT_FAT_CHECKER_HPP
-#define METRICS_FAT_FAT_CHECKER_HPP
+#pragma once
 
 #include <cstdint>
 #include <functional>
@@ -59,5 +58,3 @@ namespace metrics
     FatCheck CheckFatImage(const SectorReader& read, FatCheckMode mode);
     std::vector<uint8_t> ReadContents(const SectorReader& read, const FatCheck& check, const FatImageEntry& entry);
 }
-
-#endif

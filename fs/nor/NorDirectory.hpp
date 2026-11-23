@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_DIRECTORY_HPP
-#define FS_NOR_NOR_DIRECTORY_HPP
+#pragma once
 
 #include "fs/common/HandlePool.hpp"
 #include "fs/common/OperationQueue.hpp"
@@ -48,5 +47,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result, std::optional<EntryInfo> entry)> onDone;
     };
 }
-
-#endif

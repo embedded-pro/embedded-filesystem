@@ -1,5 +1,4 @@
-#ifndef METRICS_SUITE_MEASUREMENTS_HPP
-#define METRICS_SUITE_MEASUREMENTS_HPP
+#pragma once
 
 #include "metrics/suite/MetricRecorder.hpp"
 #include "metrics/workload/Runner.hpp"
@@ -27,5 +26,3 @@ namespace metrics
     void MeasureRandomReadRatio(const Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters);
     void MeasureMount(Runner& runner, MetricRecorder& recorder, const WorkloadParameters& parameters);
 }
-
-#endif

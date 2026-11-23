@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_DIRECTORY_READ_HPP
-#define FS_NOR_NOR_DIRECTORY_READ_HPP
+#pragma once
 
 #include "fs/interfaces/EntryInfo.hpp"
 #include "fs/interfaces/Result.hpp"
@@ -39,5 +38,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_OPEN_HPP
-#define FS_FAT_FAT_OPEN_HPP
+#pragma once
 
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatParentDirectory.hpp"
@@ -59,5 +58,3 @@ namespace fs
         infra::Function<void(Result result)> resume;
     };
 }
-
-#endif

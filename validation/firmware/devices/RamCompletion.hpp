@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_DEVICES_RAM_COMPLETION_HPP
-#define VALIDATION_FIRMWARE_DEVICES_RAM_COMPLETION_HPP
+#pragma once
 
 #include <cstdint>
 
@@ -12,5 +11,3 @@ namespace validation
         immediate
     };
 }
-
-#endif

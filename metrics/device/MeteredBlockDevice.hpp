@@ -1,5 +1,4 @@
-#ifndef METRICS_DEVICE_METERED_BLOCK_DEVICE_HPP
-#define METRICS_DEVICE_METERED_BLOCK_DEVICE_HPP
+#pragma once
 
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/timer/Timer.hpp"
@@ -73,5 +72,3 @@ namespace metrics
         infra::TimerSingleShot completionTimer;
     };
 }
-
-#endif

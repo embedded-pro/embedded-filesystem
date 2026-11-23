@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_ALLOCATION_UNITS_HPP
-#define FS_FAT_FAT_ALLOCATION_UNITS_HPP
+#pragma once
 
 #include "fs/fat/FatGeometry.hpp"
 #include <cstdint>
@@ -20,5 +19,3 @@ namespace fs
 
     std::optional<FatAllocationUnits> AllocationUnitsOf(const FatGeometry& geometry, uint32_t blocksPerUnit);
 }
-
-#endif

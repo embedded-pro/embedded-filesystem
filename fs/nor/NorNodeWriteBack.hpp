@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_NODE_WRITE_BACK_HPP
-#define FS_NOR_NOR_NODE_WRITE_BACK_HPP
+#pragma once
 
 #include "fs/nor/NorNode.hpp"
 #include "fs/nor/NorNodeCache.hpp"
@@ -28,5 +27,3 @@ namespace fs
         uint32_t inodeRecordBytes;
     };
 }
-
-#endif

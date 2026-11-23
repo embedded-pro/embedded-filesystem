@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_DEFERRED_COMPLETIONS_HPP
-#define FS_COMMON_DEFERRED_COMPLETIONS_HPP
+#pragma once
 
 #include "infra/util/BoundedDeque.hpp"
 #include "infra/util/Function.hpp"
@@ -36,5 +35,3 @@ namespace fs
         bool scheduled{ false };
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_B_TREE_HPP
-#define FS_NOR_NOR_B_TREE_HPP
+#pragma once
 
 #include "fs/nor/NorLayout.hpp"
 #include "fs/nor/NorNode.hpp"
@@ -66,5 +65,3 @@ namespace fs
         NorMapId map;
     };
 }
-
-#endif

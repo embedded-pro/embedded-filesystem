@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_BENCH_NOR_BENCH_HPP
-#define VALIDATION_FIRMWARE_BENCH_NOR_BENCH_HPP
+#pragma once
 
 #include "infra/util/BoundedString.hpp"
 #include "validation/firmware/bench/Benchmark.hpp"
@@ -74,5 +73,3 @@ namespace validation
         std::array<uint8_t, maximumReadBytes> readBuffer{};
     };
 }
-
-#endif

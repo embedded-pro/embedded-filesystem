@@ -1,5 +1,4 @@
-#ifndef FS_INTERFACES_OPEN_MODE_HPP
-#define FS_INTERFACES_OPEN_MODE_HPP
+#pragma once
 
 #include <cstdint>
 
@@ -13,5 +12,3 @@ namespace fs
         readWrite
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_BACKGROUND_SCAN_HPP
-#define FS_FAT_FAT_BACKGROUND_SCAN_HPP
+#pragma once
 
 #include "fs/common/IdleTimer.hpp"
 #include "fs/common/OperationQueue.hpp"
@@ -184,5 +183,3 @@ namespace fs
             .Allow<FatScanCurrent, FatScanStopped>();
     }
 }
-
-#endif

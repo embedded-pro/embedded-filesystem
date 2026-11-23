@@ -1,5 +1,4 @@
-#ifndef METRICS_FAT_FAT_TARGETS_HPP
-#define METRICS_FAT_FAT_TARGETS_HPP
+#pragma once
 
 #include "metrics/device/DeviceModels.hpp"
 #include "metrics/report/Targets.hpp"
@@ -24,5 +23,3 @@ namespace metrics
         const BlockDeviceModel& model;
     };
 }
-
-#endif

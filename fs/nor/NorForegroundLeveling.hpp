@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_FOREGROUND_LEVELING_HPP
-#define FS_NOR_NOR_FOREGROUND_LEVELING_HPP
+#pragma once
 
 #include "fs/common/OperationQueue.hpp"
 #include "fs/nor/NorBackgroundWork.hpp"
@@ -46,5 +45,3 @@ namespace fs
         Phase phase{ Phase::stopped };
     };
 }
-
-#endif

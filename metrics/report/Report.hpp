@@ -1,5 +1,4 @@
-#ifndef METRICS_REPORT_REPORT_HPP
-#define METRICS_REPORT_REPORT_HPP
+#pragma once
 
 #include "metrics/device/DeviceModels.hpp"
 #include <cstddef>
@@ -74,5 +73,3 @@ namespace metrics
 
     Report& GlobalReport();
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_INTERFACES_ENTRY_INFO_HPP
-#define FS_INTERFACES_ENTRY_INFO_HPP
+#pragma once
 
 #include "infra/util/BoundedString.hpp"
 #include <cstdint>
@@ -21,5 +20,3 @@ namespace fs
         bool operator==(const EntryInfo& other) const = default;
     };
 }
-
-#endif

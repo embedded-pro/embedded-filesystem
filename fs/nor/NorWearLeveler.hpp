@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_WEAR_LEVELER_HPP
-#define FS_NOR_NOR_WEAR_LEVELER_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorBlockHeader.hpp"
@@ -70,5 +69,3 @@ namespace fs
         infra::AutoResetFunction<void()> onDone;
     };
 }
-
-#endif

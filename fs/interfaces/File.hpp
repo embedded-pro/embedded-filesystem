@@ -1,5 +1,4 @@
-#ifndef FS_INTERFACES_FILE_HPP
-#define FS_INTERFACES_FILE_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/ByteRange.hpp"
@@ -30,5 +29,3 @@ namespace fs
         virtual void Close(const infra::Function<void(Result result)>& onDone) = 0;
     };
 }
-
-#endif

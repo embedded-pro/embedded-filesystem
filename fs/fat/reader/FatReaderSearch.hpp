@@ -1,5 +1,4 @@
-#ifndef FS_FAT_READER_FAT_READER_SEARCH_HPP
-#define FS_FAT_READER_FAT_READER_SEARCH_HPP
+#pragma once
 
 #include "fs/common/Path.hpp"
 #include "fs/fat/FatDirectoryReader.hpp"
@@ -55,5 +54,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

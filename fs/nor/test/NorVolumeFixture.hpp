@@ -1,5 +1,4 @@
-#ifndef FS_NOR_TEST_NOR_VOLUME_FIXTURE_HPP
-#define FS_NOR_TEST_NOR_VOLUME_FIXTURE_HPP
+#pragma once
 
 #include "fs/nor/NorFileSystem.hpp"
 #include "fs/nor/NorVolume.hpp"
@@ -255,5 +254,3 @@ namespace fs
         ExposedNorFileSystem<Config, Files, Features> fileSystem{ device };
     };
 }
-
-#endif

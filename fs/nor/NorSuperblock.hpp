@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_SUPERBLOCK_HPP
-#define FS_NOR_NOR_SUPERBLOCK_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
@@ -23,5 +22,3 @@ namespace fs
     std::optional<NorSuperblock> ParseNorSuperblock(infra::ConstByteRange bytes);
     void SerializeNorSuperblock(const NorSuperblock& superblock, infra::ByteRange bytes);
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_INTERFACES_DIRECTORY_HPP
-#define FS_INTERFACES_DIRECTORY_HPP
+#pragma once
 
 #include "fs/interfaces/EntryInfo.hpp"
 #include "fs/interfaces/Result.hpp"
@@ -20,5 +19,3 @@ namespace fs
         virtual void Next(const infra::Function<void(Result result, std::optional<EntryInfo> entry)>& onDone) = 0;
     };
 }
-
-#endif

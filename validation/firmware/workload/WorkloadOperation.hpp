@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_OPERATION_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_OPERATION_HPP
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -30,5 +29,3 @@ namespace validation
     const char* OperationName(WorkloadOperation operation);
     bool IsPartOfAppend(WorkloadOperation operation);
 }
-
-#endif

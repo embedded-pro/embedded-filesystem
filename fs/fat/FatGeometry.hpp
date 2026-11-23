@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_GEOMETRY_HPP
-#define FS_FAT_FAT_GEOMETRY_HPP
+#pragma once
 
 #include "fs/fat/FatBootSector.hpp"
 #include "fs/interfaces/Result.hpp"
@@ -40,5 +39,3 @@ namespace fs
     FatType TypeOfClusterCount(uint32_t clusters);
     FatGeometryResult GeometryOf(const BiosParameterBlock& parameters, uint32_t volumeStart, uint32_t volumeSectors, uint32_t blockSize);
 }
-
-#endif

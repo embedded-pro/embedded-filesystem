@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_JOURNAL_SCAN_HPP
-#define FS_NOR_NOR_JOURNAL_SCAN_HPP
+#pragma once
 
 #include "fs/common/CrcRecord.hpp"
 #include "fs/interfaces/Result.hpp"
@@ -65,5 +64,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

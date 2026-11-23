@@ -1,5 +1,4 @@
-#ifndef METRICS_NOR_NOR_CHECKER_HPP
-#define METRICS_NOR_NOR_CHECKER_HPP
+#pragma once
 
 #include <cstdint>
 #include <map>
@@ -68,5 +67,3 @@ namespace metrics
     NorCheck CheckNorImage(const std::vector<uint8_t>& image, uint32_t sectorSize, uint32_t pageSize);
     std::vector<uint8_t> ReadContents(const std::vector<uint8_t>& image, const NorCheck& check, const NorImageEntry& entry);
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_BACKGROUND_WORK_HPP
-#define FS_NOR_NOR_BACKGROUND_WORK_HPP
+#pragma once
 
 namespace fs
 {
@@ -20,5 +19,3 @@ namespace fs
         virtual bool Scheduled() const = 0;
     };
 }
-
-#endif

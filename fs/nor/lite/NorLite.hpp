@@ -1,5 +1,4 @@
-#ifndef FS_NOR_LITE_NOR_LITE_HPP
-#define FS_NOR_LITE_NOR_LITE_HPP
+#pragma once
 
 #include "fs/common/HandlePool.hpp"
 #include "fs/common/LiteLifecycle.hpp"
@@ -102,5 +101,3 @@ namespace fs
         HandlePool<NorFile::WithBuffer<NorFileBufferBytes(Config)>, Files> files{ Volume() };
     };
 }
-
-#endif

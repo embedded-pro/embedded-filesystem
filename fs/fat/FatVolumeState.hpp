@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_VOLUME_STATE_HPP
-#define FS_FAT_FAT_VOLUME_STATE_HPP
+#pragma once
 
 #include "fs/fat/FatAllocationUnits.hpp"
 #include "fs/fat/FatFsInfo.hpp"
@@ -19,5 +18,3 @@ namespace fs
         std::optional<FatAllocationUnits> allocationUnits;
     };
 }
-
-#endif

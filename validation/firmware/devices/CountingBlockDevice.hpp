@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_DEVICES_COUNTING_BLOCK_DEVICE_HPP
-#define VALIDATION_FIRMWARE_DEVICES_COUNTING_BLOCK_DEVICE_HPP
+#pragma once
 
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/timer/Timer.hpp"
@@ -67,5 +66,3 @@ namespace validation
         std::bitset<maximumUnits> written;
     };
 }
-
-#endif

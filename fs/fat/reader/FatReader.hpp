@@ -1,5 +1,4 @@
-#ifndef FS_FAT_READER_FAT_READER_HPP
-#define FS_FAT_READER_FAT_READER_HPP
+#pragma once
 
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/HandlePool.hpp"
@@ -127,5 +126,3 @@ namespace fs
         HandlePool<FatReaderDirectory, Directories> directories{ Volume() };
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef METRICS_WORKLOAD_RANDOM_HPP
-#define METRICS_WORKLOAD_RANDOM_HPP
+#pragma once
 
 #include <cstdint>
 
@@ -31,5 +30,3 @@ namespace metrics
         uint64_t state;
     };
 }
-
-#endif

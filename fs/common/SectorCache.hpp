@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_SECTOR_CACHE_HPP
-#define FS_COMMON_SECTOR_CACHE_HPP
+#pragma once
 
 #include "fs/common/FlushBarrier.hpp"
 #include "fs/common/SectorStore.hpp"
@@ -153,5 +152,3 @@ namespace fs
         {}
     };
 }
-
-#endif

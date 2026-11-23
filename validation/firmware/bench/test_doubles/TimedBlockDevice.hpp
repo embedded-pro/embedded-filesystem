@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_BENCH_TEST_DOUBLES_TIMED_BLOCK_DEVICE_HPP
-#define VALIDATION_FIRMWARE_BENCH_TEST_DOUBLES_TIMED_BLOCK_DEVICE_HPP
+#pragma once
 
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/stream/StringOutputStream.hpp"
@@ -91,5 +90,3 @@ namespace validation
         Result result{ Result::success };
     };
 }
-
-#endif

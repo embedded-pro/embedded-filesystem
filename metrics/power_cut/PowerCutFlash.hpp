@@ -1,5 +1,4 @@
-#ifndef METRICS_POWER_CUT_POWER_CUT_FLASH_HPP
-#define METRICS_POWER_CUT_POWER_CUT_FLASH_HPP
+#pragma once
 
 #include "hal/interfaces/test_doubles/FlashStub.hpp"
 #include <cstdint>
@@ -55,5 +54,3 @@ namespace metrics
         bool poweredDown{ false };
     };
 }
-
-#endif

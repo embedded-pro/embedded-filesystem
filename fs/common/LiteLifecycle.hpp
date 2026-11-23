@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_LITE_LIFECYCLE_HPP
-#define FS_COMMON_LITE_LIFECYCLE_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include <cstdint>
@@ -34,5 +33,3 @@ namespace fs
         Result fault{ Result::notMounted };
     };
 }
-
-#endif

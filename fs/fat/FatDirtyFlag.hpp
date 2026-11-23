@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_DIRTY_FLAG_HPP
-#define FS_FAT_FAT_DIRTY_FLAG_HPP
+#pragma once
 
 #include "fs/common/SectorCache.hpp"
 #include "fs/fat/FatVolumeState.hpp"
@@ -47,5 +46,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

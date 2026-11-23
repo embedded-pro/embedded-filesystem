@@ -1,5 +1,4 @@
-#ifndef METRICS_FAT_FAT_SUBJECT_HPP
-#define METRICS_FAT_FAT_SUBJECT_HPP
+#pragma once
 
 #include "fs/fat/FatFileSystem.hpp"
 #include "fs/fat/FatFormatter.hpp"
@@ -80,5 +79,3 @@ namespace metrics
         std::list<Call> calls;
     };
 }
-
-#endif

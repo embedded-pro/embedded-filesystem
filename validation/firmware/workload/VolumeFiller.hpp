@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_VOLUME_FILLER_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_VOLUME_FILLER_HPP
+#pragma once
 
 #include "infra/util/AutoResetFunction.hpp"
 #include "validation/firmware/workload/FileWriter.hpp"
@@ -74,5 +73,3 @@ namespace validation
         Preparation preparation;
     };
 }
-
-#endif

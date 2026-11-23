@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_WRITE_HPP
-#define FS_FAT_FAT_WRITE_HPP
+#pragma once
 
 #include "fs/fat/FatExtentCache.hpp"
 #include "fs/fat/FatOpenFile.hpp"
@@ -62,5 +61,3 @@ namespace fs
         infra::Function<void(Result result)> resume;
     };
 }
-
-#endif

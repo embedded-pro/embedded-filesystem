@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_TEST_DOUBLES_WORKLOAD_MOCK_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_TEST_DOUBLES_WORKLOAD_MOCK_HPP
+#pragma once
 
 #include "validation/firmware/workload/Workload.hpp"
 #include "gmock/gmock.h"
@@ -15,5 +14,3 @@ namespace validation
         MOCK_METHOD(void, Run, (const WorkloadParameters& parameters, const infra::Function<void()>& onDone), (override));
     };
 }
-
-#endif

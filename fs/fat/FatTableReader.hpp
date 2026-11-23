@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_TABLE_READER_HPP
-#define FS_FAT_FAT_TABLE_READER_HPP
+#pragma once
 
 #include "fs/common/SectorSource.hpp"
 #include "fs/fat/FatGeometry.hpp"
@@ -41,5 +40,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result, std::optional<uint32_t> next)> onNext;
     };
 }
-
-#endif

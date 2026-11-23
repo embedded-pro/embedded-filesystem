@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_BACKGROUND_HPP
-#define FS_NOR_NOR_BACKGROUND_HPP
+#pragma once
 
 #include "fs/common/IdleTimer.hpp"
 #include "fs/common/OperationQueue.hpp"
@@ -176,5 +175,3 @@ namespace fs
             .Allow<NorBackgroundWorking, NorBackgroundWaiting>();
     }
 }
-
-#endif

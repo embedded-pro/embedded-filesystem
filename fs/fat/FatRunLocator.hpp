@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_RUN_LOCATOR_HPP
-#define FS_FAT_FAT_RUN_LOCATOR_HPP
+#pragma once
 
 #include "fs/fat/FatChainWalk.hpp"
 #include "fs/fat/FatExtentCache.hpp"
@@ -26,5 +25,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result, const FatExtent& run)> onDone;
     };
 }
-
-#endif

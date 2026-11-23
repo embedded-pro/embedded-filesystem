@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_APPEND_WINDOWS_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_APPEND_WINDOWS_HPP
+#pragma once
 
 #include "validation/firmware/devices/DeviceCounts.hpp"
 #include "validation/firmware/workload/WorkloadOperation.hpp"
@@ -114,5 +113,3 @@ namespace validation
         WindowTotals totals;
     };
 }
-
-#endif

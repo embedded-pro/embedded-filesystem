@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_SHORT_NAME_GENERATION_HPP
-#define FS_FAT_FAT_SHORT_NAME_GENERATION_HPP
+#pragma once
 
 #include "fs/fat/FatShortName.hpp"
 #include "infra/util/BoundedString.hpp"
@@ -18,5 +17,3 @@ namespace fs
     std::optional<uint32_t> NumericTailOf(const ShortNameBytes& name, const ShortNameBytes& basis);
     ShortNameBytes HashedAlias(const ShortNameBytes& basis, infra::BoundedConstString name);
 }
-
-#endif

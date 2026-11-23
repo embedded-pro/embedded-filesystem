@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_STAT_HPP
-#define FS_FAT_FAT_STAT_HPP
+#pragma once
 
 #include "fs/fat/FatPathSlot.hpp"
 #include "fs/interfaces/Result.hpp"
@@ -28,5 +27,3 @@ namespace fs
         infra::Function<void(Result result)> onFinished;
     };
 }
-
-#endif

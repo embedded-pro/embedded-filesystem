@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_DATA_ALLOCATOR_HPP
-#define FS_NOR_NOR_DATA_ALLOCATOR_HPP
+#pragma once
 
 #include "fs/nor/NorBlockAllocator.hpp"
 #include "fs/nor/NorBlockHeader.hpp"
@@ -34,5 +33,3 @@ namespace fs
         infra::AutoResetFunction<void(std::optional<uint32_t> block)> onDone;
     };
 }
-
-#endif

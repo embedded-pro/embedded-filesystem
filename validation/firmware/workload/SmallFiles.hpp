@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_SMALL_FILES_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_SMALL_FILES_HPP
+#pragma once
 
 #include "infra/util/AutoResetFunction.hpp"
 #include "metrics/workload/Random.hpp"
@@ -39,5 +38,3 @@ namespace validation
         infra::AutoResetFunction<void()> onDone;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_NOR_LITE_TEST_NOR_LITE_FIXTURE_HPP
-#define FS_NOR_LITE_TEST_NOR_LITE_FIXTURE_HPP
+#pragma once
 
 #include "fs/interfaces/FileSystem.hpp"
 #include "fs/nor/NorFileSystem.hpp"
@@ -161,5 +160,3 @@ namespace fs
         ExposedNorLite lite{ flash };
     };
 }
-
-#endif

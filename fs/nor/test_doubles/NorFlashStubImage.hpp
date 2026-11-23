@@ -1,5 +1,4 @@
-#ifndef FS_NOR_TEST_DOUBLES_NOR_FLASH_STUB_IMAGE_HPP
-#define FS_NOR_TEST_DOUBLES_NOR_FLASH_STUB_IMAGE_HPP
+#pragma once
 
 #include "fs/nor/test_doubles/NorImage.hpp"
 #include "hal/interfaces/test_doubles/FlashStub.hpp"
@@ -25,5 +24,3 @@ namespace fs
         hal::FlashStub& flash;
     };
 }
-
-#endif

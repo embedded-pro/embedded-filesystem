@@ -1,5 +1,4 @@
-#ifndef METRICS_DEVICE_METERED_FLASH_HPP
-#define METRICS_DEVICE_METERED_FLASH_HPP
+#pragma once
 
 #include "hal/interfaces/Flash.hpp"
 #include "infra/timer/Timer.hpp"
@@ -52,5 +51,3 @@ namespace metrics
         infra::TimerSingleShot completionTimer;
     };
 }
-
-#endif

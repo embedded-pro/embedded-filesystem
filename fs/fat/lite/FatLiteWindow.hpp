@@ -1,5 +1,4 @@
-#ifndef FS_FAT_LITE_FAT_LITE_WINDOW_HPP
-#define FS_FAT_LITE_FAT_LITE_WINDOW_HPP
+#pragma once
 
 #include "fs/common/FlushBarrier.hpp"
 #include "fs/common/SectorCache.hpp"
@@ -68,5 +67,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onFlushed;
     };
 }
-
-#endif

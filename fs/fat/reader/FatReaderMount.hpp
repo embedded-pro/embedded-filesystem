@@ -1,5 +1,4 @@
-#ifndef FS_FAT_READER_FAT_READER_MOUNT_HPP
-#define FS_FAT_READER_FAT_READER_MOUNT_HPP
+#pragma once
 
 #include "fs/common/SectorSource.hpp"
 #include "fs/fat/FatBootSector.hpp"
@@ -38,5 +37,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

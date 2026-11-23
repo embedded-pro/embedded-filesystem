@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_MOUNT_SCALING_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_MOUNT_SCALING_HPP
+#pragma once
 
 #include "infra/util/AutoResetFunction.hpp"
 #include "validation/firmware/workload/VolumeFiller.hpp"
@@ -34,5 +33,3 @@ namespace validation
         infra::AutoResetFunction<void()> onDone;
     };
 }
-
-#endif

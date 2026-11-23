@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_STAT_HPP
-#define FS_NOR_NOR_STAT_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorPathSlot.hpp"
@@ -28,5 +27,3 @@ namespace fs
         infra::Function<void(Result result)> onFinished;
     };
 }
-
-#endif

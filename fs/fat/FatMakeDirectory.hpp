@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_MAKE_DIRECTORY_HPP
-#define FS_FAT_FAT_MAKE_DIRECTORY_HPP
+#pragma once
 
 #include "fs/fat/FatParentDirectory.hpp"
 #include "fs/fat/FatPathSlot.hpp"
@@ -51,5 +50,3 @@ namespace fs
         Step step{ Step::found };
     };
 }
-
-#endif

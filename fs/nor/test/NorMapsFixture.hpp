@@ -1,5 +1,4 @@
-#ifndef FS_NOR_TEST_NOR_MAPS_FIXTURE_HPP
-#define FS_NOR_TEST_NOR_MAPS_FIXTURE_HPP
+#pragma once
 
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorBTree.hpp"
@@ -112,5 +111,3 @@ namespace fs
         uint32_t nextAddress{ 2 * 4096 };
     };
 }
-
-#endif

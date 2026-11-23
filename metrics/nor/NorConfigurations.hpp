@@ -1,5 +1,4 @@
-#ifndef METRICS_NOR_NOR_CONFIGURATIONS_HPP
-#define METRICS_NOR_NOR_CONFIGURATIONS_HPP
+#pragma once
 
 #include "fs/nor/NorConfig.hpp"
 
@@ -11,5 +10,3 @@ namespace metrics
     // and the 1000 files of L6 need more node blocks than the collection can keep at twice the live nodes
     inline constexpr fs::NorConfig internalFlashConfig{ .maxBlocks = 256, .sectorsPerBlock = 2, .programUnit = 16, .pageSize = 16, .maxNameBytes = 32 };
 }
-
-#endif

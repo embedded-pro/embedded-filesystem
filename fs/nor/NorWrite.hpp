@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_WRITE_HPP
-#define FS_NOR_NOR_WRITE_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorOpenFile.hpp"
@@ -42,5 +41,3 @@ namespace fs
         infra::Function<void(Result result)> onDone;
     };
 }
-
-#endif

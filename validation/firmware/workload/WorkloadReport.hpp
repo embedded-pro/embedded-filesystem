@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_REPORT_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_REPORT_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/BoundedString.hpp"
@@ -86,5 +85,3 @@ namespace validation
         std::optional<Failure> failure;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_HIL_NO_PINS_HPP
-#define VALIDATION_FIRMWARE_HIL_NO_PINS_HPP
+#pragma once
 
 #include "hal/interfaces/Gpio.hpp"
 #include "services/hil/HilPinPool.hpp"
@@ -28,5 +27,3 @@ namespace validation
         hal::DummyPin pin;
     };
 }
-
-#endif

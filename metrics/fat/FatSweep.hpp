@@ -1,5 +1,4 @@
-#ifndef METRICS_FAT_FAT_SWEEP_HPP
-#define METRICS_FAT_FAT_SWEEP_HPP
+#pragma once
 
 #include "fs/fat/FatFileSystem.hpp"
 #include "fs/fat/FatFormatLayout.hpp"
@@ -73,5 +72,3 @@ namespace metrics
         fs::FileSystem& fileSystem;
     };
 }
-
-#endif

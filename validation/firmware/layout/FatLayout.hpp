@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_LAYOUT_FAT_LAYOUT_HPP
-#define VALIDATION_FIRMWARE_LAYOUT_FAT_LAYOUT_HPP
+#pragma once
 
 #include "fs/fat/FatFormatLayout.hpp"
 #include "infra/util/BoundedString.hpp"
@@ -50,5 +49,3 @@ namespace validation
     const char* TypeName(LayoutType type);
     void AddLayout(ResultRecord& record, const FatLayout& layout);
 }
-
-#endif

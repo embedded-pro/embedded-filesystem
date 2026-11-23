@@ -1,5 +1,4 @@
-#ifndef FS_FAT_READER_FAT_READER_WINDOW_HPP
-#define FS_FAT_READER_FAT_READER_WINDOW_HPP
+#pragma once
 
 #include "fs/common/SectorSource.hpp"
 #include "fs/interfaces/Result.hpp"
@@ -37,5 +36,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result, infra::ConstByteRange contents)> onDone;
     };
 }
-
-#endif

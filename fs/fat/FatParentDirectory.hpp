@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_PARENT_DIRECTORY_HPP
-#define FS_FAT_FAT_PARENT_DIRECTORY_HPP
+#pragma once
 
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatEntrySetWriter.hpp"
@@ -66,5 +65,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

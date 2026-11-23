@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_FILE_SYSTEM_HPP
-#define FS_NOR_NOR_FILE_SYSTEM_HPP
+#pragma once
 
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/HandlePool.hpp"
@@ -296,5 +295,3 @@ namespace fs
             .Allow<NorFault, NorFormatting, NorMounting>();
     }
 }
-
-#endif

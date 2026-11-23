@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_VOLUME_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_VOLUME_HPP
+#pragma once
 
 #include "fs/interfaces/FileSystem.hpp"
 #include "fs/interfaces/Result.hpp"
@@ -47,5 +46,3 @@ namespace validation
         virtual std::optional<VolumeCounts> Counters() const = 0;
     };
 }
-
-#endif

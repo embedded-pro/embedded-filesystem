@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_DEVICES_RAM_FLASH_HPP
-#define VALIDATION_FIRMWARE_DEVICES_RAM_FLASH_HPP
+#pragma once
 
 #include "hal/interfaces/FlashHomogeneous.hpp"
 #include "infra/util/ByteRange.hpp"
@@ -25,5 +24,3 @@ namespace validation
         RamCompletion completion;
     };
 }
-
-#endif

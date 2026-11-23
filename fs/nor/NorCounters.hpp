@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_COUNTERS_HPP
-#define FS_NOR_NOR_COUNTERS_HPP
+#pragma once
 
 #include <cstdint>
 
@@ -15,5 +14,3 @@ namespace fs
         bool operator==(const NorCounters& other) const = default;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_READ_HPP
-#define FS_FAT_FAT_READ_HPP
+#pragma once
 
 #include "fs/fat/FatExtentCache.hpp"
 #include "fs/fat/FatOpenFile.hpp"
@@ -44,5 +43,3 @@ namespace fs
         infra::Function<void(Result result, std::size_t bytesRead)> onDone;
     };
 }
-
-#endif

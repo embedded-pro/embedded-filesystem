@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_TIMING_STOPWATCH_HPP
-#define VALIDATION_FIRMWARE_TIMING_STOPWATCH_HPP
+#pragma once
 
 #include "infra/timer/Timer.hpp"
 #include "validation/firmware/timing/CycleCounter.hpp"
@@ -24,5 +23,3 @@ namespace validation
         uint32_t startCycles{ 0 };
     };
 }
-
-#endif

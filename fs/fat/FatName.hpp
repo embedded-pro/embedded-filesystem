@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_NAME_HPP
-#define FS_FAT_FAT_NAME_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/BoundedString.hpp"
@@ -10,5 +9,3 @@ namespace fs
     char FoldAscii(char character);
     bool EqualIgnoringAsciiCase(infra::BoundedConstString x, infra::BoundedConstString y);
 }
-
-#endif

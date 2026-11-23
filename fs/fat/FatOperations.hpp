@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_OPERATIONS_HPP
-#define FS_FAT_FAT_OPERATIONS_HPP
+#pragma once
 
 #include "fs/fat/FatPathSlot.hpp"
 #include "fs/fat/FatTimestamp.hpp"
@@ -42,5 +41,3 @@ namespace fs
         const FatLongNames* longNames{ nullptr };
     };
 }
-
-#endif

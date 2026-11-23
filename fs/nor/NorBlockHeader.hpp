@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_BLOCK_HEADER_HPP
-#define FS_NOR_NOR_BLOCK_HEADER_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
@@ -45,5 +44,3 @@ namespace fs
     void SerializeNorHeaderB(const NorAllocation& allocation, infra::ByteRange bytes);
     NorBlockHeader ParseNorBlockHeader(infra::ConstByteRange header, uint32_t programUnit);
 }
-
-#endif

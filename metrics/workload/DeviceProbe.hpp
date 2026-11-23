@@ -1,5 +1,4 @@
-#ifndef METRICS_WORKLOAD_DEVICE_PROBE_HPP
-#define METRICS_WORKLOAD_DEVICE_PROBE_HPP
+#pragma once
 
 #include "metrics/device/MeteredBlockDevice.hpp"
 #include "metrics/device/MeteredFlash.hpp"
@@ -70,5 +69,3 @@ namespace metrics
         const MeteredBlockDevice& device;
     };
 }
-
-#endif

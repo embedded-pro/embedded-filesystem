@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_VOLUME_MOUNT_HPP
-#define FS_NOR_NOR_VOLUME_MOUNT_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorVolume.hpp"
@@ -70,5 +69,3 @@ namespace fs
             .Start();
     }
 }
-
-#endif

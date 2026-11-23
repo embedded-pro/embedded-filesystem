@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_BASELINES_LITTLE_FS_FLASH_HPP
-#define VALIDATION_FIRMWARE_BASELINES_LITTLE_FS_FLASH_HPP
+#pragma once
 
 #include "hal/interfaces/Flash.hpp"
 #include "lfs.h"
@@ -31,5 +30,3 @@ namespace validation
         bool done = false;
     };
 }
-
-#endif

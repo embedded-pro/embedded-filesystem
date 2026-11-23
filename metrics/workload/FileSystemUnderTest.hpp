@@ -1,5 +1,4 @@
-#ifndef METRICS_WORKLOAD_FILE_SYSTEM_UNDER_TEST_HPP
-#define METRICS_WORKLOAD_FILE_SYSTEM_UNDER_TEST_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/ByteRange.hpp"
@@ -98,5 +97,3 @@ namespace metrics
         }
     };
 }
-
-#endif

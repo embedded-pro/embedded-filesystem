@@ -1,5 +1,4 @@
-#ifndef METRICS_BASELINES_FATFS_DISK_IO_HPP
-#define METRICS_BASELINES_FATFS_DISK_IO_HPP
+#pragma once
 
 #include "ff.h"
 #include "metrics/baselines/SynchronousDevices.hpp"
@@ -15,5 +14,3 @@ namespace metrics
 
     DiskIoBinding& DiskIo();
 }
-
-#endif

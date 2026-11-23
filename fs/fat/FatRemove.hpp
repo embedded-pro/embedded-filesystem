@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_REMOVE_HPP
-#define FS_FAT_FAT_REMOVE_HPP
+#pragma once
 
 #include "fs/fat/FatDirectoryReader.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
@@ -63,5 +62,3 @@ namespace fs
         Step step{ Step::found };
     };
 }
-
-#endif

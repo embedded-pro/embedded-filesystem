@@ -1,5 +1,4 @@
-#ifndef METRICS_SUITE_MEASUREMENT_HPP
-#define METRICS_SUITE_MEASUREMENT_HPP
+#pragma once
 
 #include "hal/interfaces/test_doubles/BlockDeviceStub.hpp"
 #include "hal/interfaces/test_doubles/FlashStub.hpp"
@@ -98,5 +97,3 @@ namespace metrics
         uint32_t scaleDivisor;
     };
 }
-
-#endif

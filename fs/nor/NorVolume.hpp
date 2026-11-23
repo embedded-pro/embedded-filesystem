@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_VOLUME_HPP
-#define FS_NOR_NOR_VOLUME_HPP
+#pragma once
 
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/Deliver.hpp"
@@ -188,5 +187,3 @@ namespace fs
             });
     }
 }
-
-#endif

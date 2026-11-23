@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_PATH_SLOT_HPP
-#define FS_NOR_NOR_PATH_SLOT_HPP
+#pragma once
 
 #include "fs/common/OperationQueue.hpp"
 #include "fs/interfaces/Directory.hpp"
@@ -74,5 +73,3 @@ namespace fs
         std::optional<NorPathCall> call;
     };
 }
-
-#endif

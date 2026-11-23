@@ -1,5 +1,4 @@
-#ifndef METRICS_SUITE_PHASE_WRITES_HPP
-#define METRICS_SUITE_PHASE_WRITES_HPP
+#pragma once
 
 #include "metrics/device/MeteredBlockDevice.hpp"
 #include <cstdint>
@@ -39,5 +38,3 @@ namespace metrics
         std::map<std::string, WritesOfPhase, std::less<>> phases;
     };
 }
-
-#endif

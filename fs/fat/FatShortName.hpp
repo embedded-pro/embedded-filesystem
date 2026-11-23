@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_SHORT_NAME_HPP
-#define FS_FAT_FAT_SHORT_NAME_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <array>
@@ -23,5 +22,3 @@ namespace fs
     uint8_t LongNameChecksum(const std::array<uint8_t, 11>& name);
     std::size_t ShortNameToUtf8(const ShortName& name, infra::ByteRange out);
 }
-
-#endif

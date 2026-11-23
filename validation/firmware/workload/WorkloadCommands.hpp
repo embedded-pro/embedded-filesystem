@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_COMMANDS_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_COMMANDS_HPP
+#pragma once
 
 #include "services/hil/HilArguments.hpp"
 #include "services/hil/HilCommand.hpp"
@@ -72,5 +71,3 @@ namespace validation
         std::array<Command, 2> commands;
     };
 }
-
-#endif

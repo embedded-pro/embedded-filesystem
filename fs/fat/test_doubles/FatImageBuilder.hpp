@@ -1,5 +1,4 @@
-#ifndef FS_FAT_TEST_DOUBLES_FAT_IMAGE_BUILDER_HPP
-#define FS_FAT_TEST_DOUBLES_FAT_IMAGE_BUILDER_HPP
+#pragma once
 
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatGeometry.hpp"
@@ -48,5 +47,3 @@ namespace fs
         FatGeometry geometry;
     };
 }
-
-#endif

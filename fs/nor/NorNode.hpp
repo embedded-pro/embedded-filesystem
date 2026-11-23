@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_NODE_HPP
-#define FS_NOR_NOR_NODE_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
@@ -48,5 +47,3 @@ namespace fs
     void SealNorNode(const NorNodeHeader& header, infra::ByteRange node);
     std::optional<NorNodeHeader> OpenNorNode(infra::ConstByteRange node);
 }
-
-#endif

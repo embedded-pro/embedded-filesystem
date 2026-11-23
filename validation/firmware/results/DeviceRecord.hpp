@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_RESULTS_DEVICE_RECORD_HPP
-#define VALIDATION_FIRMWARE_RESULTS_DEVICE_RECORD_HPP
+#pragma once
 
 #include "infra/util/BoundedString.hpp"
 #include "validation/firmware/results/ResultLines.hpp"
@@ -29,5 +28,3 @@ namespace validation
 
     void PrintDevice(ResultLines& results, const DeviceDescription& device);
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_OPERATIONS_HPP
-#define FS_NOR_NOR_OPERATIONS_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorPathSlot.hpp"
@@ -33,5 +32,3 @@ namespace fs
         NorOpenDirectoryOperation openDirectory{ nullptr };
     };
 }
-
-#endif

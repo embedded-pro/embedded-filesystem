@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_TIMING_SAMPLES_HPP
-#define VALIDATION_FIRMWARE_TIMING_SAMPLES_HPP
+#pragma once
 
 #include "infra/util/BoundedVector.hpp"
 #include "infra/util/WithStorage.hpp"
@@ -35,5 +34,3 @@ namespace validation
         uint64_t sum{ 0 };
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_RESERVATION_HPP
-#define FS_FAT_FAT_RESERVATION_HPP
+#pragma once
 
 #include <cstdint>
 
@@ -26,5 +25,3 @@ namespace fs
         virtual bool Reserved(uint32_t cluster) const = 0;
     };
 }
-
-#endif

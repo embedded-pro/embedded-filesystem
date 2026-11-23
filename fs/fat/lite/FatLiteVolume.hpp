@@ -1,5 +1,4 @@
-#ifndef FS_FAT_LITE_FAT_LITE_VOLUME_HPP
-#define FS_FAT_LITE_FAT_LITE_VOLUME_HPP
+#pragma once
 
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/FlushBarrier.hpp"
@@ -43,5 +42,3 @@ namespace fs
         infra::IntrusiveList<FatLiteFile> openFiles;
     };
 }
-
-#endif

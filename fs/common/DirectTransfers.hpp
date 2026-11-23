@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_DIRECT_TRANSFERS_HPP
-#define FS_COMMON_DIRECT_TRANSFERS_HPP
+#pragma once
 
 #include "fs/common/FlushBarrier.hpp"
 #include "fs/common/SectorCache.hpp"
@@ -40,5 +39,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

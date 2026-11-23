@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_LIFECYCLE_HPP
-#define FS_NOR_NOR_LIFECYCLE_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include <variant>
@@ -74,5 +73,3 @@ namespace fs
 
     using NorLifecycleEvent = std::variant<NorFormatRequested, NorFormatDone, NorMountRequested, NorMountDone, NorUnmountRequested, NorUnmountDone>;
 }
-
-#endif

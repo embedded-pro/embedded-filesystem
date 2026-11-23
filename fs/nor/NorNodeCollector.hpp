@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_NODE_COLLECTOR_HPP
-#define FS_NOR_NOR_NODE_COLLECTOR_HPP
+#pragma once
 
 #include "fs/nor/NorLayout.hpp"
 #include "fs/nor/NorMapFetch.hpp"
@@ -91,5 +90,3 @@ namespace fs
         infra::AutoResetFunction<void()> onDone;
     };
 }
-
-#endif

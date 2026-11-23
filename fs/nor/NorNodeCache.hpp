@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_NODE_CACHE_HPP
-#define FS_NOR_NOR_NODE_CACHE_HPP
+#pragma once
 
 #include "fs/nor/NorLayout.hpp"
 #include "fs/nor/NorNode.hpp"
@@ -70,5 +69,3 @@ namespace fs
         infra::AutoResetFunction<void(std::optional<std::size_t> slot)> onLoaded;
     };
 }
-
-#endif

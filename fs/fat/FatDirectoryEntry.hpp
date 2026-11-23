@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_DIRECTORY_ENTRY_HPP
-#define FS_FAT_FAT_DIRECTORY_ENTRY_HPP
+#pragma once
 
 #include "fs/fat/FatShortName.hpp"
 #include "infra/util/BoundedString.hpp"
@@ -70,5 +69,3 @@ namespace fs
     void EncodeLongEntry(infra::BoundedConstString name, uint8_t ordinal, bool last, uint8_t checksum, infra::ByteRange out);
     uint8_t LongEntriesFor(infra::BoundedConstString name);
 }
-
-#endif

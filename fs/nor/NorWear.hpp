@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_WEAR_HPP
-#define FS_NOR_NOR_WEAR_HPP
+#pragma once
 
 #include "fs/nor/NorBlockStates.hpp"
 #include "fs/nor/NorEraseCounts.hpp"
@@ -17,5 +16,3 @@ namespace fs
 
     std::optional<uint32_t> WornBlock(const NorBlockStates& blocks, const NorEraseCounts& counts, NorBlockState state, NorWear wear);
 }
-
-#endif

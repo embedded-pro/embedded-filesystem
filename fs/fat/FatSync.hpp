@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_SYNC_HPP
-#define FS_FAT_FAT_SYNC_HPP
+#pragma once
 
 #include "fs/fat/FatOpenFile.hpp"
 #include "fs/interfaces/Result.hpp"
@@ -28,5 +27,3 @@ namespace fs
         infra::Function<void(Result result)> onDone;
     };
 }
-
-#endif

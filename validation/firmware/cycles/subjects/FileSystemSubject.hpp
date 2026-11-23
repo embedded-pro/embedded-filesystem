@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_CYCLES_SUBJECTS_FILE_SYSTEM_SUBJECT_HPP
-#define VALIDATION_FIRMWARE_CYCLES_SUBJECTS_FILE_SYSTEM_SUBJECT_HPP
+#pragma once
 
 #include "fs/fat/FatFormatter.hpp"
 #include "fs/interfaces/FileSystem.hpp"
@@ -99,5 +98,3 @@ namespace validation
         void StartFormat(const infra::Function<void(fs::Result result)>& onDone) override;
     };
 }
-
-#endif

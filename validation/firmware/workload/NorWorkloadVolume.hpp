@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_NOR_WORKLOAD_VOLUME_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_NOR_WORKLOAD_VOLUME_HPP
+#pragma once
 
 #include "fs/nor/NorFileSystem.hpp"
 #include "hal/interfaces/Flash.hpp"
@@ -47,5 +46,3 @@ namespace validation
         fs::NorFileSystem::WithStorage<Config, 2> fileSystem;
     };
 }
-
-#endif

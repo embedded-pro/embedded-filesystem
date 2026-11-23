@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_LITTLE_ENDIAN_HPP
-#define FS_COMMON_LITTLE_ENDIAN_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstddef>
@@ -14,5 +13,3 @@ namespace fs
     void StoreLittle32(infra::ByteRange bytes, std::size_t offset, uint32_t value);
     void StoreLittle64(infra::ByteRange bytes, std::size_t offset, uint64_t value);
 }
-
-#endif

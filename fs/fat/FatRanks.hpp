@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_RANKS_HPP
-#define FS_FAT_FAT_RANKS_HPP
+#pragma once
 
 #include <cstdint>
 
@@ -11,5 +10,3 @@ namespace fs
     constexpr uint8_t trailingEntryRank = 3;
     constexpr uint8_t cleanRank = 4;
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_INTERFACES_FILE_SYSTEM_HPP
-#define FS_INTERFACES_FILE_SYSTEM_HPP
+#pragma once
 
 #include "fs/interfaces/Directory.hpp"
 #include "fs/interfaces/EntryInfo.hpp"
@@ -44,5 +43,3 @@ namespace fs
         virtual bool Idle() const = 0;
     };
 }
-
-#endif

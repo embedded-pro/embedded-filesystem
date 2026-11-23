@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_TEST_DOUBLES_WORKLOAD_VOLUME_MOCK_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_TEST_DOUBLES_WORKLOAD_VOLUME_MOCK_HPP
+#pragma once
 
 #include "validation/firmware/workload/WorkloadVolume.hpp"
 #include "gmock/gmock.h"
@@ -17,5 +16,3 @@ namespace validation
         MOCK_METHOD(std::optional<VolumeCounts>, Counters, (), (const, override));
     };
 }
-
-#endif

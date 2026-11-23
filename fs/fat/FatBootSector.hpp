@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_BOOT_SECTOR_HPP
-#define FS_FAT_FAT_BOOT_SECTOR_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
@@ -39,5 +38,3 @@ namespace fs
     std::optional<BiosParameterBlock> ParseBootSector(infra::ConstByteRange sector);
     void SerializeBootSector(const BiosParameterBlock& parameters, FatType type, infra::ByteRange sector);
 }
-
-#endif

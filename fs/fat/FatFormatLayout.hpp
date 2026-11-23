@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_FORMAT_LAYOUT_HPP
-#define FS_FAT_FAT_FORMAT_LAYOUT_HPP
+#pragma once
 
 #include "fs/fat/FatBootSector.hpp"
 #include "fs/fat/FatPartitionTable.hpp"
@@ -43,5 +42,3 @@ namespace fs
     SdFormatParameters SdParametersFor(uint32_t sectors);
     std::optional<FatFormatLayout> ComputeFormatLayout(uint32_t blocks, uint32_t blockSize, const FatFormatConfig& config);
 }
-
-#endif

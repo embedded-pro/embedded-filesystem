@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_HEADER_SCAN_HPP
-#define FS_NOR_NOR_HEADER_SCAN_HPP
+#pragma once
 
 #include "fs/nor/NorBlockHeader.hpp"
 #include "fs/nor/NorVolumeState.hpp"
@@ -51,5 +50,3 @@ namespace fs
         infra::AutoResetFunction<void()> onDone;
     };
 }
-
-#endif

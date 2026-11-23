@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_CYCLES_SUBJECTS_LITTLE_FS_SUBJECT_HPP
-#define VALIDATION_FIRMWARE_CYCLES_SUBJECTS_LITTLE_FS_SUBJECT_HPP
+#pragma once
 
 #include "hal/interfaces/Flash.hpp"
 #include "lfs.h"
@@ -59,5 +58,3 @@ namespace validation
         std::array<uint8_t, configuration.cacheSize> fileBuffer{};
     };
 }
-
-#endif

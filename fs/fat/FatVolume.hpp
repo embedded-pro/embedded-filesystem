@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_VOLUME_HPP
-#define FS_FAT_FAT_VOLUME_HPP
+#pragma once
 
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/Deliver.hpp"
@@ -166,5 +165,3 @@ namespace fs
             });
     }
 }
-
-#endif

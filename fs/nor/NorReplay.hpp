@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_REPLAY_HPP
-#define FS_NOR_NOR_REPLAY_HPP
+#pragma once
 
 #include "fs/common/CrcRecord.hpp"
 #include "fs/interfaces/Result.hpp"
@@ -50,5 +49,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result, std::optional<NorRecordPosition> overflow)> onDone;
     };
 }
-
-#endif

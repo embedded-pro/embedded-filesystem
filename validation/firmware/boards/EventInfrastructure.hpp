@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_BOARDS_EVENT_INFRASTRUCTURE_HPP
-#define VALIDATION_FIRMWARE_BOARDS_EVENT_INFRASTRUCTURE_HPP
+#pragma once
 
 #include "hal/cortex_m/DataWatchpointAndTrace.hpp"
 #include "hal/cortex_m/InterruptCortex.hpp"
@@ -40,5 +39,3 @@ namespace validation
         hal::cortex::SystemTickTimerService systemTick;
     };
 }
-
-#endif

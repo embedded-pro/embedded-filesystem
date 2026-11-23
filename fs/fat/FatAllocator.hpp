@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_ALLOCATOR_HPP
-#define FS_FAT_FAT_ALLOCATOR_HPP
+#pragma once
 
 #include "fs/common/SectorCache.hpp"
 #include "fs/fat/FatFreeSpaceScan.hpp"
@@ -86,5 +85,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onLinked;
     };
 }
-
-#endif

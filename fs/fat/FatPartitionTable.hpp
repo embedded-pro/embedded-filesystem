@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_PARTITION_TABLE_HPP
-#define FS_FAT_FAT_PARTITION_TABLE_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
@@ -20,5 +19,3 @@ namespace fs
     bool IsProtectiveMbr(infra::ConstByteRange sector);
     void SerializeMbr(const PartitionEntry& partition, infra::ByteRange sector);
 }
-
-#endif

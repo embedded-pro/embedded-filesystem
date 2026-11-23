@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_RUN_SEARCH_HPP
-#define FS_FAT_FAT_RUN_SEARCH_HPP
+#pragma once
 
 #include "fs/common/SectorCache.hpp"
 #include "fs/fat/FatAllocationUnits.hpp"
@@ -51,5 +50,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result, FatReservation run)> onDone;
     };
 }
-
-#endif

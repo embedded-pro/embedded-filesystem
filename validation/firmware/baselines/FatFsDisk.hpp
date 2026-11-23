@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_BASELINES_FAT_FS_DISK_HPP
-#define VALIDATION_FIRMWARE_BASELINES_FAT_FS_DISK_HPP
+#pragma once
 
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/InterfaceConnector.hpp"
@@ -33,5 +32,3 @@ namespace validation
         hal::BlockDevice::Result result = hal::BlockDevice::Result::success;
     };
 }
-
-#endif

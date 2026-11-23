@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_TABLE_HPP
-#define FS_FAT_FAT_TABLE_HPP
+#pragma once
 
 #include "fs/fat/FatBootSector.hpp"
 #include "infra/util/ByteRange.hpp"
@@ -31,5 +30,3 @@ namespace fs
     std::optional<bool> CleanShutdown(FatType type, uint32_t secondEntry);
     uint32_t WithCleanShutdown(FatType type, uint32_t secondEntry, bool clean);
 }
-
-#endif

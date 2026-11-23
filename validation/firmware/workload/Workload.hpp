@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_HPP
+#pragma once
 
 #include "infra/timer/Timer.hpp"
 #include "infra/util/BoundedString.hpp"
@@ -50,5 +49,3 @@ namespace validation
         virtual void Run(const WorkloadParameters& parameters, const infra::Function<void()>& onDone) = 0;
     };
 }
-
-#endif

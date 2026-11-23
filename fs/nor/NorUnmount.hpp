@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_UNMOUNT_HPP
-#define FS_NOR_NOR_UNMOUNT_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/Function.hpp"
@@ -27,5 +26,3 @@ namespace fs
         infra::Function<void(Result result)> onDone;
     };
 }
-
-#endif

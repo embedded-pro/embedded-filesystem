@@ -1,5 +1,4 @@
-#ifndef METRICS_DEVICE_FLASH_STATISTICS_HPP
-#define METRICS_DEVICE_FLASH_STATISTICS_HPP
+#pragma once
 
 #include "infra/timer/TimerService.hpp"
 #include <cstdint>
@@ -37,5 +36,3 @@ namespace metrics
 
     WearSummary SummarizeWear(const std::vector<uint32_t>& eraseCounts);
 }
-
-#endif

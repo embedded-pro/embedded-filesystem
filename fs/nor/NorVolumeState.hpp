@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_VOLUME_STATE_HPP
-#define FS_NOR_NOR_VOLUME_STATE_HPP
+#pragma once
 
 #include "fs/nor/NorBlockStates.hpp"
 #include "fs/nor/NorCheckpoint.hpp"
@@ -52,5 +51,3 @@ namespace fs
         uint32_t nodeOffset{ 0 };
     };
 }
-
-#endif

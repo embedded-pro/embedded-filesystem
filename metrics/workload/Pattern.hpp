@@ -1,5 +1,4 @@
-#ifndef METRICS_WORKLOAD_PATTERN_HPP
-#define METRICS_WORKLOAD_PATTERN_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstddef>
@@ -32,5 +31,3 @@ namespace metrics
         return true;
     }
 }
-
-#endif

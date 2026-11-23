@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_NODE_BLOCKS_HPP
-#define FS_NOR_NOR_NODE_BLOCKS_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstddef>
@@ -32,5 +31,3 @@ namespace fs
         uint32_t count{ 0 };
     };
 }
-
-#endif

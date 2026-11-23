@@ -1,5 +1,4 @@
-#ifndef METRICS_WORKLOAD_COMPLETION_QUEUE_HPP
-#define METRICS_WORKLOAD_COMPLETION_QUEUE_HPP
+#pragma once
 
 #include <deque>
 #include <functional>
@@ -23,5 +22,3 @@ namespace metrics
         std::deque<std::function<void()>> actions;
     };
 }
-
-#endif
