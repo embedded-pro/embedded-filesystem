@@ -1,5 +1,4 @@
-#ifndef FS_FAT_TEST_DOUBLES_SPARSE_BLOCK_DEVICE_HPP
-#define FS_FAT_TEST_DOUBLES_SPARSE_BLOCK_DEVICE_HPP
+#pragma once
 
 #include "fs/fat/test_doubles/BlockImage.hpp"
 #include "hal/interfaces/BlockDevice.hpp"
@@ -98,5 +97,3 @@ namespace fs
         {}
     };
 }
-
-#endif

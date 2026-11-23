@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_DEVICES_DEVICE_COUNTS_HPP
-#define VALIDATION_FIRMWARE_DEVICES_DEVICE_COUNTS_HPP
+#pragma once
 
 #include <array>
 #include <cstddef>
@@ -93,5 +92,3 @@ namespace validation
         }
     };
 }
-
-#endif

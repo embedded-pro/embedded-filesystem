@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_BOARDS_STM32H745_BOARD_PROFILE_HPP
-#define VALIDATION_FIRMWARE_BOARDS_STM32H745_BOARD_PROFILE_HPP
+#pragma once
 
 #include "hal_st/stm32fxxx/GpioStm.hpp"
 #include "hal_st/stm32fxxx/NorFlashStm.hpp"
@@ -73,5 +72,3 @@ namespace validation::board
         return config;
     }
 }
-
-#endif

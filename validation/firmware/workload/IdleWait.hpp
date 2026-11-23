@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_IDLE_WAIT_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_IDLE_WAIT_HPP
+#pragma once
 
 #include "fs/interfaces/FileSystem.hpp"
 #include "infra/timer/Timer.hpp"
@@ -33,5 +32,3 @@ namespace validation
         infra::TimePoint deadline;
     };
 }
-
-#endif

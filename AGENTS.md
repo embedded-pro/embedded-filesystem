@@ -177,6 +177,4 @@ tools/verify.sh
 - *Memory*: `metrics/` may use the standard library. Reason: host-only harness, never linked into `fs.*`.
 - *Optimisation*: `validation/firmware/baselines` blocks with `infra::EventDispatcher::ExecuteUntil`. Reason: it
   adapts synchronous FatFs and littlefs to EmIL devices; never linked into `fs.*`.
-- *Style*: include guards `<FOLDER>_<FILE>_HPP` (`FS_NOR_NOR_LAYOUT_HPP`), not `#pragma once`. Reason: all 303
-  headers use them; one convention per repository.
 - *Style*: comments may also be license headers or `NOLINT`.

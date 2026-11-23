@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_CHECKPOINT_HPP
-#define FS_NOR_NOR_CHECKPOINT_HPP
+#pragma once
 
 #include "fs/nor/NorLayout.hpp"
 #include "infra/util/ByteRange.hpp"
@@ -29,5 +28,3 @@ namespace fs
     std::optional<NorCheckpoint> OpenNorCheckpoint(infra::ConstByteRange bytes);
     bool IsNorBlockInUse(infra::ConstByteRange checkpoint, uint32_t block);
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_RENAME_HPP
-#define FS_NOR_NOR_RENAME_HPP
+#pragma once
 
 #include "fs/common/CrcRecord.hpp"
 #include "fs/interfaces/Result.hpp"
@@ -61,5 +60,3 @@ namespace fs
         infra::AutoResetFunction<void()> onFetched;
     };
 }
-
-#endif

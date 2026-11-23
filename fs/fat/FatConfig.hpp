@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_CONFIG_HPP
-#define FS_FAT_FAT_CONFIG_HPP
+#pragma once
 
 #include "infra/timer/Timer.hpp"
 #include <chrono>
@@ -42,5 +41,3 @@ namespace fs
         uint32_t timerServiceId{ infra::systemTimerServiceId };
     };
 }
-
-#endif

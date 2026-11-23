@@ -1,5 +1,4 @@
-#ifndef FS_FAT_UTF8_HPP
-#define FS_FAT_UTF8_HPP
+#pragma once
 
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/ByteRange.hpp"
@@ -39,5 +38,3 @@ namespace fs
         std::optional<char16_t> pendingLow;
     };
 }
-
-#endif

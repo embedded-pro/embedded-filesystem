@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_CHAIN_WALK_HPP
-#define FS_FAT_FAT_CHAIN_WALK_HPP
+#pragma once
 
 #include "fs/common/SectorCache.hpp"
 #include "fs/fat/FatExtentCache.hpp"
@@ -39,5 +38,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result, const FatExtent& run)> onDone;
     };
 }
-
-#endif

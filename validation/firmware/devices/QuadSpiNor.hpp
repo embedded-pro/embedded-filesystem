@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_DEVICES_QUAD_SPI_NOR_HPP
-#define VALIDATION_FIRMWARE_DEVICES_QUAD_SPI_NOR_HPP
+#pragma once
 
 #include "hal/interfaces/Flash.hpp"
 #include "hal/interfaces/QuadSpi.hpp"
@@ -57,5 +56,3 @@ namespace validation
         std::optional<services::FlashRegion> region;
     };
 }
-
-#endif

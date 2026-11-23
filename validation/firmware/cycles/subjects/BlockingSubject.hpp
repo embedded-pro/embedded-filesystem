@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_CYCLES_SUBJECTS_BLOCKING_SUBJECT_HPP
-#define VALIDATION_FIRMWARE_CYCLES_SUBJECTS_BLOCKING_SUBJECT_HPP
+#pragma once
 
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/BoundedString.hpp"
@@ -34,5 +33,3 @@ namespace validation
         std::array<char, maxPath + 1> target{};
     };
 }
-
-#endif

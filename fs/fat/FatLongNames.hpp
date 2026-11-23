@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_LONG_NAMES_HPP
-#define FS_FAT_FAT_LONG_NAMES_HPP
+#pragma once
 
 #include "fs/fat/FatDirectoryEntry.hpp"
 #include "fs/fat/FatShortNameGeneration.hpp"
@@ -22,5 +21,3 @@ namespace fs
 
     inline constexpr FatLongNames fatLongNames{ &LongEntriesFor, &EncodeLongEntry, &BasisName, &WithNumericTail, &NumericTailOf, &HashedAlias };
 }
-
-#endif

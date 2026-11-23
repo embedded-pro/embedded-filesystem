@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_OPERATION_QUEUE_HPP
-#define FS_COMMON_OPERATION_QUEUE_HPP
+#pragma once
 
 #include "infra/event/ClaimableResource.hpp"
 #include "infra/util/Function.hpp"
@@ -71,5 +70,3 @@ namespace fs
         infra::ClaimableResource::Claimer claimer;
     };
 }
-
-#endif

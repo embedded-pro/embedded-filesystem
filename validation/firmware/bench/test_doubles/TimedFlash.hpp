@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_BENCH_TEST_DOUBLES_TIMED_FLASH_HPP
-#define VALIDATION_FIRMWARE_BENCH_TEST_DOUBLES_TIMED_FLASH_HPP
+#pragma once
 
 #include "hal/interfaces/Flash.hpp"
 #include "infra/stream/StringOutputStream.hpp"
@@ -101,5 +100,3 @@ namespace validation
         infra::TimerSingleShot timer;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_RANDOM_OVERWRITE_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_RANDOM_OVERWRITE_HPP
+#pragma once
 
 #include "infra/util/AutoResetFunction.hpp"
 #include "metrics/workload/Random.hpp"
@@ -45,5 +44,3 @@ namespace validation
         std::array<uint8_t, overwriteSize> data{};
     };
 }
-
-#endif

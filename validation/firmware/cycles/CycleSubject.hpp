@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_CYCLES_CYCLE_SUBJECT_HPP
-#define VALIDATION_FIRMWARE_CYCLES_CYCLE_SUBJECT_HPP
+#pragma once
 
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/ByteRange.hpp"
@@ -51,5 +50,3 @@ namespace validation
         virtual void Remove(infra::BoundedConstString path, const Done& onDone) = 0;
     };
 }
-
-#endif

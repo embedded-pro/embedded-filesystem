@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_RECORD_READER_HPP
-#define FS_NOR_NOR_RECORD_READER_HPP
+#pragma once
 
 #include "fs/common/CrcRecord.hpp"
 #include "fs/nor/NorGeometry.hpp"
@@ -36,5 +35,3 @@ namespace fs
         infra::AutoResetFunction<void(const std::optional<OpenedRecord>& record)> onDone;
     };
 }
-
-#endif

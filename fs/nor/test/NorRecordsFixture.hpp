@@ -1,5 +1,4 @@
-#ifndef FS_NOR_TEST_NOR_RECORDS_FIXTURE_HPP
-#define FS_NOR_TEST_NOR_RECORDS_FIXTURE_HPP
+#pragma once
 
 #include "fs/common/LittleEndian.hpp"
 #include "fs/nor/NorBTree.hpp"
@@ -194,5 +193,3 @@ namespace fs
         std::array<uint8_t, 512> recordBuffer{};
     };
 }
-
-#endif

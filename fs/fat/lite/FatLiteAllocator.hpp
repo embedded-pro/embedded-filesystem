@@ -1,5 +1,4 @@
-#ifndef FS_FAT_LITE_FAT_LITE_ALLOCATOR_HPP
-#define FS_FAT_LITE_FAT_LITE_ALLOCATOR_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -47,5 +46,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onFreed;
     };
 }
-
-#endif

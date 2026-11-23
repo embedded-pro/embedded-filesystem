@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_MAP_FETCH_HPP
-#define FS_NOR_NOR_MAP_FETCH_HPP
+#pragma once
 
 #include "fs/nor/NorNode.hpp"
 #include "fs/nor/NorNodeCache.hpp"
@@ -45,5 +44,3 @@ namespace fs
         infra::AutoResetFunction<void(NorFetchResult result)> onDone;
     };
 }
-
-#endif

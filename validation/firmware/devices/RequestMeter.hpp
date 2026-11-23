@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_DEVICES_REQUEST_METER_HPP
-#define VALIDATION_FIRMWARE_DEVICES_REQUEST_METER_HPP
+#pragma once
 
 #include "infra/timer/Timer.hpp"
 #include "infra/util/Function.hpp"
@@ -33,5 +32,3 @@ namespace validation
         uint32_t lastCycles{ 0 };
     };
 }
-
-#endif

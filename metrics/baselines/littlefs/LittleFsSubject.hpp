@@ -1,5 +1,4 @@
-#ifndef METRICS_BASELINES_LITTLEFS_LITTLE_FS_SUBJECT_HPP
-#define METRICS_BASELINES_LITTLEFS_LITTLE_FS_SUBJECT_HPP
+#pragma once
 
 #include "lfs.h"
 #include "metrics/baselines/SynchronousDevices.hpp"
@@ -91,5 +90,3 @@ namespace metrics
         CompletionQueue completions;
     };
 }
-
-#endif

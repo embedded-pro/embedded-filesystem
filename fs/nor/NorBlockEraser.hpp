@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_BLOCK_ERASER_HPP
-#define FS_NOR_NOR_BLOCK_ERASER_HPP
+#pragma once
 
 #include "fs/nor/NorWear.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -37,5 +36,3 @@ namespace fs
         infra::AutoResetFunction<void()> onStepped;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_MAKE_DIRECTORY_HPP
-#define FS_NOR_NOR_MAKE_DIRECTORY_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorCreate.hpp"
@@ -26,5 +25,3 @@ namespace fs
         NorCreate create;
     };
 }
-
-#endif

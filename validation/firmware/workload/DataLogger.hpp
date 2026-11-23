@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_DATA_LOGGER_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_DATA_LOGGER_HPP
+#pragma once
 
 #include "infra/util/AutoResetFunction.hpp"
 #include "validation/firmware/workload/LogAppender.hpp"
@@ -35,5 +34,3 @@ namespace validation
         infra::AutoResetFunction<void()> onDone;
     };
 }
-
-#endif

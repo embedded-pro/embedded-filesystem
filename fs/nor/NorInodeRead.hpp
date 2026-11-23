@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_INODE_READ_HPP
-#define FS_NOR_NOR_INODE_READ_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorConfig.hpp"
@@ -37,5 +36,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef METRICS_REPORT_REPORT_ENVIRONMENT_HPP
-#define METRICS_REPORT_REPORT_ENVIRONMENT_HPP
+#pragma once
 
 #include "metrics/report/Report.hpp"
 #include "gtest/gtest.h"
@@ -23,5 +22,3 @@ namespace metrics
 
     std::optional<std::string> TakeMetricsOutputPath(int& argc, char** argv);
 }
-
-#endif

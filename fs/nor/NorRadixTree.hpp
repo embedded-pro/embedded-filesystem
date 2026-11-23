@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_RADIX_TREE_HPP
-#define FS_NOR_NOR_RADIX_TREE_HPP
+#pragma once
 
 #include "fs/nor/NorLayout.hpp"
 #include "fs/nor/NorNode.hpp"
@@ -53,5 +52,3 @@ namespace fs
         uint32_t owner;
     };
 }
-
-#endif

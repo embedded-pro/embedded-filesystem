@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_CRC32_HPP
-#define FS_COMMON_CRC32_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include "infra/util/Crc.hpp"
@@ -11,5 +10,3 @@ namespace fs
 
     uint32_t Crc32Of(infra::ConstByteRange bytes);
 }
-
-#endif

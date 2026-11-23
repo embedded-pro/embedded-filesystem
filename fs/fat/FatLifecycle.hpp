@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_LIFECYCLE_HPP
-#define FS_FAT_FAT_LIFECYCLE_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include <variant>
@@ -63,5 +62,3 @@ namespace fs
 
     using FatLifecycleEvent = std::variant<FatMountRequested, FatMountDone, FatUnmountRequested, FatUnmountDone, FatMediaRemoved>;
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_CLOSED_FILES_HPP
-#define FS_FAT_FAT_CLOSED_FILES_HPP
+#pragma once
 
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatExtentCache.hpp"
@@ -36,5 +35,3 @@ namespace fs
         std::size_t count{ 0 };
     };
 }
-
-#endif

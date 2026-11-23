@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_MOUNT_HPP
-#define FS_FAT_FAT_MOUNT_HPP
+#pragma once
 
 #include "fs/common/SectorCache.hpp"
 #include "fs/fat/FatBootSector.hpp"
@@ -46,5 +45,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

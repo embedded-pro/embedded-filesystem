@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_TIMING_NANOSECONDS_HPP
-#define VALIDATION_FIRMWARE_TIMING_NANOSECONDS_HPP
+#pragma once
 
 #include <cstdint>
 
@@ -10,5 +9,3 @@ namespace validation
         return cycles / clockHz * 1'000'000'000 + cycles % clockHz * 1'000'000'000 / clockHz;
     }
 }
-
-#endif

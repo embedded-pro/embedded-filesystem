@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_FILE_SYSTEM_HPP
-#define FS_FAT_FAT_FILE_SYSTEM_HPP
+#pragma once
 
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/FlushBarrier.hpp"
@@ -284,5 +283,3 @@ namespace fs
             .Allow<FatFault, FatMounting>();
     }
 }
-
-#endif

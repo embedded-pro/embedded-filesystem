@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_CYCLES_SUBJECTS_CYCLE_CONFIGURATIONS_HPP
-#define VALIDATION_FIRMWARE_CYCLES_SUBJECTS_CYCLE_CONFIGURATIONS_HPP
+#pragma once
 
 #include "fs/fat/FatFileSystem.hpp"
 #include "fs/nor/NorFileSystem.hpp"
@@ -23,5 +22,3 @@ namespace validation::cycles
 
     constexpr footprint::LittleFsConfiguration littleFsRamMatched{ 16, 16, ramFlashSectorSize, ramFlashSectors / 8, 500, true };
 }
-
-#endif

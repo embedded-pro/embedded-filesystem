@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_OPEN_FILE_HPP
-#define FS_FAT_FAT_OPEN_FILE_HPP
+#pragma once
 
 #include "fs/fat/FatEntryAssembler.hpp"
 #include "fs/fat/FatReservation.hpp"
@@ -26,5 +25,3 @@ namespace fs
         void Committed();
     };
 }
-
-#endif

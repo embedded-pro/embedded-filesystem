@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_OPEN_FILE_HPP
-#define FS_NOR_NOR_OPEN_FILE_HPP
+#pragma once
 
 #include "fs/interfaces/OpenMode.hpp"
 #include "fs/nor/NorRecord.hpp"
@@ -41,5 +40,3 @@ namespace fs
         std::optional<uint32_t> SecondLeafIndex(uint32_t fanout) const;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_DEVICES_COUNTING_FLASH_HPP
-#define VALIDATION_FIRMWARE_DEVICES_COUNTING_FLASH_HPP
+#pragma once
 
 #include "hal/interfaces/Flash.hpp"
 #include "infra/timer/Timer.hpp"
@@ -62,5 +61,3 @@ namespace validation
         infra::AutoResetFunction<void()> onDone;
     };
 }
-
-#endif

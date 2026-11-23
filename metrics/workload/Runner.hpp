@@ -1,5 +1,4 @@
-#ifndef METRICS_WORKLOAD_RUNNER_HPP
-#define METRICS_WORKLOAD_RUNNER_HPP
+#pragma once
 
 #include "metrics/device/VirtualTime.hpp"
 #include "metrics/workload/DeviceProbe.hpp"
@@ -94,5 +93,3 @@ namespace metrics
         bool interrupted{ false };
     };
 }
-
-#endif

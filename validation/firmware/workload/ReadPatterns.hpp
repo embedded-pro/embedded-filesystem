@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_READ_PATTERNS_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_READ_PATTERNS_HPP
+#pragma once
 
 #include "infra/util/AutoResetFunction.hpp"
 #include "metrics/workload/Random.hpp"
@@ -57,5 +56,3 @@ namespace validation
         std::array<uint8_t, chunkSize> data{};
     };
 }
-
-#endif

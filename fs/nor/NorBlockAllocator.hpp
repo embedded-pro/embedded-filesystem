@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_BLOCK_ALLOCATOR_HPP
-#define FS_NOR_NOR_BLOCK_ALLOCATOR_HPP
+#pragma once
 
 #include "fs/nor/NorBlockHeader.hpp"
 #include "fs/nor/NorWear.hpp"
@@ -44,5 +43,3 @@ namespace fs
         infra::AutoResetFunction<void(std::optional<uint32_t> block)> onDone;
     };
 }
-
-#endif

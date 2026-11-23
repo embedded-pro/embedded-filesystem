@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_TRANSFER_ALIGNMENT_HPP
-#define FS_COMMON_TRANSFER_ALIGNMENT_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstddef>
@@ -21,5 +20,3 @@ namespace fs
         std::size_t alignment;
     };
 }
-
-#endif

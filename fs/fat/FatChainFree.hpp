@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_CHAIN_FREE_HPP
-#define FS_FAT_FAT_CHAIN_FREE_HPP
+#pragma once
 
 #include "fs/common/DirectTransfers.hpp"
 #include "fs/common/SectorCache.hpp"
@@ -55,5 +54,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

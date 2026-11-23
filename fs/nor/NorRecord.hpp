@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_RECORD_HPP
-#define FS_NOR_NOR_RECORD_HPP
+#pragma once
 
 #include "fs/common/CrcRecord.hpp"
 #include "fs/nor/NorLayout.hpp"
@@ -127,5 +126,3 @@ namespace fs
         bool malformed{ false };
     };
 }
-
-#endif

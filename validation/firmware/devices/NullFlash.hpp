@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_DEVICES_NULL_FLASH_HPP
-#define VALIDATION_FIRMWARE_DEVICES_NULL_FLASH_HPP
+#pragma once
 
 #include "hal/interfaces/FlashHomogeneous.hpp"
 
@@ -16,5 +15,3 @@ namespace validation
         void EraseSectors(uint32_t beginIndex, uint32_t endIndex, infra::Function<void()> onDone) override;
     };
 }
-
-#endif

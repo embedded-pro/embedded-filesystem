@@ -1,5 +1,4 @@
-#ifndef FS_FAT_TEST_FAT_FILE_SYSTEM_FIXTURE_HPP
-#define FS_FAT_TEST_FAT_FILE_SYSTEM_FIXTURE_HPP
+#pragma once
 
 #include "fs/fat/FatFileSystem.hpp"
 #include "fs/fat/FatFormatter.hpp"
@@ -165,5 +164,3 @@ public:
     testing::StrictMock<infra::MockCallback<void(fs::Result, std::size_t)>> readDone;
     testing::StrictMock<infra::MockCallback<void(fs::Result)>> done;
 };
-
-#endif

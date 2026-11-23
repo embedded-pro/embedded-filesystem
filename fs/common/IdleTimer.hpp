@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_IDLE_TIMER_HPP
-#define FS_COMMON_IDLE_TIMER_HPP
+#pragma once
 
 #include "fs/common/OperationQueue.hpp"
 #include "infra/timer/Timer.hpp"
@@ -26,5 +25,3 @@ namespace fs
         infra::TimerSingleShot timer;
     };
 }
-
-#endif

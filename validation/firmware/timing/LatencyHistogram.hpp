@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_TIMING_LATENCY_HISTOGRAM_HPP
-#define VALIDATION_FIRMWARE_TIMING_LATENCY_HISTOGRAM_HPP
+#pragma once
 
 #include "infra/util/BoundedVector.hpp"
 #include <array>
@@ -25,5 +24,3 @@ namespace validation
         std::array<uint32_t, buckets> counts{};
     };
 }
-
-#endif

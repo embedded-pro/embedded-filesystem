@@ -1,5 +1,4 @@
-#ifndef FS_NOR_TEST_DOUBLES_NOR_IMAGE_FLASH_HPP
-#define FS_NOR_TEST_DOUBLES_NOR_IMAGE_FLASH_HPP
+#pragma once
 
 #include "fs/nor/test_doubles/NorImage.hpp"
 #include "hal/interfaces/Flash.hpp"
@@ -24,5 +23,3 @@ namespace fs
         NorImage& image;
     };
 }
-
-#endif

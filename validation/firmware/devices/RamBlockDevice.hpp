@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_DEVICES_RAM_BLOCK_DEVICE_HPP
-#define VALIDATION_FIRMWARE_DEVICES_RAM_BLOCK_DEVICE_HPP
+#pragma once
 
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -37,5 +36,3 @@ namespace validation
         Result pendingResult{ Result::success };
     };
 }
-
-#endif

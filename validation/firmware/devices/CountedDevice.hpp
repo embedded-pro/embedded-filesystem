@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_DEVICES_COUNTED_DEVICE_HPP
-#define VALIDATION_FIRMWARE_DEVICES_COUNTED_DEVICE_HPP
+#pragma once
 
 #include "infra/util/Function.hpp"
 #include "validation/firmware/devices/DeviceCounts.hpp"
@@ -23,5 +22,3 @@ namespace validation
         virtual bool InUse() const = 0;
     };
 }
-
-#endif

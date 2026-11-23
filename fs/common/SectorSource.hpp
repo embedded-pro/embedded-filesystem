@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_SECTOR_SOURCE_HPP
-#define FS_COMMON_SECTOR_SOURCE_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/ByteRange.hpp"
@@ -21,5 +20,3 @@ namespace fs
         virtual void Read(uint32_t sector, const infra::Function<void(Result result, infra::ConstByteRange contents)>& onDone) = 0;
     };
 }
-
-#endif

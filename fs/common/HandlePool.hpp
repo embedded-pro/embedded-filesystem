@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_HANDLE_POOL_HPP
-#define FS_COMMON_HANDLE_POOL_HPP
+#pragma once
 
 #include "infra/util/BoundedVector.hpp"
 #include "infra/util/SharedPtr.hpp"
@@ -99,5 +98,3 @@ namespace fs
         return true;
     }
 }
-
-#endif

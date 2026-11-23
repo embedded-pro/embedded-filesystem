@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_TIMING_TEST_DOUBLES_FAKE_CYCLE_COUNTER_HPP
-#define VALIDATION_FIRMWARE_TIMING_TEST_DOUBLES_FAKE_CYCLE_COUNTER_HPP
+#pragma once
 
 #include "infra/timer/Timer.hpp"
 #include "validation/firmware/timing/CycleCounter.hpp"
@@ -24,5 +23,3 @@ namespace validation
         uint64_t added{ 0 };
     };
 }
-
-#endif

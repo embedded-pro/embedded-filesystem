@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_ENTRY_ASSEMBLER_HPP
-#define FS_FAT_FAT_ENTRY_ASSEMBLER_HPP
+#pragma once
 
 #include "fs/fat/FatDirectoryEntry.hpp"
 #include "fs/interfaces/EntryInfo.hpp"
@@ -79,5 +78,3 @@ namespace fs
         FatScannedEntry scanned;
     };
 }
-
-#endif

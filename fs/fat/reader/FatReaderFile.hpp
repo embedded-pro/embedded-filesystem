@@ -1,5 +1,4 @@
-#ifndef FS_FAT_READER_FAT_READER_FILE_HPP
-#define FS_FAT_READER_FAT_READER_FILE_HPP
+#pragma once
 
 #include "fs/common/HandlePool.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
@@ -71,5 +70,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result, std::size_t bytesRead)> onRead;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef METRICS_SUITE_METRIC_RECORDER_HPP
-#define METRICS_SUITE_METRIC_RECORDER_HPP
+#pragma once
 
 #include "metrics/report/Report.hpp"
 #include "metrics/report/Targets.hpp"
@@ -29,5 +28,3 @@ namespace metrics
 
     std::optional<std::string> UnexpectedResult(const Runner& runner);
 }
-
-#endif

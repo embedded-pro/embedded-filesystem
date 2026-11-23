@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_CYCLES_CYCLE_RUN_HPP
-#define VALIDATION_FIRMWARE_CYCLES_CYCLE_RUN_HPP
+#pragma once
 
 #include "infra/timer/Timer.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -149,5 +148,3 @@ namespace validation
         alignas(32) std::array<uint8_t, writeBytes> readBuffer{};
     };
 }
-
-#endif

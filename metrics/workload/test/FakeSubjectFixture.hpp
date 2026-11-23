@@ -1,5 +1,4 @@
-#ifndef METRICS_WORKLOAD_TEST_FAKE_SUBJECT_FIXTURE_HPP
-#define METRICS_WORKLOAD_TEST_FAKE_SUBJECT_FIXTURE_HPP
+#pragma once
 
 #include "hal/interfaces/test_doubles/FlashStub.hpp"
 #include "infra/timer/test_helper/ClockFixture.hpp"
@@ -28,5 +27,3 @@ namespace metrics
         Runner runner{ time, subject, probe };
     };
 }
-
-#endif

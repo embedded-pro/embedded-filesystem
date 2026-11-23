@@ -1,5 +1,4 @@
-#ifndef METRICS_NOR_NOR_TARGETS_HPP
-#define METRICS_NOR_NOR_TARGETS_HPP
+#pragma once
 
 #include "fs/nor/NorConfig.hpp"
 #include "metrics/device/DeviceModels.hpp"
@@ -39,5 +38,3 @@ namespace metrics
         std::string smallerFilesOfL1;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_HIL_DEVICE_COMMANDS_HPP
-#define VALIDATION_FIRMWARE_HIL_DEVICE_COMMANDS_HPP
+#pragma once
 
 #include "infra/util/MemoryRange.hpp"
 #include "services/hil/HilArguments.hpp"
@@ -39,5 +38,3 @@ namespace validation
         std::array<Command, 2> commands;
     };
 }
-
-#endif

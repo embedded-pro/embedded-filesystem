@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FOOTPRINT_CONFIGURATIONS_HPP
-#define VALIDATION_FOOTPRINT_CONFIGURATIONS_HPP
+#pragma once
 
 #include "fs/nor/NorConfig.hpp"
 #include <cstdint>
@@ -26,5 +25,3 @@ namespace validation::footprint
     constexpr LittleFsConfiguration littleFsDefault{ 16, 16, 16, 16, 500, false };
     constexpr LittleFsConfiguration littleFsRamMatched{ 16, 16, norSectorSize, 512, 500, true };
 }
-
-#endif

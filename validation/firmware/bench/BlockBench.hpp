@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_BENCH_BLOCK_BENCH_HPP
-#define VALIDATION_FIRMWARE_BENCH_BLOCK_BENCH_HPP
+#pragma once
 
 #include "fs/common/TransferAlignment.hpp"
 #include "infra/util/BoundedString.hpp"
@@ -59,5 +58,3 @@ namespace validation
         alignas(fs::bufferAlignment) std::array<uint8_t, maximumBlocks * 512> buffer{};
     };
 }
-
-#endif

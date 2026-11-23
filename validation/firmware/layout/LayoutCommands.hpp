@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_LAYOUT_LAYOUT_COMMANDS_HPP
-#define VALIDATION_FIRMWARE_LAYOUT_LAYOUT_COMMANDS_HPP
+#pragma once
 
 #include "fs/common/TransferAlignment.hpp"
 #include "fs/fat/FatFormatter.hpp"
@@ -67,5 +66,3 @@ namespace validation
         std::array<Command, 2> commands;
     };
 }
-
-#endif

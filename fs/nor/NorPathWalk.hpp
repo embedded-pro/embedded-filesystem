@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_PATH_WALK_HPP
-#define FS_NOR_NOR_PATH_WALK_HPP
+#pragma once
 
 #include "fs/common/Path.hpp"
 #include "fs/interfaces/Result.hpp"
@@ -52,5 +51,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

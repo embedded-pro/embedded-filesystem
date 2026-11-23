@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_FLUSH_BARRIER_HPP
-#define FS_COMMON_FLUSH_BARRIER_HPP
+#pragma once
 
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -47,5 +46,3 @@ namespace fs
         infra::AutoResetFunction<void(hal::BlockDevice::Result result)> onDone;
     };
 }
-
-#endif

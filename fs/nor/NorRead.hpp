@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_READ_HPP
-#define FS_NOR_NOR_READ_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorMapFetch.hpp"
@@ -45,5 +44,3 @@ namespace fs
         infra::Function<void(Result result, std::size_t bytesRead)> onDone;
     };
 }
-
-#endif

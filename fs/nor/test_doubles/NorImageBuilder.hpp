@@ -1,5 +1,4 @@
-#ifndef FS_NOR_TEST_DOUBLES_NOR_IMAGE_BUILDER_HPP
-#define FS_NOR_TEST_DOUBLES_NOR_IMAGE_BUILDER_HPP
+#pragma once
 
 #include "fs/common/CrcRecord.hpp"
 #include "fs/nor/NorBlockHeader.hpp"
@@ -106,5 +105,3 @@ namespace fs
         infra::BoundedVector<uint32_t>::WithMaxSize<128> blocksToCommit;
     };
 }
-
-#endif

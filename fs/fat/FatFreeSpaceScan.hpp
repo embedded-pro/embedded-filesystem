@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_FREE_SPACE_SCAN_HPP
-#define FS_FAT_FAT_FREE_SPACE_SCAN_HPP
+#pragma once
 
 #include "fs/common/SectorCache.hpp"
 #include "fs/fat/FatFreeRuns.hpp"
@@ -43,5 +42,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

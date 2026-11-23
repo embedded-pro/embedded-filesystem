@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_EXTENT_CACHE_HPP
-#define FS_FAT_FAT_EXTENT_CACHE_HPP
+#pragma once
 
 #include "infra/util/MemoryRange.hpp"
 #include <array>
@@ -74,5 +73,3 @@ namespace fs
         {}
     };
 }
-
-#endif

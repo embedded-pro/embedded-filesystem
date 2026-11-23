@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_BENCH_BENCH_COMMANDS_HPP
-#define VALIDATION_FIRMWARE_BENCH_BENCH_COMMANDS_HPP
+#pragma once
 
 #include "services/hil/HilArguments.hpp"
 #include "services/hil/HilCommand.hpp"
@@ -82,5 +81,3 @@ namespace validation
         std::array<Command, 8> commands;
     };
 }
-
-#endif

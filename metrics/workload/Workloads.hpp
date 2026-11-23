@@ -1,5 +1,4 @@
-#ifndef METRICS_WORKLOAD_WORKLOADS_HPP
-#define METRICS_WORKLOAD_WORKLOADS_HPP
+#pragma once
 
 #include "metrics/workload/Runner.hpp"
 #include <cstddef>
@@ -38,5 +37,3 @@ namespace metrics
     void ReadPatterns(Runner& runner, const WorkloadParameters& parameters);
     void MountScaling(Runner& runner, const WorkloadParameters& parameters);
 }
-
-#endif

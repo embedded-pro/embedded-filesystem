@@ -1,5 +1,4 @@
-#ifndef METRICS_DEVICE_DEVICE_MODELS_HPP
-#define METRICS_DEVICE_DEVICE_MODELS_HPP
+#pragma once
 
 #include "infra/timer/TimerService.hpp"
 #include <cstddef>
@@ -78,5 +77,3 @@ namespace metrics
     std::vector<std::pair<std::string, std::string>> Parameters(const NorModel& model);
     std::vector<std::pair<std::string, std::string>> Parameters(const BlockDeviceModel& model);
 }
-
-#endif

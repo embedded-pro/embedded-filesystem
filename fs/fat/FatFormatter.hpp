@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_FORMATTER_HPP
-#define FS_FAT_FAT_FORMATTER_HPP
+#pragma once
 
 #include "fs/common/TransferAlignment.hpp"
 #include "fs/fat/FatFormatLayout.hpp"
@@ -103,5 +102,3 @@ namespace fs
         {}
     };
 }
-
-#endif

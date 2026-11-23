@@ -1,5 +1,4 @@
-#ifndef FS_FAT_READER_FAT_READER_VOLUME_HPP
-#define FS_FAT_READER_FAT_READER_VOLUME_HPP
+#pragma once
 
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/Deliver.hpp"
@@ -73,5 +72,3 @@ namespace fs
 
     extern template void FatReaderVolume::Defer(const infra::Function<void(Result result)>& onDone, Result result);
 }
-
-#endif

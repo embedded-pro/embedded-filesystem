@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_OPEN_HPP
-#define FS_NOR_NOR_OPEN_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorCreate.hpp"
@@ -51,5 +50,3 @@ namespace fs
         uint32_t lastIndex{ 0 };
     };
 }
-
-#endif

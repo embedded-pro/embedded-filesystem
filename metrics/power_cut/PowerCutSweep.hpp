@@ -1,5 +1,4 @@
-#ifndef METRICS_POWER_CUT_POWER_CUT_SWEEP_HPP
-#define METRICS_POWER_CUT_POWER_CUT_SWEEP_HPP
+#pragma once
 
 #include "hal/interfaces/BlockDevice.hpp"
 #include "hal/interfaces/Flash.hpp"
@@ -90,5 +89,3 @@ namespace metrics
 
     std::vector<uint64_t> SampledCutPoints(uint64_t writeSteps, std::optional<uint64_t> maximum);
 }
-
-#endif

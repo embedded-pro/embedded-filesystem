@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_DIRECTORY_HPP
-#define FS_FAT_FAT_DIRECTORY_HPP
+#pragma once
 
 #include "fs/common/HandlePool.hpp"
 #include "fs/common/OperationQueue.hpp"
@@ -51,5 +50,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result, std::optional<EntryInfo> entry)> onDone;
     };
 }
-
-#endif

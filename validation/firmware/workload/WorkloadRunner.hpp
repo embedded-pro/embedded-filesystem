@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_RUNNER_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_WORKLOAD_RUNNER_HPP
+#pragma once
 
 #include "fs/interfaces/Directory.hpp"
 #include "fs/interfaces/File.hpp"
@@ -108,5 +107,3 @@ namespace validation
         infra::AutoResetFunction<void()> onReleased;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_DEVICES_BLOCK_DEVICE_REGION_HPP
-#define VALIDATION_FIRMWARE_DEVICES_BLOCK_DEVICE_REGION_HPP
+#pragma once
 
 #include "hal/interfaces/BlockDevice.hpp"
 #include <cstdint>
@@ -29,5 +28,3 @@ namespace validation
         uint32_t blocks;
     };
 }
-
-#endif

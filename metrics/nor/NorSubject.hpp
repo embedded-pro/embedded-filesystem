@@ -1,5 +1,4 @@
-#ifndef METRICS_NOR_NOR_SUBJECT_HPP
-#define METRICS_NOR_NOR_SUBJECT_HPP
+#pragma once
 
 #include "fs/nor/NorConfig.hpp"
 #include "fs/nor/NorFileSystem.hpp"
@@ -109,5 +108,3 @@ namespace metrics
         {}
     };
 }
-
-#endif

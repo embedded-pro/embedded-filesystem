@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_FILE_WRITER_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_FILE_WRITER_HPP
+#pragma once
 
 #include "infra/util/AutoResetFunction.hpp"
 #include "validation/firmware/workload/Workload.hpp"
@@ -47,5 +46,3 @@ namespace validation
         std::array<uint8_t, maximumChunk> data{};
     };
 }
-
-#endif

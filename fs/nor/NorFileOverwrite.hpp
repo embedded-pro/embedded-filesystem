@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_FILE_OVERWRITE_HPP
-#define FS_NOR_NOR_FILE_OVERWRITE_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorMapFetch.hpp"
@@ -59,5 +58,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_PHASE_TOTALS_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_PHASE_TOTALS_HPP
+#pragma once
 
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/BoundedVector.hpp"
@@ -67,5 +66,3 @@ namespace validation
         infra::BoundedString::WithStorage<24> key;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_ENTRY_UPDATE_HPP
-#define FS_FAT_FAT_ENTRY_UPDATE_HPP
+#pragma once
 
 #include "fs/common/SectorCache.hpp"
 #include "fs/fat/FatDirectoryEntry.hpp"
@@ -40,5 +39,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

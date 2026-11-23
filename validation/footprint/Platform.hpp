@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FOOTPRINT_PLATFORM_HPP
-#define VALIDATION_FOOTPRINT_PLATFORM_HPP
+#pragma once
 
 #include "hal/cortex_m/InterruptCortex.hpp"
 #include "hal/cortex_m/SystemTickTimerService.hpp"
@@ -26,5 +25,3 @@ namespace validation::footprint
         std::array<uint8_t, 64> buffer{};
     };
 }
-
-#endif

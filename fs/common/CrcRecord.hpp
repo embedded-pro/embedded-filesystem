@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_CRC_RECORD_HPP
-#define FS_COMMON_CRC_RECORD_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstddef>
@@ -38,5 +37,3 @@ namespace fs
     std::optional<std::size_t> RecordLength(infra::ConstByteRange header);
     std::optional<OpenedRecord> OpenRecord(infra::ConstByteRange bytes);
 }
-
-#endif

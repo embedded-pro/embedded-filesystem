@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_DELIVER_HPP
-#define FS_COMMON_DELIVER_HPP
+#pragma once
 
 #include "fs/interfaces/Directory.hpp"
 #include "fs/interfaces/EntryInfo.hpp"
@@ -48,5 +47,3 @@ namespace fs::detail
         onDone(result, 0);
     }
 }
-
-#endif

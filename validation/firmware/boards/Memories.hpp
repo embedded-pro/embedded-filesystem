@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_BOARDS_MEMORIES_HPP
-#define VALIDATION_FIRMWARE_BOARDS_MEMORIES_HPP
+#pragma once
 
 #include "infra/util/MemoryRange.hpp"
 #include <cstdint>
@@ -21,5 +20,3 @@ namespace validation
 
     void ConfigureMemories(infra::MemoryRange<const MemoryRegion> regions);
 }
-
-#endif

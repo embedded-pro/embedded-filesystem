@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_CHECKPOINT_LOAD_HPP
-#define FS_NOR_NOR_CHECKPOINT_LOAD_HPP
+#pragma once
 
 #include "fs/common/Crc32.hpp"
 #include "fs/interfaces/Result.hpp"
@@ -72,5 +71,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

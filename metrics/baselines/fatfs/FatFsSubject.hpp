@@ -1,5 +1,4 @@
-#ifndef METRICS_BASELINES_FATFS_FAT_FS_SUBJECT_HPP
-#define METRICS_BASELINES_FATFS_FAT_FS_SUBJECT_HPP
+#pragma once
 
 #include "ff.h"
 #include "metrics/baselines/SynchronousDevices.hpp"
@@ -69,5 +68,3 @@ namespace metrics
         CompletionQueue completions;
     };
 }
-
-#endif

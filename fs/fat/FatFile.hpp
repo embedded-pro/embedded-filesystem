@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_FILE_HPP
-#define FS_FAT_FAT_FILE_HPP
+#pragma once
 
 #include "fs/common/HandlePool.hpp"
 #include "fs/common/OperationQueue.hpp"
@@ -106,5 +105,3 @@ namespace fs
         {}
     };
 }
-
-#endif

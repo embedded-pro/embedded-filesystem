@@ -1,5 +1,4 @@
-#ifndef METRICS_POWER_CUT_POWER_CUT_BLOCK_DEVICE_HPP
-#define METRICS_POWER_CUT_POWER_CUT_BLOCK_DEVICE_HPP
+#pragma once
 
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -73,5 +72,3 @@ namespace metrics
         infra::AutoResetFunction<void(Result)> onFlushDone;
     };
 }
-
-#endif

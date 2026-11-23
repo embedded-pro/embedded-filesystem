@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_BOARDS_BOARD_INFO_STM_HPP
-#define VALIDATION_FIRMWARE_BOARDS_BOARD_INFO_STM_HPP
+#pragma once
 
 #include "services/hil/HilBoardInfo.hpp"
 
@@ -25,5 +24,3 @@ namespace validation
         const char* resetCause;
     };
 }
-
-#endif

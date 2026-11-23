@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_TABLE_WRITER_HPP
-#define FS_FAT_FAT_TABLE_WRITER_HPP
+#pragma once
 
 #include "fs/common/SectorStore.hpp"
 #include "fs/fat/FatGeometry.hpp"
@@ -35,5 +34,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

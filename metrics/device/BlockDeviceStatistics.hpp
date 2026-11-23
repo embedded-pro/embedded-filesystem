@@ -1,5 +1,4 @@
-#ifndef METRICS_DEVICE_BLOCK_DEVICE_STATISTICS_HPP
-#define METRICS_DEVICE_BLOCK_DEVICE_STATISTICS_HPP
+#pragma once
 
 #include "infra/timer/TimerService.hpp"
 #include <cstdint>
@@ -30,5 +29,3 @@ namespace metrics
         bool operator==(const BlockDeviceCounters& other) const = default;
     };
 }
-
-#endif

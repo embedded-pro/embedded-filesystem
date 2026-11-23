@@ -1,5 +1,4 @@
-#ifndef METRICS_REPORT_TARGETS_HPP
-#define METRICS_REPORT_TARGETS_HPP
+#pragma once
 
 #include "metrics/report/Report.hpp"
 #include <optional>
@@ -19,5 +18,3 @@ namespace metrics
         virtual std::optional<Target> For(std::string_view metric, std::string_view workload) const = 0;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_TIMING_CYCLE_COUNTER_HPP
-#define VALIDATION_FIRMWARE_TIMING_CYCLE_COUNTER_HPP
+#pragma once
 
 #include <cstdint>
 
@@ -18,5 +17,3 @@ namespace validation
         virtual uint32_t Cycles() const = 0;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_CYCLES_IDLE_CYCLE_COUNTER_HPP
-#define VALIDATION_FIRMWARE_CYCLES_IDLE_CYCLE_COUNTER_HPP
+#pragma once
 
 #include "infra/event/LowPowerEventDispatcher.hpp"
 #include "validation/firmware/timing/CycleCounter.hpp"
@@ -37,5 +36,3 @@ namespace validation
         uint64_t idleCycles{ 0 };
     };
 }
-
-#endif

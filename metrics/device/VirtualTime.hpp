@@ -1,5 +1,4 @@
-#ifndef METRICS_DEVICE_VIRTUAL_TIME_HPP
-#define METRICS_DEVICE_VIRTUAL_TIME_HPP
+#pragma once
 
 #include "infra/timer/test_helper/PerfectTimerService.hpp"
 #include <functional>
@@ -30,5 +29,3 @@ namespace metrics
         bool running{ false };
     };
 }
-
-#endif

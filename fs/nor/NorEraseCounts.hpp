@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_ERASE_COUNTS_HPP
-#define FS_NOR_NOR_ERASE_COUNTS_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
@@ -33,5 +32,3 @@ namespace fs
         bool based{ false };
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef METRICS_BOARDS_BOARD_DEVICES_HPP
-#define METRICS_BOARDS_BOARD_DEVICES_HPP
+#pragma once
 
 #include "fs/nor/NorConfig.hpp"
 #include "metrics/device/DeviceModels.hpp"
@@ -28,5 +27,3 @@ namespace metrics
 
     std::string DeviceModelsJson(std::span<const NorBoardDevice> norDevices, std::span<const BlockBoardDevice> blockDevices = {});
 }
-
-#endif

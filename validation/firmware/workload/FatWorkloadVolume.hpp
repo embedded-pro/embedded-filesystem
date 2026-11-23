@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_WORKLOAD_FAT_WORKLOAD_VOLUME_HPP
-#define VALIDATION_FIRMWARE_WORKLOAD_FAT_WORKLOAD_VOLUME_HPP
+#pragma once
 
 #include "fs/common/TransferAlignment.hpp"
 #include "fs/fat/FatFileSystem.hpp"
@@ -65,5 +64,3 @@ namespace validation
         fs::FatFormatter::WithStorage<8> formatter;
     };
 }
-
-#endif

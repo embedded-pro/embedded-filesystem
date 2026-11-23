@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_RESULTS_RESULT_LINES_HPP
-#define VALIDATION_FIRMWARE_RESULTS_RESULT_LINES_HPP
+#pragma once
 
 #include "infra/util/BoundedString.hpp"
 #include "infra/util/MemoryRange.hpp"
@@ -54,5 +53,3 @@ namespace validation
         uint32_t nextId = 1;
     };
 }
-
-#endif

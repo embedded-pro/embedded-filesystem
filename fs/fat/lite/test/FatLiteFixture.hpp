@@ -1,5 +1,4 @@
-#ifndef FS_FAT_LITE_TEST_FAT_LITE_FIXTURE_HPP
-#define FS_FAT_LITE_TEST_FAT_LITE_FIXTURE_HPP
+#pragma once
 
 #include "fs/common/LittleEndian.hpp"
 #include "fs/fat/FatFileSystem.hpp"
@@ -265,5 +264,3 @@ public:
         : FatLiteFixture(GetParam())
     {}
 };
-
-#endif

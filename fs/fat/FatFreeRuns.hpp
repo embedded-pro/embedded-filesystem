@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_FREE_RUNS_HPP
-#define FS_FAT_FAT_FREE_RUNS_HPP
+#pragma once
 
 #include "fs/fat/FatAllocationUnits.hpp"
 #include "fs/fat/FatReservation.hpp"
@@ -28,5 +27,3 @@ namespace fs
         FatReservation extending;
     };
 }
-
-#endif

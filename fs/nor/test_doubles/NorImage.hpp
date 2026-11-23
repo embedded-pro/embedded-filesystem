@@ -1,5 +1,4 @@
-#ifndef FS_NOR_TEST_DOUBLES_NOR_IMAGE_HPP
-#define FS_NOR_TEST_DOUBLES_NOR_IMAGE_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
@@ -22,5 +21,3 @@ namespace fs
         virtual void EraseSector(uint32_t sector) = 0;
     };
 }
-
-#endif

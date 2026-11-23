@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_DIRECTORY_READER_HPP
-#define FS_FAT_FAT_DIRECTORY_READER_HPP
+#pragma once
 
 #include "fs/common/SectorSource.hpp"
 #include "fs/fat/FatEntryAssembler.hpp"
@@ -74,5 +73,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

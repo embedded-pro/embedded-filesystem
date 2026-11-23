@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_CONFIG_HPP
-#define FS_NOR_NOR_CONFIG_HPP
+#pragma once
 
 #include "fs/nor/NorLayout.hpp"
 #include <bit>
@@ -78,5 +77,3 @@ namespace fs
         return detail::IsValidNorGeometry(config) && detail::IsValidNorNodes(config) && detail::IsValidNorInodes(config) && detail::IsValidNorWork(config);
     }
 }
-
-#endif

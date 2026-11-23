@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_CYCLES_SUBJECTS_FAT_FS_SUBJECT_HPP
-#define VALIDATION_FIRMWARE_CYCLES_SUBJECTS_FAT_FS_SUBJECT_HPP
+#pragma once
 
 #include "hal/interfaces/BlockDevice.hpp"
 #include "validation/firmware/baselines/FatFsDisk.hpp"
@@ -37,5 +36,3 @@ namespace validation
         bool fileOpen{ false };
     };
 }
-
-#endif

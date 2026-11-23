@@ -1,5 +1,4 @@
-#ifndef FS_FAT_READER_TEST_FAT_READER_FIXTURE_HPP
-#define FS_FAT_READER_TEST_FAT_READER_FIXTURE_HPP
+#pragma once
 
 #include "fs/common/LittleEndian.hpp"
 #include "fs/fat/FatFormatter.hpp"
@@ -252,5 +251,3 @@ public:
         : FatReaderFixture(GetParam())
     {}
 };
-
-#endif

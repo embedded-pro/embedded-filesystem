@@ -1,5 +1,4 @@
-#ifndef FS_FAT_TEST_DOUBLES_BLOCK_IMAGE_HPP
-#define FS_FAT_TEST_DOUBLES_BLOCK_IMAGE_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
@@ -20,5 +19,3 @@ namespace fs
         virtual void WriteBlock(uint32_t block, infra::ConstByteRange data) = 0;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef FS_FAT_LITE_FAT_LITE_HPP
-#define FS_FAT_LITE_FAT_LITE_HPP
+#pragma once
 
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/FlushBarrier.hpp"
@@ -167,5 +166,3 @@ namespace fs
         HandlePool<FatReaderDirectory, Directories> directories{ Volume() };
     };
 }
-
-#endif

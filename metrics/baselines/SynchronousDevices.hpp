@@ -1,5 +1,4 @@
-#ifndef METRICS_BASELINES_SYNCHRONOUS_DEVICES_HPP
-#define METRICS_BASELINES_SYNCHRONOUS_DEVICES_HPP
+#pragma once
 
 #include "hal/interfaces/BlockDevice.hpp"
 #include "hal/interfaces/Flash.hpp"
@@ -55,5 +54,3 @@ namespace metrics
         hal::BlockDevice& device;
     };
 }
-
-#endif

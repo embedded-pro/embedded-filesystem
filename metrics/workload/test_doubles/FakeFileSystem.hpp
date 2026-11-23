@@ -1,5 +1,4 @@
-#ifndef METRICS_WORKLOAD_TEST_DOUBLES_FAKE_FILE_SYSTEM_HPP
-#define METRICS_WORKLOAD_TEST_DOUBLES_FAKE_FILE_SYSTEM_HPP
+#pragma once
 
 #include "hal/interfaces/Flash.hpp"
 #include "metrics/workload/CompletionQueue.hpp"
@@ -75,5 +74,3 @@ namespace metrics
         CompletionQueue completions;
     };
 }
-
-#endif

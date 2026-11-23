@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_FS_INFO_HPP
-#define FS_FAT_FAT_FS_INFO_HPP
+#pragma once
 
 #include "infra/util/ByteRange.hpp"
 #include <cstdint>
@@ -18,5 +17,3 @@ namespace fs
     std::optional<FsInfo> ParseFsInfo(infra::ConstByteRange sector, uint32_t clusterCount);
     void SerializeFsInfo(const FsInfo& info, infra::ByteRange sector);
 }
-
-#endif

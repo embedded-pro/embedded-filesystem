@@ -1,5 +1,4 @@
-#ifndef METRICS_DEVICE_VIRTUAL_TIME_ENVIRONMENT_HPP
-#define METRICS_DEVICE_VIRTUAL_TIME_ENVIRONMENT_HPP
+#pragma once
 
 #include "infra/event/EventDispatcherWithWeakPtr.hpp"
 #include "infra/timer/test_helper/PerfectTimerService.hpp"
@@ -22,5 +21,3 @@ namespace metrics
         VirtualTime time{ timerService };
     };
 }
-
-#endif

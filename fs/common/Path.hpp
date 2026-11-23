@@ -1,5 +1,4 @@
-#ifndef FS_COMMON_PATH_HPP
-#define FS_COMMON_PATH_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "infra/util/BoundedString.hpp"
@@ -36,5 +35,3 @@ namespace fs
         infra::BoundedConstString remaining;
     };
 }
-
-#endif

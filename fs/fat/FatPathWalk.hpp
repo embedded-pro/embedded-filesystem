@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_PATH_WALK_HPP
-#define FS_FAT_FAT_PATH_WALK_HPP
+#pragma once
 
 #include "fs/common/Path.hpp"
 #include "fs/fat/FatDirectoryReader.hpp"
@@ -49,5 +48,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result)> onDone;
     };
 }
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef METRICS_INTEROP_INTEROP_TOOLS_HPP
-#define METRICS_INTEROP_INTEROP_TOOLS_HPP
+#pragma once
 
 #include "hal/interfaces/BlockDevice.hpp"
 #include "infra/util/AutoResetFunction.hpp"
@@ -48,5 +47,3 @@ namespace metrics
         infra::AutoResetFunction<void(Result)> onDone;
     };
 }
-
-#endif

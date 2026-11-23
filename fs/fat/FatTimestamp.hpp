@@ -1,5 +1,4 @@
-#ifndef FS_FAT_FAT_TIMESTAMP_HPP
-#define FS_FAT_FAT_TIMESTAMP_HPP
+#pragma once
 
 #include "infra/timer/Timer.hpp"
 #include <cstdint>
@@ -19,5 +18,3 @@ namespace fs
     FatDateTime ToFatDateTime(infra::TimePoint time);
     FatDateTime FatNow(uint32_t timerServiceId);
 }
-
-#endif

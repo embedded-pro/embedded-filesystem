@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_LAYOUT_HPP
-#define FS_NOR_NOR_LAYOUT_HPP
+#pragma once
 
 #include <cstdint>
 
@@ -67,5 +66,3 @@ namespace fs
         return norInodeRecordFixedBytes + inlineBytes + maxNameBytes;
     }
 }
-
-#endif

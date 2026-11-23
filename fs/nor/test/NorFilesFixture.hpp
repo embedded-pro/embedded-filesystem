@@ -1,5 +1,4 @@
-#ifndef FS_NOR_TEST_NOR_FILES_FIXTURE_HPP
-#define FS_NOR_TEST_NOR_FILES_FIXTURE_HPP
+#pragma once
 
 #include "fs/nor/NorFile.hpp"
 #include "fs/nor/test/NorRecordsFixture.hpp"
@@ -160,5 +159,3 @@ namespace fs
         }
     };
 }
-
-#endif

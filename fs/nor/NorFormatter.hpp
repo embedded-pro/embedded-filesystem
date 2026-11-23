@@ -1,5 +1,4 @@
-#ifndef FS_NOR_NOR_FORMATTER_HPP
-#define FS_NOR_NOR_FORMATTER_HPP
+#pragma once
 
 #include "fs/interfaces/Result.hpp"
 #include "fs/nor/NorConfig.hpp"
@@ -93,5 +92,3 @@ namespace fs
         {}
     };
 }
-
-#endif

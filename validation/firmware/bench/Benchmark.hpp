@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_BENCH_BENCHMARK_HPP
-#define VALIDATION_FIRMWARE_BENCH_BENCHMARK_HPP
+#pragma once
 
 #include "infra/util/AutoResetFunction.hpp"
 #include "infra/util/BoundedString.hpp"
@@ -62,5 +61,3 @@ namespace validation
         Samples::WithCapacity<maximumRepetitions> samples;
     };
 }
-
-#endif

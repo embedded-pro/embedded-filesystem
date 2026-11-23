@@ -1,5 +1,4 @@
-#ifndef FS_FAT_READER_FAT_READER_DIRECTORY_HPP
-#define FS_FAT_READER_FAT_READER_DIRECTORY_HPP
+#pragma once
 
 #include "fs/common/HandlePool.hpp"
 #include "fs/fat/FatDirectoryReader.hpp"
@@ -49,5 +48,3 @@ namespace fs
         infra::AutoResetFunction<void(Result result, std::optional<EntryInfo> entry)> onDone;
     };
 }
-
-#endif

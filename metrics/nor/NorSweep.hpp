@@ -1,5 +1,4 @@
-#ifndef METRICS_NOR_NOR_SWEEP_HPP
-#define METRICS_NOR_NOR_SWEEP_HPP
+#pragma once
 
 #include "fs/common/DeferredCompletions.hpp"
 #include "fs/common/HandlePool.hpp"
@@ -138,5 +137,3 @@ namespace metrics
         infra::SharedPtr<fs::File> file;
     };
 }
-
-#endif

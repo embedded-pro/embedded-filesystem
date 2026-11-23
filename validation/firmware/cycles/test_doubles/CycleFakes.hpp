@@ -1,5 +1,4 @@
-#ifndef VALIDATION_FIRMWARE_CYCLES_TEST_DOUBLES_CYCLE_FAKES_HPP
-#define VALIDATION_FIRMWARE_CYCLES_TEST_DOUBLES_CYCLE_FAKES_HPP
+#pragma once
 
 #include "infra/event/EventDispatcher.hpp"
 #include "infra/stream/StringOutputStream.hpp"
@@ -192,5 +191,3 @@ namespace validation
         std::size_t calls{ 0 };
     };
 }
-
-#endif

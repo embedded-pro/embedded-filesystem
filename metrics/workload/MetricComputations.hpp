@@ -1,5 +1,4 @@
-#ifndef METRICS_WORKLOAD_METRIC_COMPUTATIONS_HPP
-#define METRICS_WORKLOAD_METRIC_COMPUTATIONS_HPP
+#pragma once
 
 #include "metrics/workload/Runner.hpp"
 #include <cstddef>
@@ -35,5 +34,3 @@ namespace metrics
     RecordSelection LastCheckpointPeriods(const std::vector<CallRecord>& records, std::string_view phase, std::size_t periods);
     std::optional<infra::Duration> MeanAppendTime(const RecordSelection& records, infra::Duration sectorErase);
 }
-
-#endif
