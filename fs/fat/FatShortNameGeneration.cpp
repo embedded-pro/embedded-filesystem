@@ -148,8 +148,11 @@ namespace fs
 
         ShortNameBytes bytes;
         bytes.fill(' ');
-        std::ranges::transform(base, bytes.begin(), Upper);
-        std::ranges::transform(extension, bytes.begin() + baseBytes, Upper);
+        // Indexed copy: at -O3 GCC 14+ cannot see the FitsPart() bound and reports -Wstringop-overflow.
+        for (std::size_t index = 0; index != base.size(); ++index)
+            bytes[index] = Upper(base[index]);
+        for (std::size_t index = 0; index != extension.size(); ++index)
+            bytes[baseBytes + index] = Upper(extension[index]);
         return bytes;
     }
 
