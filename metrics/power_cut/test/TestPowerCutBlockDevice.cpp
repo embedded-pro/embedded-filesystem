@@ -2,6 +2,7 @@
 #include "infra/event/test_helper/EventDispatcherFixture.hpp"
 #include "metrics/power_cut/PowerCutBlockDevice.hpp"
 #include "gmock/gmock.h"
+#include <algorithm>
 #include <vector>
 
 namespace
@@ -116,8 +117,8 @@ TEST_F(PowerCutBlockDeviceTest, interrupted_block_is_torn_in_half_by_default)
 
     Write(0, 1, 0x11);
 
-    std::vector<uint8_t> expected(8, 0x11);
-    expected.resize(16, metrics::PowerCutBlockDevice::tornPattern);
+    std::vector<uint8_t> expected(16, metrics::PowerCutBlockDevice::tornPattern);
+    std::fill_n(expected.begin(), 8, 0x11);
     EXPECT_EQ(expected, BlockContent(0));
 }
 
@@ -127,8 +128,8 @@ TEST_F(PowerCutBlockDeviceTest, interrupted_block_is_torn_after_the_given_number
 
     Write(0, 1, 0x11);
 
-    std::vector<uint8_t> expected(4, 0x11);
-    expected.resize(16, metrics::PowerCutBlockDevice::tornPattern);
+    std::vector<uint8_t> expected(16, metrics::PowerCutBlockDevice::tornPattern);
+    std::fill_n(expected.begin(), 4, 0x11);
     EXPECT_EQ(expected, BlockContent(0));
 }
 

@@ -9,6 +9,8 @@
 #include "metrics/suite/MetricRecorder.hpp"
 #include "gtest/gtest.h"
 #include <algorithm>
+#include <cinttypes>
+#include <cstdio>
 #include <functional>
 #include <iterator>
 #include <optional>
@@ -422,9 +424,8 @@ namespace
     {
         for (uint32_t index = 0; index != count; ++index)
         {
-            char name[12] = "F0000000TXT";
-            auto number = std::to_string(index);
-            std::copy(number.rbegin(), number.rend(), std::reverse_iterator<char*>(name + 8));
+            char name[12]{};
+            std::snprintf(name, sizeof(name), "F%07" PRIu32 "TXT", index % 10000000);
             builder.AddFile(directory, "", name, infra::ConstByteRange());
         }
     }
